@@ -16,6 +16,7 @@ import argparse
 from pathlib import Path
 import re
 import math
+import sys
 from shutil import copyfile
 
 import pandas as pd
@@ -119,38 +120,115 @@ def load_template_id_lookup() -> dict[str, str]:
 
 
 def load_mapping() -> pd.DataFrame:
+    # P3B.8 fix 3: the static rows are resolved against the current build-code map
+    # (resolve_static_mapping) instead of being used as written.
     mapping = pd.read_csv(MAPPING_PATH, dtype=str).fillna("")
     expected = {"build_code", "assembly_id"}
     if not expected.issubset(mapping.columns):
         raise ValueError(
             f"Mapping CSV must contain columns {sorted(expected)}; found {list(mapping.columns)}"
         )
-    mapping["build_code"] = mapping["build_code"].apply(clean_text)
-    mapping["assembly_id"] = mapping["assembly_id"].apply(clean_text)
+    mapping = resolve_static_mapping(mapping, pd.read_csv(BUILD_CODE_MAP_PATH, dtype=str).fillna(""))
     mapping["element_id"] = ""
-    mapping = mapping[(mapping["build_code"] != "") & (mapping["assembly_id"] != "")].copy()
     structural_mapping = load_structural_mapping()
-    dynamic_mapping = load_dynamic_mapping()
+    dynamic_mapping = load_dynamic_mapping(set(mapping["build_code"]))
     return pd.concat(
         [mapping.loc[:, ["build_code", "assembly_id", "element_id"]], structural_mapping, dynamic_mapping],
         ignore_index=True,
     )
 
 
-def load_dynamic_mapping() -> pd.DataFrame:
+def warn(message: str) -> None:
+    print(f"WARNING: {message}", file=sys.stderr)
+
+
+def resolve_static_mapping(mapping: pd.DataFrame, build_df: pd.DataFrame) -> pd.DataFrame:
+    """P3B.8 fix 3: map the static rows onto the build codes of the current model.
+
+    Prefab group ids in build codes (``PREFAB_WALL_<level>_<nnn>``) are sequential numbers
+    that shift whenever the model gains or loses a prefab wall, so a build code written into
+    the mapping CSV can later name a different wall, or none. A row can therefore name its
+    wall by ``host_wall_element_id`` (the Revit ElementId of the prefab group's host wall;
+    the exports have no UniqueId); its build code is then looked up in the current
+    build-code map. A written ``build_code`` that disagrees is only reported, never used.
+    Rows whose wall or build code is not in the micro schedule are skipped with a warning
+    (the original raised on the first one). Rows without an assembly id are ignored.
+    """
+    if "host_wall_element_id" not in mapping.columns:
+        mapping = mapping.assign(host_wall_element_id="")
+    for column in ["build_code", "assembly_id", "host_wall_element_id"]:
+        mapping[column] = mapping[column].apply(clean_text)
+    mapping = mapping[mapping["assembly_id"] != ""]
+
+    build_df = build_df.assign(
+        element_id=build_df["element_id"].apply(clean_text),
+        build_code=build_df["build_code"].apply(clean_text),
+    )
+    scheduled_codes = set(build_df["build_code"])
+    codes_by_element: dict[str, list[str]] = {}
+    for element_id, build_code in zip(build_df["element_id"], build_df["build_code"], strict=True):
+        if element_id and build_code and build_code not in codes_by_element.setdefault(element_id, []):
+            codes_by_element[element_id].append(build_code)
+
+    rows: list[dict[str, str]] = []
+    unchecked = 0
+    for _, row in mapping.iterrows():
+        build_code = row["build_code"]
+        assembly_id = row["assembly_id"]
+        host_id = row["host_wall_element_id"]
+        if not host_id:
+            if not build_code:
+                continue
+            if build_code not in scheduled_codes:
+                warn(f"mapping row `{build_code}` -> {assembly_id}: build code is not in the 4D "
+                     "build-code map (not scheduled, or its prefab group id shifted); skipped")
+                continue
+            unchecked += 1
+            rows.append({"build_code": build_code, "assembly_id": assembly_id})
+            continue
+
+        candidates = codes_by_element.get(host_id, [])
+        task_name = clean_text(build_code.split("|")[0]) if build_code else ""
+        if task_name:
+            same_task = [code for code in candidates if clean_text(code.split("|")[0]) == task_name]
+            candidates = same_task or candidates
+        if not candidates:
+            warn(f"mapping row host wall {host_id} -> {assembly_id}: the element is not in the "
+                 "4D build-code map (not scheduled); skipped")
+            continue
+        if len(candidates) > 1:
+            raise ValueError(
+                f"Host wall {host_id} ({assembly_id}) is in several build codes: {candidates}; "
+                "add the build code's task name to the mapping row"
+            )
+        resolved = candidates[0]
+        if build_code and build_code != resolved:
+            warn(f"mapping row host wall {host_id} -> {assembly_id}: build code `{build_code}` "
+                 f"does not match the model; the wall is in `{resolved}` now, using that")
+        rows.append({"build_code": resolved, "assembly_id": assembly_id})
+
+    if unchecked:
+        warn(f"{unchecked} mapping row(s) have no host_wall_element_id; their build codes are "
+             "used as written and cannot be checked against the model")
+
+    resolved_df = pd.DataFrame(rows, columns=["build_code", "assembly_id"]).drop_duplicates()
+    conflicts = resolved_df[resolved_df["build_code"].duplicated(keep=False)]
+    if not conflicts.empty:
+        raise ValueError(
+            "Build codes mapped to more than one assembly: "
+            + "; ".join(f"`{code}` -> {sorted(group['assembly_id'])}"
+                        for code, group in conflicts.groupby("build_code"))
+        )
+    return resolved_df.reset_index(drop=True)
+
+
+def load_dynamic_mapping(existing_mapped_build_codes: set[str]) -> pd.DataFrame:
+    # P3B.8 fix 3: the build codes of the static mapping come resolved from load_mapping()
+    # (the original re-read the CSV here and used its build codes as written).
     if not MICRO_SCHEDULE_PATH.exists():
         return pd.DataFrame(columns=["build_code", "assembly_id", "element_id"])
 
     rows: list[dict[str, str]] = []
-    existing_mapped_build_codes: set[str] = set()
-    if MAPPING_PATH.exists():
-        static_mapping = pd.read_csv(MAPPING_PATH, dtype=str).fillna("")
-        if {"build_code", "assembly_id"}.issubset(static_mapping.columns):
-            existing_mapped_build_codes = {
-                clean_text(row["build_code"])
-                for _, row in static_mapping.iterrows()
-                if clean_text(row["build_code"]) and clean_text(row["assembly_id"])
-            }
 
     if BUILD_CODE_MAP_PATH.exists():
         build_df = pd.read_csv(BUILD_CODE_MAP_PATH, dtype=str).fillna("")
@@ -752,7 +830,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--vendors", type=Path, required=True, metavar="CSV",
                         help="vendors.csv: Template_ID, Location, Building_System")
     parser.add_argument("--mapping", type=Path, required=True, metavar="CSV",
-                        help="4d_build_code_to_assembly_id_mapping.csv: build_code, assembly_id")
+                        help="4d_build_code_to_assembly_id_mapping.csv: build_code, assembly_id, "
+                        "optional host_wall_element_id (stable key, see README)")
     parser.add_argument("--assembly-import", type=Path, required=True, metavar="XLSX",
                         help="Assembly_Import.xlsx (step manufacton-assemblies)")
     parser.add_argument("--parts-summary", type=Path, required=True, metavar="CSV",

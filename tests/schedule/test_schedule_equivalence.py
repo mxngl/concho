@@ -127,6 +127,11 @@ COMPARED_OUTPUTS = [
     ("spatial-viewer", f"{PE}/spatial_visualizer_micro.html", "spatial_visualizer_micro.html"),
 ]
 
+ORDERS_ORIGINAL_ERROR = (
+    "ValueError: Build code not found in 4D build-code map: "
+    "`Exterior Wall Install | L -1 | PREFAB_WALL_LNEG1_001`"
+)
+
 # Outputs that a P3B.8 bug fix changes on purpose (see engines/schedule/README.md, "Fixed in
 # P3B.8"). They are checked by a dedicated function instead of byte equality.
 P3B8_CHANGED_OUTPUTS = {
@@ -178,6 +183,7 @@ def _migrated_args(ipd: Path, new: Path, inputs_from: Path | None = None) -> dic
         "micro": new / "micro", "fuzor": new / "fuzor", "rooms": new / "rooms",
     }
     committed_prefab = ipd / PREFAB_OUT
+    orders = committed_prefab if inputs_from is not None else out["prefab"]
     return {
         "takt-zones": [
             "--schedules-dir", str(ipd / "revit_schedules" / "Current"),
@@ -258,15 +264,17 @@ def _migrated_args(ipd: Path, new: Path, inputs_from: Path | None = None) -> dic
             "--llm-context", str(zones / "central_bim_model_llm_context.csv"),
             "--out-dir", str(out["prefab"]),
         ],
-        # manufacton-orders fails on this data (see module docstring), so the original
-        # delivery analysis read the committed Manufacton workbooks and maps.
+        # The original manufacton-orders fails on this data (see module docstring), so the
+        # original delivery analysis read the committed Manufacton workbooks and maps; the
+        # isolated comparison does the same. Since P3B.8 fix 3 the chained (golden) run reads
+        # the regenerated ones.
         "delivery-windows": [
             "--micro-schedule", str(micro / "Micro_Schedule.csv"),
             "--llm-context", str(zones / "central_bim_model_llm_context.csv"),
-            "--production-order", str(committed_prefab / "Production_Order.xlsx"),
-            "--production-order-items", str(committed_prefab / "Production_Order_Items.xlsx"),
-            "--kit-map", str(committed_prefab / "Revit_Kit_Parameter_Map.csv"),
-            "--assembly-map", str(committed_prefab / "Revit_Assembly_Id_Map.csv"),
+            "--production-order", str(orders / "Production_Order.xlsx"),
+            "--production-order-items", str(orders / "Production_Order_Items.xlsx"),
+            "--kit-map", str(orders / "Revit_Kit_Parameter_Map.csv"),
+            "--assembly-map", str(orders / "Revit_Assembly_Id_Map.csv"),
             "--out-dir", str(new / "delivery"),
         ],
         # P3B.8 fix 2: generator for room_takt_zones.csv (no original script). In the isolated
@@ -368,10 +376,15 @@ def test_step_exit_status_matches(runs: dict[str, object], step: str) -> None:
     orig = runs["results"]["orig"][step]
     new = runs["results"]["new"][step]
     if step == "manufacton-orders":
-        # Known failure of the original on the 989a6b7 data; the migrated step must fail
-        # identically.
-        assert orig.returncode != 0 and new.returncode != 0
-        assert orig.stderr.strip().splitlines()[-1] == new.stderr.strip().splitlines()[-1]
+        # Known failure of the original on the 989a6b7 data. Fixed in P3B.8 (fix 3): with the
+        # same (legacy) mapping CSV, the migrated step skips the 17 stale build codes with a
+        # warning each and writes the workbooks.
+        assert orig.returncode != 0
+        assert orig.stderr.strip().splitlines()[-1] == ORDERS_ORIGINAL_ERROR
+        assert new.returncode == 0, new.stderr[-2000:]
+        skipped = [line for line in new.stderr.splitlines()
+                   if line.startswith("WARNING: mapping row") and line.endswith("skipped")]
+        assert len(skipped) == 17
         return
     assert orig.returncode == 0, orig.stderr[-2000:]
     assert new.returncode == 0, new.stderr[-2000:]

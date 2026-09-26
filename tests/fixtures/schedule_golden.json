@@ -35,8 +35,7 @@
       "returncode": 0
     },
     "manufacton-orders": {
-      "returncode": 1,
-      "error": "ValueError: Build code not found in 4D build-code map: `Exterior Wall Install | L -1 | PREFAB_WALL_LNEG1_001`"
+      "returncode": 0
     },
     "delivery-windows": {
       "returncode": 0
@@ -122,21 +121,21 @@
       "metrics": {}
     },
     "delivery/delivery_units_by_micro_schedule.csv": {
-      "sha256": "f76e0030781ca30039e3f548775a74b1a346d67c4e922e8a8cee7f240bfb8061",
+      "sha256": "feb1a469a0fde24547869426c2a4636094aa15d69423a5184b0940b647652a4a",
       "metrics": {
-        "rows": 1145,
+        "rows": 759,
         "columns": 12,
         "by_source": {
-          "Micro Schedule Fallback": 544,
-          "Production Order": 601
+          "Micro Schedule Fallback": 303,
+          "Production Order": 456
         },
-        "elements": 3491,
+        "elements": 2470,
         "first_need_date": "2029-11-09",
         "last_need_date": "2030-01-17"
       }
     },
     "delivery/delivery_window_daily_timeseries.csv": {
-      "sha256": "c9df89b6194325dc485e5be57b2d4ee50d17cbf2ff4f97825b502b338d1485a0",
+      "sha256": "9f5b2d55f82498fdc860ede28573d79a9fe73b47d42336a648e197bf34332cb0",
       "metrics": {
         "rows": 140,
         "columns": 14
@@ -146,24 +145,24 @@
       "metrics": {}
     },
     "delivery/delivery_window_summary_metrics.csv": {
-      "sha256": "7eab72da101dcdd99072a1f619505d7ce7bba3878bedca0af2f5b661d80e0360",
+      "sha256": "3955eb5bf5637bc9ad3d61d4f212ec53a7e44a90ca2af5a0bff46466bc26be73",
       "metrics": {
         "rows": 2,
         "columns": 15,
         "windows": {
           "1 day": {
-            "total_delivered_elements": 3491.0,
-            "total_delivered_cf": 69076.18,
-            "max_single_delivery_cf": 8752.17,
-            "max_peak_on_site_cf": 8752.17,
-            "max_peak_on_site_elements": 370.0
+            "total_delivered_elements": 2470.0,
+            "total_delivered_cf": 58139.43,
+            "max_single_delivery_cf": 16843.71,
+            "max_peak_on_site_cf": 16843.71,
+            "max_peak_on_site_elements": 569.0
           },
           "1 week": {
-            "total_delivered_elements": 3491.0,
-            "total_delivered_cf": 69076.18,
-            "max_single_delivery_cf": 18885.95,
-            "max_peak_on_site_cf": 18885.95,
-            "max_peak_on_site_elements": 822.0
+            "total_delivered_elements": 2470.0,
+            "total_delivered_cf": 58139.43,
+            "max_single_delivery_cf": 37817.59,
+            "max_peak_on_site_cf": 37817.59,
+            "max_peak_on_site_elements": 1227.0
           }
         }
       }
@@ -175,25 +174,25 @@
       "metrics": {}
     },
     "delivery/production_order_count_by_delivery_window.csv": {
-      "sha256": "ba8f7eeaa0e934efdd8c129ccdc387f98b99edcd4babf75399571bcd4aaf61e8",
+      "sha256": "78728ef47eb613e5bff9d5b77af6470fd840cbfcf5933966ad5d8b1c49d3e97d",
       "metrics": {
-        "rows": 207,
+        "rows": 192,
         "columns": 3,
         "windows": {
           "1 day": {
-            "delivery_days": 38,
-            "peak_orders_per_delivery": 44,
-            "orders": 601
+            "delivery_days": 19,
+            "peak_orders_per_delivery": 80,
+            "orders": 456
           },
           "3 days": {
-            "delivery_days": 20,
-            "peak_orders_per_delivery": 87,
-            "orders": 601
+            "delivery_days": 11,
+            "peak_orders_per_delivery": 176,
+            "orders": 456
           },
           "1 week": {
-            "delivery_days": 11,
-            "peak_orders_per_delivery": 155,
-            "orders": 601
+            "delivery_days": 7,
+            "peak_orders_per_delivery": 229,
+            "orders": 456
           }
         }
       }
@@ -433,6 +432,42 @@
         "rows": 801,
         "columns": 9,
         "prefab_groups": 131
+      }
+    },
+    "prefab/Production_Order.xlsx": {
+      "sha256": "b374aa7787259532a141a38ee8d4ec154d91ab9c0420fa657275ae7a86864cc9",
+      "metrics": {
+        "sheet_rows": [
+          457
+        ]
+      }
+    },
+    "prefab/Production_Order_Items.xlsx": {
+      "sha256": "3e5e0d0e01a70bb04e62b5429bc329c74948a861eb1e6aec3f7c661ec2848be3",
+      "metrics": {
+        "sheet_rows": [
+          457
+        ]
+      }
+    },
+    "prefab/Revit_Assembly_Id_Map.csv": {
+      "sha256": "4a2c55d44266ca8a2dd31fd32fec9f760994789ed07932b495291507c63e37b0",
+      "metrics": {
+        "rows": 2589,
+        "columns": 4,
+        "assemblies": 423,
+        "mapped_prefab_elements": {
+          "SL0W-LNEG1C-WALL": 84,
+          "SL1-2R-WALL": 61,
+          "SL1-3R-WALL": 82
+        }
+      }
+    },
+    "prefab/Revit_Kit_Parameter_Map.csv": {
+      "sha256": "ec86d168bb83e1a6a0b6e6b1d039114f762c965e4056426bc177df32f8555375",
+      "metrics": {
+        "rows": 2589,
+        "columns": 5
       }
     },
     "rooms/room_takt_zones.csv": {

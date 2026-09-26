@@ -155,7 +155,7 @@ the bamboo design:
 | `micro_schedule_rules.json` | `micro-schedule --rules` | split rules (by level / room) and dependency constraints (chains, serial, same-start, 7-day curing lags) |
 | `ALICE_BIM_Map.csv` | `micro-schedule --bim-map` | ALICE task → BIM selectors (`Category:…, Family:…, Type:…, Level:…, discipline:…`), productivity, unit, crew/equipment dependency |
 | `vendors.csv` | `manufacton-orders --vendors` | Manufacton template id per building system |
-| `4d_build_code_to_assembly_id_mapping.csv` | `manufacton-orders --mapping` | Fuzor build code → Manufacton assembly id (Island prefab walls) |
+| `4d_build_code_to_assembly_id_mapping.csv` | `manufacton-orders --mapping` | Island prefab walls → Manufacton assembly id. Columns `build_code, assembly_id, host_wall_element_id` (the last one added in P3B.8, see below) |
 | `Fuzor_Schedule_Template.csv` | not read by any script | ALICE schedule export (CSV, 33 tasks) that was used as the Fuzor import template; accepted by `--macro-schedule` (ALICE column format, WBS filter applies) |
 
 **Not committed.** The CLIs take these paths as arguments:
@@ -300,6 +300,44 @@ plan: only `Takt_Zones.csv` changes (L 1 Takt Zone 8, rooms 201 + 150: area 5,65
 original did. The plot PNGs and `room_boundary_plot_summary.csv` next to the committed file
 are not reproduced (nothing reads them).
 
+**Fix 3: `manufacton-orders` runs on the reference data** (`adapters/manufacton/kit_import.py`,
+`load_mapping`, `load_dynamic_mapping`, new `resolve_static_mapping`). Error before:
+`Build code not found in 4D build-code map: Exterior Wall Install | L -1 | PREFAB_WALL_LNEG1_001`.
+Root cause: prefab group ids (`PREFAB_WALL_<level>_<nnn>`, from `prefab-walls`) are
+sequential over all levels. The model gained 16 L -1 prefab groups (11 → 27), so every later
+id shifted (L0_013…018 → L0_029…034, L1_035…039 → L1_081…085), and the L -1 exterior walls
+are no longer scheduled by "Exterior Wall Install". None of the 17 build codes in
+`4d_build_code_to_assembly_id_mapping.csv` exists in today's build-code map, and the step
+raised on the first. Worse, a shifted id that still exists would silently give a different
+wall the assembly. Fix:
+
+- The mapping CSV gets an optional column **`host_wall_element_id`**: the Revit ElementId of
+  the prefab group's host wall (the stable key; the Revit exports have no `UniqueId`, so
+  ElementId is the best available key; it can change on copy/detach). The step looks the
+  element up in the current `Revit_4D_Build_Code_Map.csv` (restricted to the task named in the
+  row's build code) and uses *that* build code. If the row's `build_code` disagrees, it
+  warns and uses the element's build code, never the written one.
+- Rows whose wall (or, without a host id, whose build code) is not in the micro schedule are
+  skipped with a warning; rows without a host id still work but get one warning that they
+  cannot be checked. One wall mapped to two assemblies is an error.
+- The Island CSV now holds the 17 mapped rows with their host walls (recovered from the
+  committed `Revit_Assembly_Id_Map.csv`: each old group's element set equals exactly one
+  current group) and today's build codes; the 73 rows without an assembly id were dropped.
+  The 6 L -1 rows stay (Ash's `SL0W-LNEG1C` assembly) and are skipped with a warning while
+  L -1 walls are not scheduled.
+
+Island effect: the step now writes all four outputs from the fixture inputs; the golden run
+feeds `delivery-windows` these regenerated workbooks instead of the committed ones. 456
+production orders (464 if the stale rows were only skipped: the 11 scheduled SL groups become
+3 SL orders instead of 11 `EXTW_*` orders); the SL assemblies cover 227 elements
+(`SL0W-LNEG1C-WALL` 84, `SL1-3R-WALL` 82, `SL1-2R-WALL` 61). The committed workbooks (601
+orders) came from an older model: 1,040 of their elements are not in the current micro
+schedule. Peak production orders per delivery become 1 day 80, 3 days 176, 1 week 229
+(committed: 44 / 87 / 155); see `docs/engines/schedule.md` for all delivery values. With the
+original (legacy) CSV, the step now succeeds too and skips the 17 stale rows with a warning
+each. Tests: `test_kit_mapping_shifted_group_id_does_not_map_another_wall`,
+`test_kit_mapping_skips_unscheduled_rows`, `test_kit_mapping_rejects_two_assemblies_for_one_wall`.
+
 ## Findings (kept as-is, for Phase 3B)
 
 1. ~~**Takt-zone polygons lose their last corner**~~ — fixed in P3B.8 (fix 1, see
@@ -308,13 +346,11 @@ are not reproduced (nothing reads them).
    `load_delivery_units()` returns micro-schedule units without a `source` column, and
    `production_order_window_series()` raises `KeyError: 'source'`, after most CSVs and PNGs
    are written.
-3. **`manufacton-orders` fails on the IPD_Challenge@989a6b7 data** (original and migrated):
-   `Build code not found in 4D build-code map: Exterior Wall Install | L -1 | PREFAB_WALL_LNEG1_001`.
-   The static `4d_build_code_to_assembly_id_mapping.csv` expects prefab group ids that the
-   current prefab mapping (801 rows) no longer produces. Run on its own against the committed
-   intermediate files, `manufacton-assemblies` fails too (`Missing part catalog id for
-   MEP_ELECTRICAL_FIXTURES_…`). So the committed Manufacton workbooks cannot be regenerated
-   from 989a6b7.
+3. ~~**`manufacton-orders` fails on the IPD_Challenge@989a6b7 data**~~ — fixed in P3B.8
+   (fix 3). (Run on its own against the *committed* intermediate files,
+   `manufacton-assemblies` still fails with `Missing part catalog id for
+   MEP_ELECTRICAL_FIXTURES_…`, because those committed files come from an older model; in
+   the pipeline it runs on the regenerated files and succeeds.)
 4. **pandas 3 breaks the micro schedule** (`TypeError: Invalid value '1440372' for dtype
    'float64'` in `assign_room_takt_ids`); pandas 2.3.3 emits a FutureWarning there. The
    `schedule` extra therefore pins pandas 2.3.3.

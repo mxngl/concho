@@ -75,8 +75,12 @@ CHANGED_FUNCTIONS = {
 # "Fixed in P3B.8"): functions whose body changed on purpose, and new helper functions.
 P3B8_CHANGED_FUNCTIONS = {
     "core/takt_zones.py": {"assign_takt_ids"},  # fix 1: keep the last polygon corner
+    # fix 3: resolve the static 4D mapping against the current model
+    "adapters/manufacton/kit_import.py": {"load_mapping", "load_dynamic_mapping"},
 }
-P3B8_NEW_FUNCTIONS: dict[str, set[str]] = {}
+P3B8_NEW_FUNCTIONS: dict[str, set[str]] = {
+    "adapters/manufacton/kit_import.py": {"resolve_static_mapping", "warn"},
+}
 
 NEW_FUNCTIONS = {"configure", "build_parser", "main", "parse_floor_plan"}
 PATH_CONSTANT = re.compile(r"(_PATH|_PATHS|_DIR|_GLOB)$|^(ROOT|BACKGROUND_BY_LEVEL)$")

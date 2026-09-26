@@ -11,6 +11,7 @@ import csv
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
+import pandas as pd
 import pytest
 from mini_project import write_mini_project
 from openpyxl import Workbook
@@ -194,6 +195,66 @@ def test_manufacton_outputs(pipeline: dict[str, Path]) -> None:
     kits = {row["element_id"]: row["kit_id"] for row in
             _rows(mf / "Revit_Kit_Parameter_Map.csv")}
     assert kits["1001"] == kits["1003"]
+
+
+def _build_code_map(groups: dict[str, list[str]]) -> pd.DataFrame:
+    return pd.DataFrame(
+        [{"element_id": element, "build_code": f"Exterior Wall Install | L 1 | {group}"}
+         for group, elements in groups.items() for element in elements]
+    )
+
+
+def test_kit_mapping_shifted_group_id_does_not_map_another_wall(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """P3B.8 fix 3: prefab group ids are sequential and shift when the model changes.
+
+    The mapping was written when host wall 5001 was in group _001. A new wall (4001) now
+    comes first, so 5001 is in _002 and _001 is a different wall. The row must follow its
+    host wall, report the stale build code, and leave the other wall unmapped.
+    """
+    build_df = _build_code_map({"PREFAB_WALL_L1_001": ["4001", "4002"],
+                                "PREFAB_WALL_L1_002": ["5001", "5002"]})
+    mapping = pd.DataFrame([{"build_code": "Exterior Wall Install | L 1 | PREFAB_WALL_L1_001",
+                             "assembly_id": "SOUTH-WALL", "host_wall_element_id": "5001"}])
+    resolved = kit_import.resolve_static_mapping(mapping, build_df)
+    assert resolved.to_dict("records") == [
+        {"build_code": "Exterior Wall Install | L 1 | PREFAB_WALL_L1_002",
+         "assembly_id": "SOUTH-WALL"}]
+    err = capsys.readouterr().err
+    assert "`Exterior Wall Install | L 1 | PREFAB_WALL_L1_001` does not match the model" in err
+
+
+def test_kit_mapping_skips_unscheduled_rows(capsys: pytest.CaptureFixture[str]) -> None:
+    """P3B.8 fix 3: rows whose wall / build code is not scheduled are skipped with a warning
+    (the original raised on the first one); build codes without a host id stay usable."""
+    build_df = _build_code_map({"PREFAB_WALL_L1_001": ["4001"]})
+    mapping = pd.DataFrame([
+        {"build_code": "Exterior Wall Install | L 1 | PREFAB_WALL_L1_001", "assembly_id": "A"},
+        {"build_code": "Exterior Wall Install | L -1 | PREFAB_WALL_LNEG1_001",
+         "assembly_id": "B"},
+        {"build_code": "Exterior Wall Install | L 1 | PREFAB_WALL_L1_003", "assembly_id": ""},
+    ])
+    resolved = kit_import.resolve_static_mapping(mapping, build_df)
+    assert list(resolved["assembly_id"]) == ["A"]
+    err = capsys.readouterr().err
+    assert "PREFAB_WALL_LNEG1_001` -> B: build code is not in the 4D build-code map" in err
+    assert "1 mapping row(s) have no host_wall_element_id" in err
+
+    mapping = pd.DataFrame([{"build_code": "", "assembly_id": "A", "host_wall_element_id": "9"}])
+    assert kit_import.resolve_static_mapping(mapping, build_df).empty
+    assert "host wall 9 -> A: the element is not in the 4D build-code map" in (
+        capsys.readouterr().err)
+
+
+def test_kit_mapping_rejects_two_assemblies_for_one_wall() -> None:
+    build_df = _build_code_map({"PREFAB_WALL_L1_001": ["4001", "4002"]})
+    mapping = pd.DataFrame([
+        {"build_code": "", "assembly_id": "A", "host_wall_element_id": "4001"},
+        {"build_code": "", "assembly_id": "B", "host_wall_element_id": "4002"},
+    ])
+    with pytest.raises(ValueError, match="more than one assembly"):
+        kit_import.resolve_static_mapping(mapping, build_df)
 
 
 def test_delivery_windows(pipeline: dict[str, Path]) -> None:
