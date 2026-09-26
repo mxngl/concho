@@ -1,21 +1,36 @@
+"""Command line interface: ``concho-stv`` / ``python -m engines.stv.cli``.
+
+With ``--config project_config.json`` (P3.2) the course team, the building lifetime and the
+use-phase inputs come from the config (``stv`` section); ``--team`` overrides the team.
+Without ``--config`` the team comes from ``--team`` or the input JSON, as before.
+
+The config use phase is added to single runs. ``--combine-results`` sums the use phase of
+all inputs, so per-trade runs that are combined later should use ``--no-use-phase`` (all
+but one). ``--architecture-history-dir`` runs stay construction-only, as before.
+"""
+
 from __future__ import annotations
 
 import argparse
-from datetime import datetime, timezone
 import json
-from pathlib import Path
 import re
+import sys
+from datetime import UTC, datetime
+from pathlib import Path
+
+from engines.common.config import validate_config_file
 
 from .central_bim import load_central_bim_model
-from .engine import STVEngine
-from .revit_architecture import load_architecture_schedule
+from .custom_materials import CustomMaterialsError
+from .engine import LIFETIME_YEARS, STVEngine
 from .models import STVInputs, STVResults
-from .revit_mep import load_mep_schedule
+from .project import STVProjectSettings
 from .reference import TEMPLATE_ENV_VAR, STVReferenceData, resolve_template_path
+from .revit_architecture import load_architecture_schedule
+from .revit_mep import load_mep_schedule
 from .revit_structural import load_structural_schedule
 from .visualization import export_visualizations
 from .workbook_inputs import load_stv_workbook_inputs
-
 
 ARCHITECTURE_HISTORY_TIMESTAMP_RE = re.compile(
     r"_(\d{4}-\d{2}-\d{2})_(\d{2})-(\d{2})-(\d{2})(am|pm)_",
@@ -59,10 +74,10 @@ def append_results_history(
         if previous_results is not None:
             history.append(_history_entry(
                 previous_results,
-                timestamp=previous_timestamp or datetime.now(timezone.utc).isoformat(),
+                timestamp=previous_timestamp or datetime.now(UTC).isoformat(),
             ))
 
-    history.append(_history_entry(results, timestamp=datetime.now(timezone.utc).isoformat()))
+    history.append(_history_entry(results, timestamp=datetime.now(UTC).isoformat()))
     history_path.write_text(json.dumps(history, indent=2), encoding="utf-8")
     return history_path
 
@@ -80,9 +95,9 @@ def _parse_schedule_timestamp(schedule_path: Path) -> datetime:
         parsed = datetime.fromisoformat(
             f"{date_part}T{hour:02d}:{minute_text}:{second_text}"
         )
-        return parsed.replace(tzinfo=timezone.utc)
+        return parsed.replace(tzinfo=UTC)
 
-    return datetime.fromtimestamp(schedule_path.stat().st_mtime, tz=timezone.utc)
+    return datetime.fromtimestamp(schedule_path.stat().st_mtime, tz=UTC)
 
 
 def _run_stv(
@@ -90,12 +105,36 @@ def _run_stv(
     *,
     team: str,
     template_path: str,
+    lifetime_years: int = LIFETIME_YEARS,
 ) -> STVResults:
     payload["team"] = team
     inputs = STVInputs.from_dict(payload)
     reference_data = STVReferenceData.from_workbook(template_path)
-    engine = STVEngine(reference_data)
+    engine = STVEngine(reference_data, lifetime_years=lifetime_years)
     return engine.calculate(inputs)
+
+
+def _load_settings(
+    parser: argparse.ArgumentParser, config_path: str | None
+) -> STVProjectSettings | None:
+    """Read the STV settings from --config (errors exit, warnings go to stderr)."""
+    if not config_path:
+        return None
+    report = validate_config_file(config_path)
+    if not report.ok:
+        parser.error(
+            f"invalid project_config {config_path}:\n"
+            + "\n".join(f"  - {e}" for e in report.errors)
+        )
+    try:
+        settings = STVProjectSettings.from_config(
+            report.config, Path(config_path).resolve().parent
+        )
+    except CustomMaterialsError as exc:
+        parser.error(str(exc))
+    for warning in settings.warnings:
+        print(f"warning: {warning}", file=sys.stderr)
+    return settings
 
 
 def _run_architecture_history(
@@ -104,6 +143,7 @@ def _run_architecture_history(
     team: str,
     output_dir: Path,
     template_path: str,
+    lifetime_years: int = LIFETIME_YEARS,
 ) -> dict[str, object]:
     schedule_paths = sorted(
         schedule_dir.glob("*.csv"),
@@ -129,7 +169,9 @@ def _run_architecture_history(
                 for item in report.construction_items
             ]
         }
-        results = _run_stv(payload, team=team, template_path=template_path)
+        results = _run_stv(
+            payload, team=team, template_path=template_path, lifetime_years=lifetime_years
+        )
         timestamp = _parse_schedule_timestamp(schedule_path).isoformat()
         history.append(
             _history_entry(
@@ -185,7 +227,25 @@ def build_parser() -> argparse.ArgumentParser:
             f"(default: ${TEMPLATE_ENV_VAR}). The course workbook must be supplied locally."
         ),
     )
-    parser.add_argument("--team", help="Team name, for example Island.")
+    parser.add_argument(
+        "--config",
+        help=(
+            "project_config JSON (docs/config.md): course team, lifetime and use-phase "
+            "inputs come from its stv section."
+        ),
+    )
+    parser.add_argument(
+        "--no-use-phase",
+        action="store_true",
+        help=(
+            "Construction only: ignore stv.use_phase of --config (e.g. for per-trade runs "
+            "that are combined later with --combine-results)."
+        ),
+    )
+    parser.add_argument(
+        "--team",
+        help="Course team row of the STV workbook (overrides stv.course_team of --config).",
+    )
     parser.add_argument(
         "--structural-schedule",
         help="Path to a Revit structural schedule CSV to convert into embodied STV inputs.",
@@ -232,6 +292,8 @@ def build_parser() -> argparse.ArgumentParser:
 def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
+    settings = _load_settings(parser, args.config)
+    lifetime_years = settings.lifetime_years if settings else LIFETIME_YEARS
 
     if not args.combine_results:
         try:
@@ -245,10 +307,12 @@ def main() -> None:
     previous_results = None
     previous_timestamp = None
     if results_path.exists():
-        previous_results = STVResults.from_dict(json.loads(results_path.read_text(encoding="utf-8")))
+        previous_results = STVResults.from_dict(
+            json.loads(results_path.read_text(encoding="utf-8"))
+        )
         previous_timestamp = datetime.fromtimestamp(
             results_path.stat().st_mtime,
-            tz=timezone.utc,
+            tz=UTC,
         ).isoformat()
 
     if args.combine_results:
@@ -257,7 +321,18 @@ def main() -> None:
             STVResults.from_dict(json.loads(path.read_text(encoding="utf-8")))
             for path in result_paths
         ]
-        combined_results = STVResults.combine(loaded_results, team=args.team)
+        team = args.team or (settings.team if settings else None)
+        with_use_phase = [
+            str(path) for path, result in zip(result_paths, loaded_results, strict=True)
+            if any(result.breakdown.use_phase.to_dict().values())
+        ]
+        if len(with_use_phase) > 1:
+            print(
+                "warning: the use phase is summed over "
+                f"{len(with_use_phase)} inputs: {', '.join(with_use_phase)}",
+                file=sys.stderr,
+            )
+        combined_results = STVResults.combine(loaded_results, team=team)
 
         results_path.write_text(
             json.dumps(combined_results.to_dict(), indent=2),
@@ -281,14 +356,17 @@ def main() -> None:
         return
 
     if args.architecture_history_dir:
-        team = args.team
+        team = args.team or (settings.team if settings else None)
         if not team:
-            parser.error("Provide a team with --team when using --architecture-history-dir.")
+            parser.error(
+                "Provide a team with --team or --config when using --architecture-history-dir."
+            )
         response = _run_architecture_history(
             Path(args.architecture_history_dir),
             team=team,
             output_dir=output_dir,
             template_path=args.template,
+            lifetime_years=lifetime_years,
         )
         print(json.dumps(response, indent=2))
         return
@@ -380,10 +458,20 @@ def main() -> None:
             encoding="utf-8",
         )
 
-    team = args.team or payload.get("team")
+    if settings is not None and not args.no_use_phase:
+        if payload.get("use_phase"):
+            print(
+                "warning: the use phase from the inputs is replaced by stv.use_phase of "
+                "--config.",
+                file=sys.stderr,
+            )
+        payload["use_phase"] = settings.use_phase
+    team = args.team or (settings.team if settings else None) or payload.get("team")
     if not team:
-        parser.error("Provide a team with --team or in the input JSON.")
-    results = _run_stv(payload, team=team, template_path=args.template)
+        parser.error("Provide a team with --team, --config or in the input JSON.")
+    results = _run_stv(
+        payload, team=team, template_path=args.template, lifetime_years=lifetime_years
+    )
 
     results_path.write_text(
         json.dumps(results.to_dict(), indent=2),
@@ -407,7 +495,9 @@ def main() -> None:
     if args.mep_schedule:
         response["mep_schedule_items"] = str(output_dir / "mep_schedule_items.json")
     if args.architecture_schedule:
-        response["architecture_schedule_items"] = str(output_dir / "architecture_schedule_items.json")
+        response["architecture_schedule_items"] = str(
+            output_dir / "architecture_schedule_items.json"
+        )
     if args.central_bim_model:
         response["central_bim_model_stv_items"] = str(
             output_dir / "central_bim_model_stv_items.json"

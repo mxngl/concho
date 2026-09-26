@@ -5,7 +5,6 @@ from typing import Any
 
 from openpyxl import load_workbook
 
-
 STV_WORKBOOK_CONSTRUCTION_ITEMS = {
     ("Energy", "Photovoltaics (sf)"),
     ("Energy", "EV Battery (kWh)"),

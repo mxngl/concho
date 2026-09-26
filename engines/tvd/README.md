@@ -16,22 +16,24 @@ TVD targets per cluster. Results are identical to AutoTVD (see "Tests" below).
 | `cost_db.py` | cost DB parsing incl. German number format (`$6.184,22`) |
 | `quantities.py` | aggregation (DNC marker, excluded categories, keyword AC split) and quantity rules |
 | `summary.py` | cluster summary, console formatting |
-| `engine.py` | `compute()` / `run_files()`: inputs → `TvdRun` (line items, summary, counts, results dict) |
+| `engine.py` | `compute()` / `run_files()`: inputs + project config → `TvdRun` (line items, summary, counts, results dict) |
+| `targets.py` | `ProjectTargets`: project values from `project_config` (names, GSF, total and cluster targets, custom clusters, tolerance) |
+| `clusters.py` | canonical course clusters A–H with display names; maps cost DB labels (incl. the legacy `Special Contruction`) |
 | `results_writer.py` | results JSON (`<timestamp>.json` + `latest.json`, schema = AutoTVD `results/SCHEMA.md`) |
 | `history.py` | named history snapshots |
 | `alert.py` | budget-overrun webhook (env vars, see below) |
-| `island_defaults.py` | Island constants: targets, GSF, rule tables. **Temporary**, replaced by `project_config` in P3.1/P3.2 |
+| `rules.py` | engine default rule tables (takeoff clusters, mirrors, keyword split, toilet codes, excluded categories); move to the cost DB in P3.4 |
 | `cli.py` | `python -m engines.tvd` / `concho-tvd` |
 
-The HTML/PDF dashboard is rendered by `dashboards/tvd/legacy_render.py` (unchanged copy of the
-AutoTVD renderer, replaced in P7.1).
+The HTML/PDF dashboard is rendered by `dashboards/tvd/legacy_render.py` (copy of the AutoTVD
+renderer; team name and GSF come from the config since P3.2; replaced in P7.1).
 
 ### Quantity rules (priority order)
 
 1. **Fixed Quantity** in the cost DB always wins.
 2. **Toilet count**: `C1030` = number of elements with an AC in `TOILET_ACS` (all categories,
    incl. excluded ones).
-3. Clusters outside `TAKEOFF_CLUSTERS` (A–C) without a fixed quantity → 0.
+3. Clusters outside `TAKEOFF_CLUSTERS` (course clusters A–C) without a fixed quantity → 0.
 4. **Quantity mirror** (`QUANTITY_MIRRORS`): take another AC's takeoff area, or its fixed quantity.
 5. **Takeoff lookup** by unit: `SF`/`GSF` → Area, `MSF` → Area/1000, `LF` → Length,
    `EA`/`Flight` → count, `CY` → Volume/27, `CF` → Volume.
@@ -44,7 +46,8 @@ sub-codes by keywords in Category + Family + Type (e.g. `B2010` → `B2010.CW` /
 
 ```bash
 pip install -e .
-concho-tvd --arch path/to/Architecture_TakeOff.csv \
+concho-tvd --config path/to/project_config.json \
+           --arch path/to/Architecture_TakeOff.csv \
            --struct path/to/Structural_Schedule.csv \
            --cost path/to/cost_data.csv \
            --out path/to/output            # or: python -m engines.tvd ...
@@ -52,7 +55,9 @@ concho-tvd --arch path/to/Architecture_TakeOff.csv \
 
 | Flag | Meaning |
 |---|---|
-| `--arch`, `--struct`, `--cost` | input files (**required**, local paths only) |
+| `--config FILE` | `project_config` JSON (**required**): targets, GSF, project/team name ([docs/config.md](../../docs/config.md)) |
+| `--arch`, `--struct` | QTO exports (**required**, local paths only) |
+| `--cost` | cost DB; default `files.cost_db` of the config |
 | `--out DIR` | output folder (**required**): `DIR/results/`, `DIR/history/`, `DIR/TVD_Dashboard.html` |
 | `--ci` | CI mode: dashboard to `DIR/docs/index.html`, no browser, no demo snapshot |
 | `--snapshot LABEL` | save a named snapshot to the history folder |
@@ -88,7 +93,7 @@ and `Mark`/`Comments` are checked for the `DNC` marker. Other columns are ignore
 
 | Column | Notes |
 |---|---|
-| `Cluster Name` | must match the keys of `CLUSTER_TARGETS` (incl. the typo `Special Contruction`) |
+| `Cluster Name` | course cluster letter (`A`–`H`) or name (`Substructure` … `General Conditions`; the legacy typo `Special Contruction` is read as `Special Construction`), or the name of a custom cluster from the config |
 | `Assembly Code` | Uniformat code or synthetic sub-code (`B2010.CW`); blank rows are skipped |
 | `Assembly Group Name` | group label |
 | `Description             ` | description; **the header has 13 trailing spaces** |
@@ -102,11 +107,17 @@ The new cost DB format with plain numbers and a validator comes in P3.4.
 
 - `tests/tvd/test_tvd_units.py`: every quantity rule and the dedup, on the invented fixture in
   `tests/fixtures/tvd_synthetic/`.
+- `tests/tvd/test_tvd_project_config.py` (P3.2): the Island example config vs. an invented
+  second config (`tests/fixtures/configs/river_test.project_config.json`) change exactly the
+  project values (targets, GSF, names) in the results JSON and the dashboard.
 - `tests/tvd/test_tvd_equivalence.py`: runs this engine and the original `tvd_analysis.py` on
   `AUTOTVD_DIR/qto/*.csv` + `AUTOTVD_DIR/cost_data.csv` and compares the results JSON (all fields
-  except timestamps, label and paths), the history snapshot and the dashboard HTML. With the
-  reference inputs it also checks grand total 16,065,644.29, `unmapped_count` 1693 and
-  `dnc_count` 75. Skipped unless `AUTOTVD_DIR` is set:
+  except timestamps, label, paths and the project/team names), the history snapshot and the
+  dashboard HTML. The new engine runs with `engines/common/examples/island_2026.project_config.json`.
+  Masked since P3.2: the cluster name (`Special Contruction` → `Special Construction`), the team
+  name and the GSF expressions in the dashboard. With the reference inputs it also checks grand
+  total 16,065,644.29, `unmapped_count` 1693 and `dnc_count` 75. Skipped unless `AUTOTVD_DIR`
+  is set:
 
   ```bash
   git clone --branch island-2026-final https://github.com/mxngl/AutoTVD /tmp/AutoTVD
@@ -121,3 +132,5 @@ The new cost DB format with plain numbers and a validator comes in P3.4.
 - `data_source` in the results JSON lists the three input files relative to the working
   directory (file name only if outside it), never absolute paths.
 - The webhook env vars are read when the alert fires, not at import time.
+- P3.2: project values (targets, GSF, project/team name) come from `project_config`
+  (`--config`) instead of constants; course clusters use canonical names (`Special Construction`).

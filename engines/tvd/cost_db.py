@@ -1,5 +1,7 @@
 """Cost DB parsing (AutoTVD ``cost_data.csv`` format, incl. German number format)."""
 
+from engines.tvd.clusters import display_name
+
 
 def parse_cost(val: str):
     """
@@ -29,6 +31,8 @@ def load_cost_data(rows: list[dict]) -> list[dict]:
 
     The column names ``"Description             "`` and ``"Unit             "``
     carry trailing spaces, exactly as in the AutoTVD ``cost_data.csv`` header.
+    Course cluster names are normalised to their display names (e.g. the legacy
+    "Special Contruction" becomes "Special Construction").
     """
     result = []
     for row in rows:
@@ -37,7 +41,7 @@ def load_cost_data(rows: list[dict]) -> list[dict]:
             continue
         fq_raw = row.get("Fixed Quantity", "").strip()
         result.append({
-            "cluster": row.get("Cluster Name", "").strip(),
+            "cluster": display_name(row.get("Cluster Name", "").strip()),
             "ac":      ac,
             "group":   row.get("Assembly Group Name", "").strip(),
             "desc":    row.get("Description             ", "").strip(),

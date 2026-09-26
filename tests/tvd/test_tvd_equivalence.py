@@ -6,9 +6,20 @@ fixture root (``CONCHO_FIXTURES_DIR`` or ``.fixtures/``, see ``tests/conftest.py
 copied into this repo: ``cost_data.csv`` is RSMeans-derived.
 
 Both implementations run in CI mode on ``AUTOTVD_DIR/qto/*.csv`` +
-``AUTOTVD_DIR/cost_data.csv`` inside ``tmp_path``. Compared: the results JSON (all
-fields except run timestamps, run label and input paths), the history snapshot
-(except its date) and the dashboard HTML (with timestamps and data source masked).
+``AUTOTVD_DIR/cost_data.csv`` inside ``tmp_path``; the new engine reads the project values
+from the Island example config (``engines/common/examples/island_2026.project_config.json``).
+Compared: the results JSON (all fields except run timestamps, run label, input paths and
+the project/team names added in P3.2), the history snapshot (except its date) and the
+dashboard HTML (with timestamps and data source masked).
+
+Intended differences since P3.2, normalised/masked here:
+
+- the cluster name "Special Contruction" (typo in the AutoTVD cost DB, kept by the original)
+  is "Special Construction" in the new engine; the original outputs are normalised to it;
+- the dashboard takes the team name and the gross floor area from the config instead of
+  hardcoded strings: the team name is masked in both HTML files, and the GSF expressions in
+  the PDF export (``30000`` / ``30,000 GSF`` in the original, ``GROSS_SF_JS`` in the new
+  renderer) are masked.
 """
 
 import hashlib
@@ -23,6 +34,20 @@ from pathlib import Path
 import pytest
 
 SNAPSHOT_LABEL = "Equivalence check"
+REPO_ROOT = Path(__file__).resolve().parents[2]
+ISLAND_CONFIG = REPO_ROOT / "engines" / "common" / "examples" / "island_2026.project_config.json"
+TEAM_NAME = "Island Team 2026"  # project.team_name in ISLAND_CONFIG
+
+# P3.2: canonical cluster name (the original keeps the cost DB typo).
+LEGACY_NAME, CANONICAL_NAME = "Special Contruction", "Special Construction"
+
+# P3.2: GSF expressions of the PDF export, hardcoded in the original.
+_GSF_MASKS = {
+    "sub: '30,000 GSF',     col: cMuted": "sub: <gsf>, col: cMuted",
+    "sub: GROSS_SF_JS.toLocaleString('en-US') + ' GSF', col: cMuted": "sub: <gsf>, col: cMuted",
+    "Math.round(grandTotal / 30000)": "Math.round(grandTotal / <gsf>)",
+    "Math.round(grandTotal / GROSS_SF_JS)": "Math.round(grandTotal / <gsf>)",
+}
 
 # sha256 of the Island reference inputs (docs/ROADMAP.md §1, P0.4).
 REFERENCE_SHA256 = {
@@ -57,10 +82,16 @@ def _run(cmd: list[str], cwd: Path) -> None:
     assert proc.returncode == 0, proc.stdout + proc.stderr
 
 
+def _canonical(obj):
+    """Replace the legacy cluster name in all keys and string values (original outputs)."""
+    text = json.dumps(obj, ensure_ascii=False).replace(LEGACY_NAME, CANONICAL_NAME)
+    return json.loads(text)
+
+
 def _strip_meta(payload: dict) -> dict:
     payload = json.loads(json.dumps(payload))
-    for key in ("generated_at", "date", "label", "data_source"):
-        payload["meta"].pop(key)
+    for key in ("generated_at", "date", "label", "data_source", "project_name", "team_name"):
+        payload["meta"].pop(key, None)
     return payload
 
 
@@ -84,7 +115,7 @@ def outputs(tmp_path_factory, autotvd_dir) -> dict[str, Path]:
 
     new = tmp_path_factory.mktemp("new")
     _run([sys.executable, "-m", "engines.tvd", "--ci", "--snapshot", SNAPSHOT_LABEL, *flags,
-          "--out", str(new)], new)
+          "--config", str(ISLAND_CONFIG), "--out", str(new)], new)
     return {"orig": orig, "new": new}
 
 
@@ -95,7 +126,9 @@ def _load(path: Path) -> dict:
 def test_results_json_identical(outputs):
     orig = _load(outputs["orig"] / "results" / "latest.json")
     new = _load(outputs["new"] / "results" / "latest.json")
-    assert _strip_meta(new) == _strip_meta(orig)
+    assert _strip_meta(new) == _canonical(_strip_meta(orig))
+    assert new["meta"]["project_name"] == "Island 2026 university building"
+    assert new["meta"]["team_name"] == TEAM_NAME
     # The timestamped copy equals latest.json in both implementations.
     new_ts = _single(outputs["new"] / "results", "2*.json")
     assert _load(new_ts) == new
@@ -106,15 +139,23 @@ def test_history_snapshot_identical(outputs):
     new = _load(_single(outputs["new"] / "history", "*_equivalence_check.json"))
     orig.pop("date")
     new.pop("date")
-    assert new == orig
+    assert new == _canonical(orig)
 
 
 def test_dashboard_html_identical(outputs):
     def normalise(folder: Path) -> str:
         html = (folder / "docs" / "index.html").read_text(encoding="utf-8")
         source = _load(folder / "results" / "latest.json")["meta"]["data_source"]
-        return _TS.sub("<ts>", html.replace(source, "<source>"))
+        html = html.replace(source, "<source>").replace(LEGACY_NAME, CANONICAL_NAME)
+        html = html.replace("cl-special-contruction", "cl-special-construction")  # anchor id
+        html = html.replace(TEAM_NAME, "<team>")
+        for old, mask in _GSF_MASKS.items():
+            html = html.replace(old, mask)
+        return _TS.sub("<ts>", html)
 
+    new_html = (outputs["new"] / "docs" / "index.html").read_text(encoding="utf-8")
+    assert "grandTotal / 30000" not in new_html  # GSF only via GROSS_SF_JS (from config)
+    assert "'30,000 GSF'" not in new_html
     assert normalise(outputs["new"]) == normalise(outputs["orig"])
 
 

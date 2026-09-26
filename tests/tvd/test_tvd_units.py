@@ -14,8 +14,9 @@ from engines.tvd.quantities import aggregate_quantities, calculate_costs, pick_q
 
 
 @pytest.fixture
-def run(synthetic_paths):
-    return run_files(synthetic_paths["arch"], synthetic_paths["struct"], synthetic_paths["cost"])
+def run(synthetic_paths, island_config):
+    return run_files(synthetic_paths["arch"], synthetic_paths["struct"], synthetic_paths["cost"],
+                     island_config)
 
 
 @pytest.fixture
@@ -185,7 +186,8 @@ def test_cluster_summary_and_payload(run):
     assert fin["cost_per_sf"] == round(307080.67 / 30_000, 2)
     assert payload["meta"]["unmapped_count"] == 2
     assert payload["meta"]["dnc_count"] == 2
-    assert "Special Contruction" in payload["cluster_targets"]
+    assert "Special Construction" in payload["cluster_targets"]
+    assert payload["meta"]["project_name"] == "Island 2026 university building"
     shell = next(c for c in payload["cluster_summary"] if c["cluster"] == "Shell")
     assert shell["target"] == 3_826_446
     assert [li["ac"] for li in payload["line_items"]["Interiors"]][:2] == ["C1010", "C1020"]
@@ -258,6 +260,7 @@ def test_cli_ci_mode(tmp_path, synthetic_paths, monkeypatch):
         "--arch", synthetic_paths["arch"],
         "--struct", synthetic_paths["struct"],
         "--cost", synthetic_paths["cost"],
+        "--config", synthetic_paths["config"],
         "--out", str(out),
     ])
     assert rc == 0

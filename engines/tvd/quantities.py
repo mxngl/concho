@@ -4,20 +4,23 @@ Rules (see :func:`pick_quantity`): fixed quantity, toilet count, quantity mirror
 takeoff lookup by unit. Aggregation handles DNC elements, excluded categories and
 keyword-based AC splitting.
 
-The project-specific rule tables default to the Island values in
-:mod:`engines.tvd.island_defaults` (replaced by project_config in P3.1/P3.2).
+The rule tables default to the engine defaults in :mod:`engines.tvd.rules` (moved to
+the cost DB in P3.4). Clusters are compared by course cluster (A-H), see
+:mod:`engines.tvd.clusters`.
 """
 
 from collections import defaultdict
 
-from engines.tvd.island_defaults import (
+from engines.common.config import CourseCluster
+from engines.tvd.clusters import course_cluster
+from engines.tvd.loading import parse_qty_str
+from engines.tvd.rules import (
     AC_KEYWORD_SPLIT,
     EXCLUDE_CATEGORIES,
     QUANTITY_MIRRORS,
     TAKEOFF_CLUSTERS,
     TOILET_ACS,
 )
-from engines.tvd.loading import parse_qty_str
 
 # Elements whose Family, Type, Mark, or Comments contain this marker (case-insensitive)
 # are silently excluded from all quantity aggregation and cost calculations.
@@ -112,7 +115,7 @@ def pick_quantity(
     fixed_qty_by_ac: dict | None = None,
     *,
     toilet_acs: set[str] = TOILET_ACS,
-    takeoff_clusters: set[str] = TAKEOFF_CLUSTERS,
+    takeoff_clusters: frozenset[CourseCluster] = TAKEOFF_CLUSTERS,
     quantity_mirrors: dict[str, tuple[str, str]] = QUANTITY_MIRRORS,
 ) -> tuple[float, str]:
     """
@@ -140,7 +143,7 @@ def pick_quantity(
         return float(count), label
 
     # Only clusters A–C use takeoff data from here on
-    if cr["cluster"] not in takeoff_clusters:
+    if course_cluster(cr["cluster"]) not in takeoff_clusters:
         return 0.0, "Fixed only (none set)"
 
     # Rule 3 — finish mirrors: track another AC's quantity
@@ -181,7 +184,7 @@ def calculate_costs(
     all_ac_counts: dict,
     *,
     toilet_acs: set[str] = TOILET_ACS,
-    takeoff_clusters: set[str] = TAKEOFF_CLUSTERS,
+    takeoff_clusters: frozenset[CourseCluster] = TAKEOFF_CLUSTERS,
     quantity_mirrors: dict[str, tuple[str, str]] = QUANTITY_MIRRORS,
 ) -> list[dict]:
     """Apply unit costs to quantities and return enriched line items."""
@@ -196,6 +199,7 @@ def calculate_costs(
 
     results = []
     for cr in cost_data:
+        is_takeoff = course_cluster(cr["cluster"]) in takeoff_clusters
         qty, qty_src = pick_quantity(
             cr, code_qtys, all_ac_counts, fixed_qty_by_ac,
             toilet_acs=toilet_acs,
@@ -210,12 +214,12 @@ def calculate_costs(
             notes.append("No unit cost")
         if (qty == 0
                 and cr["fixed_qty"] is None
-                and cr["cluster"] in takeoff_clusters
+                and is_takeoff
                 and cr["ac"] not in special_acs):
             notes.append("Zero qty from takeoff")
         if (cr["ac"] not in code_qtys
                 and cr["fixed_qty"] is None
-                and cr["cluster"] in takeoff_clusters
+                and is_takeoff
                 and cr["ac"] not in special_acs):
             notes.append("AC not in takeoff")
 

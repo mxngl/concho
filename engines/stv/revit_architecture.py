@@ -1,13 +1,12 @@
 from __future__ import annotations
 
 import csv
+import re
 from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
-import re
 
 from .models import ConstructionItem
-
 
 DOOR_DEFAULT_THICKNESS_FT = 1.75 / 12.0
 
@@ -84,7 +83,6 @@ def _map_architecture_row(row: dict[str, str]) -> ConstructionItem | None:
     assembly_description = _normalized(row.get("Assembly Description"))
     material = _normalized(row.get("Material"))
     area_sf = _parse_measurement(row.get("Area", ""))
-    volume_cf = _parse_measurement(row.get("Volume", ""))
 
     if category == "floors":
         return _map_floor(area_sf, family, type_name, assembly_code, assembly_description, material)
@@ -100,7 +98,7 @@ def _map_architecture_row(row: dict[str, str]) -> ConstructionItem | None:
             material_type="Curtain Wall Double Pane (sf)",
             amount=area_sf,
         )
-    
+
     if category == "curtain wall mullions":
         if area_sf <= 0:
             return None

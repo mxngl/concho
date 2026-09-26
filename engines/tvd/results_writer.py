@@ -17,13 +17,17 @@ def build_results_payload(
     dupes_removed: int,
     dnc_count: int,
     ts: datetime | None = None,
+    *,
+    project_name: str = "",
+    team_name: str = "",
 ) -> dict:
     """
     Build the structured results dict of a run.
 
     Schema
     ------
-    meta              – run provenance (timestamp, source files, element counts)
+    meta              – run provenance (timestamp, project/team name, source files,
+                        element counts)
     financials        – grand total, TVD target, delta, $/SF, status
     cluster_targets   – dict of cluster → target value
     cluster_summary   – list of {cluster, estimate, target, delta, delta_pct, per_sf}
@@ -71,6 +75,8 @@ def build_results_payload(
             "generated_at":      ts.isoformat(),
             "date":              date_str,
             "label":             f"Run {date_str}",
+            "project_name":      project_name,
+            "team_name":         team_name,
             "data_source":       source,
             "gross_sf":          gross_sf,
             "total_elements":    all_elements_count,
