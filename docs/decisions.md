@@ -1,6 +1,6 @@
 # Decisions
 
-Decision records for D1–D10 from [ROADMAP.md §2](ROADMAP.md#2-decisions-needed-human-settle-these-before-or-during-phase-0).
+Decision records for D1–D10 from [ROADMAP.md §2](ROADMAP.md#2-decisions-needed-human-settle-these-before-or-during-phase-0), plus decisions taken in later tasks (D11+).
 State as of 2026-09-26. Owners: Max Nagel, Ashmitha Jaysi Sivakumar. Updating these records is task P0.5.
 
 Status values: **decided** · **working assumption** (acted on, still to be confirmed) · **deferred** (not needed yet) · **open** (not settled; recommended default listed).
@@ -17,6 +17,7 @@ Status values: **decided** · **working assumption** (acted on, still to be conf
 | D8 | Tool access 2027 | working assumption |
 | D9 | Location of the transcript agent and ClashBot | open |
 | D10 | Origin of `6.38e6` / `1.51e8` | open |
+| D11 | Urinal `null` vs. `0` in `project_config` (P3.10 item 3) | decided |
 
 ---
 
@@ -75,3 +76,19 @@ Status values: **decided** · **working assumption** (acted on, still to be conf
 - **Status:** open
 - **Context:** Both constants come from the course workbook `CEE_222_STV_V12.xlsx` (roadmap §1); their derivation is unknown.
 - **Recommended default:** ask Renate or the TA; document the answer in the engine docs.
+
+## D11: Urinal `null` vs. `0` in `project_config` (P3.10 item 3)
+
+- **Status:** decided (2026-09-26, with P3.1)
+- **Context:** The course STV workbook applies the 0.75 toilet factor whenever the urinal
+  cell is non-blank, even when it holds 0. The engine applies it only when `urinal_gpf > 0`
+  (found in P2.4). A plain number cannot tell "no urinals" from "urinal cell = 0".
+- **Decision:** `stv.use_phase.water.urinal_gpf` in `project_config`:
+  - `null` = the building has no urinals → toilet factor 1.0 (course: blank cell);
+  - a number, **including an explicit `0`** = course behaviour → toilet factor 0.75
+    (course: non-blank cell);
+  - the key must be present unless `use_phase.not_modeled` is true, so the choice is always
+    explicit.
+- **Consequences:** The schema (P3.1) already distinguishes the two. The engine change
+  (factor 0.75 for any non-null value, 1.0 for `null`) and its test belong to P3.10 and the
+  config wiring in P3.2; until then the engine keeps its current behaviour.

@@ -1,0 +1,1125 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/mxngl/concho/blob/main/docs/schema/project_config.schema.json",
+  "$defs": {
+    "Adapters": {
+      "additionalProperties": false,
+      "description": "Optional licensed-tool adapters (D8). The core runs with all of them off.",
+      "properties": {
+        "alice": {
+          "default": false,
+          "description": "ALICE macro schedule import/export.",
+          "title": "Alice",
+          "type": "boolean"
+        },
+        "fuzor": {
+          "default": false,
+          "description": "Fuzor 4D export.",
+          "title": "Fuzor",
+          "type": "boolean"
+        },
+        "manufacton": {
+          "default": false,
+          "description": "Manufacton parts/assemblies/orders.",
+          "title": "Manufacton",
+          "type": "boolean"
+        }
+      },
+      "title": "Adapters",
+      "type": "object"
+    },
+    "AgentSection": {
+      "additionalProperties": false,
+      "description": "Concho agent settings.",
+      "properties": {
+        "default_language": {
+          "default": "en",
+          "description": "Answer language (ISO 639-1, e.g. 'en', 'de').",
+          "pattern": "^[a-z]{2}(-[A-Z]{2})?$",
+          "title": "Default Language",
+          "type": "string"
+        },
+        "models": {
+          "$ref": "#/$defs/Models"
+        },
+        "discord": {
+          "$ref": "#/$defs/Discord"
+        },
+        "extensions": {
+          "$ref": "#/$defs/Extensions"
+        }
+      },
+      "required": [
+        "models"
+      ],
+      "title": "AgentSection",
+      "type": "object"
+    },
+    "BlockedWindow": {
+      "additionalProperties": false,
+      "description": "A period without site work, e.g. hurricane season.",
+      "properties": {
+        "name": {
+          "description": "Label, e.g. 'Hurricane season 2030'.",
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "start": {
+          "description": "First blocked day.",
+          "format": "date",
+          "title": "Start",
+          "type": "string"
+        },
+        "end": {
+          "description": "Last blocked day.",
+          "format": "date",
+          "title": "End",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "start",
+        "end"
+      ],
+      "title": "BlockedWindow",
+      "type": "object"
+    },
+    "Budget": {
+      "additionalProperties": false,
+      "description": "Course budget formula: budget = grant x (1 - inflation + roi) ^ (construction_year -\ngrant_year).",
+      "properties": {
+        "grant": {
+          "description": "Grant amount in the grant year.",
+          "exclusiveMinimum": 0,
+          "title": "Grant",
+          "type": "number"
+        },
+        "grant_year": {
+          "description": "Year the grant is given.",
+          "maximum": 2200,
+          "minimum": 1900,
+          "title": "Grant Year",
+          "type": "integer"
+        },
+        "construction_year": {
+          "description": "Year of construction.",
+          "maximum": 2200,
+          "minimum": 1900,
+          "title": "Construction Year",
+          "type": "integer"
+        },
+        "inflation": {
+          "description": "Annual inflation as a fraction (0.03 = 3 %).",
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Inflation",
+          "type": "number"
+        },
+        "roi": {
+          "description": "Annual return on investment as a fraction.",
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Roi",
+          "type": "number"
+        }
+      },
+      "required": [
+        "grant",
+        "grant_year",
+        "construction_year",
+        "inflation",
+        "roi"
+      ],
+      "title": "Budget",
+      "type": "object"
+    },
+    "Calendar": {
+      "additionalProperties": false,
+      "description": "Work calendar.",
+      "properties": {
+        "hours_per_day": {
+          "default": 8,
+          "description": "Working hours per day.",
+          "exclusiveMinimum": 0,
+          "maximum": 24,
+          "title": "Hours Per Day",
+          "type": "number"
+        },
+        "workdays": {
+          "description": "Working weekdays.",
+          "items": {
+            "$ref": "#/$defs/Weekday"
+          },
+          "minItems": 1,
+          "title": "Workdays",
+          "type": "array"
+        },
+        "holidays": {
+          "description": "Non-working dates.",
+          "items": {
+            "format": "date",
+            "type": "string"
+          },
+          "title": "Holidays",
+          "type": "array"
+        }
+      },
+      "title": "Calendar",
+      "type": "object"
+    },
+    "Cogeneration": {
+      "additionalProperties": false,
+      "description": "Cogeneration inputs (course STV workbook, use-phase block). Omit the whole object\n(`null`) when the project has no cogeneration.",
+      "properties": {
+        "fuel_type": {
+          "description": "Fuel name as in the course 'Cogen Data' sheet.",
+          "minLength": 1,
+          "title": "Fuel Type",
+          "type": "string"
+        },
+        "electricity_kwh": {
+          "description": "Electricity per year (kWh).",
+          "minimum": 0,
+          "title": "Electricity Kwh",
+          "type": "number"
+        },
+        "heating_mj": {
+          "description": "Heating per year (MJ).",
+          "minimum": 0,
+          "title": "Heating Mj",
+          "type": "number"
+        },
+        "cooling_kwh": {
+          "description": "Cooling per year (kWh).",
+          "minimum": 0,
+          "title": "Cooling Kwh",
+          "type": "number"
+        },
+        "splits": {
+          "$ref": "#/$defs/CogenerationSplits"
+        }
+      },
+      "required": [
+        "fuel_type",
+        "electricity_kwh",
+        "heating_mj",
+        "cooling_kwh",
+        "splits"
+      ],
+      "title": "Cogeneration",
+      "type": "object"
+    },
+    "CogenerationSplits": {
+      "additionalProperties": false,
+      "description": "Shares of the cogeneration fuel per output; must sum to 1.0.",
+      "properties": {
+        "electricity": {
+          "description": "Share of the fuel used for electricity.",
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Electricity",
+          "type": "number"
+        },
+        "heating": {
+          "description": "Share of the fuel used for heating.",
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Heating",
+          "type": "number"
+        },
+        "cooling": {
+          "description": "Share of the fuel used for cooling.",
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Cooling",
+          "type": "number"
+        }
+      },
+      "required": [
+        "electricity",
+        "heating",
+        "cooling"
+      ],
+      "title": "CogenerationSplits",
+      "type": "object"
+    },
+    "CourseCluster": {
+      "description": "TVD clusters A-H as in the course TVD workbook (cluster sheets \"A Substructure\" ...\n\"H Gen. Cond.\").",
+      "enum": [
+        "A",
+        "B",
+        "C",
+        "D",
+        "E",
+        "F",
+        "G",
+        "H"
+      ],
+      "title": "CourseCluster",
+      "type": "string"
+    },
+    "CourseTeam": {
+      "description": "The seven team rows of the course STV workbook (``LCA Data`` rows 115-121).",
+      "enum": [
+        "Pacific",
+        "Atlantic",
+        "Ridge",
+        "Island",
+        "River",
+        "Central",
+        "Express"
+      ],
+      "title": "CourseTeam",
+      "type": "string"
+    },
+    "CustomCluster": {
+      "additionalProperties": false,
+      "description": "A team-specific cluster that is not part of the course (flagged non-course data).",
+      "properties": {
+        "name": {
+          "description": "Display name, e.g. 'Equipment Rental'.",
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "target": {
+          "description": "Target amount in project currency.",
+          "minimum": 0,
+          "title": "Target",
+          "type": "number"
+        },
+        "mode": {
+          "description": "`carved_out`: part of the total target (course clusters get the rest). `on_top`: added on top of the total target (reported as a warning).",
+          "enum": [
+            "carved_out",
+            "on_top"
+          ],
+          "title": "Mode",
+          "type": "string"
+        },
+        "is_course_data": {
+          "const": false,
+          "default": false,
+          "description": "Always false: custom clusters are team data.",
+          "title": "Is Course Data",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "name",
+        "target",
+        "mode"
+      ],
+      "title": "CustomCluster",
+      "type": "object"
+    },
+    "DeriveFromReferences": {
+      "additionalProperties": false,
+      "description": "Course method: cluster share = average of the reference columns, then\n`reallocation_pct` of the total is reallocated by the owner value ratings.",
+      "properties": {
+        "method": {
+          "const": "derive_from_references",
+          "title": "Method",
+          "type": "string"
+        },
+        "reference_columns": {
+          "description": "RSMeans reference and previous projects (course: 1 + 3 columns).",
+          "items": {
+            "$ref": "#/$defs/ReferenceColumn"
+          },
+          "minItems": 1,
+          "title": "Reference Columns",
+          "type": "array"
+        },
+        "owner_ratings": {
+          "additionalProperties": {
+            "minimum": 0,
+            "type": "number"
+          },
+          "description": "Owner value rating per course cluster A-H (course sheet 'TVD Owners').",
+          "propertyNames": {
+            "$ref": "#/$defs/CourseCluster"
+          },
+          "title": "Owner Ratings",
+          "type": "object"
+        },
+        "reallocation_pct": {
+          "default": 0.1,
+          "description": "Share of the total reallocated by owner ratings (0.10 = 10 %).",
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Reallocation Pct",
+          "type": "number"
+        }
+      },
+      "required": [
+        "method",
+        "reference_columns",
+        "owner_ratings"
+      ],
+      "title": "DeriveFromReferences",
+      "type": "object"
+    },
+    "Discord": {
+      "additionalProperties": false,
+      "description": "Discord IDs are given as env var NAMES only, never as IDs.",
+      "properties": {
+        "guild": {
+          "anyOf": [
+            {
+              "description": "Name of an environment variable (UPPER_SNAKE_CASE). The value itself lives in `.env` / GitHub secrets, never in this file.",
+              "pattern": "^[A-Z_][A-Z0-9_]*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Env var with the server ID.",
+          "title": "Guild"
+        },
+        "channels": {
+          "description": "Logical channel name (e.g. 'ask', 'debug') -> env var with the channel ID.",
+          "patternProperties": {
+            "^[a-z][a-z0-9_-]*$": {
+              "description": "Name of an environment variable (UPPER_SNAKE_CASE). The value itself lives in `.env` / GitHub secrets, never in this file.",
+              "pattern": "^[A-Z_][A-Z0-9_]*$",
+              "type": "string"
+            }
+          },
+          "title": "Channels",
+          "type": "object"
+        }
+      },
+      "title": "Discord",
+      "type": "object"
+    },
+    "ExplicitSplit": {
+      "additionalProperties": false,
+      "description": "Cluster targets given directly, as shares of the total or as amounts.",
+      "properties": {
+        "method": {
+          "const": "explicit",
+          "title": "Method",
+          "type": "string"
+        },
+        "basis": {
+          "description": "`pct`: values are fractions of the course-cluster total (total target minus carved-out custom clusters) and must sum to 1.0. `amount`: values are currency amounts that, with the carved-out custom clusters, must sum to the total target.",
+          "enum": [
+            "pct",
+            "amount"
+          ],
+          "title": "Basis",
+          "type": "string"
+        },
+        "values": {
+          "additionalProperties": {
+            "minimum": 0,
+            "type": "number"
+          },
+          "description": "One value per course cluster A-H (all eight required; 0 is allowed).",
+          "propertyNames": {
+            "$ref": "#/$defs/CourseCluster"
+          },
+          "title": "Values",
+          "type": "object"
+        }
+      },
+      "required": [
+        "method",
+        "basis",
+        "values"
+      ],
+      "title": "ExplicitSplit",
+      "type": "object"
+    },
+    "Extensions": {
+      "additionalProperties": false,
+      "description": "Optional agent extensions (Phase 10).",
+      "properties": {
+        "transcripts": {
+          "default": false,
+          "description": "Meeting transcript agent.",
+          "title": "Transcripts",
+          "type": "boolean"
+        },
+        "clashbot": {
+          "default": false,
+          "description": "ClashBot (needs ACC/APS access).",
+          "title": "Clashbot",
+          "type": "boolean"
+        }
+      },
+      "title": "Extensions",
+      "type": "object"
+    },
+    "FilesSection": {
+      "additionalProperties": false,
+      "description": "Input files and the exports directory, relative to this config file. `cost_db` and\n`macro_schedule` are needed by the engines (error if set but missing, warning if unset);\nthe others are optional (warning if set but missing).",
+      "properties": {
+        "cost_db": {
+          "anyOf": [
+            {
+              "description": "Path relative to the directory of this config file.",
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "TVD cost DB CSV (P3.4).",
+          "title": "Cost Db"
+        },
+        "stv_mapping": {
+          "anyOf": [
+            {
+              "description": "Path relative to the directory of this config file.",
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "STV mapping CSV (P3.6).",
+          "title": "Stv Mapping"
+        },
+        "custom_materials": {
+          "anyOf": [
+            {
+              "description": "Path relative to the directory of this config file.",
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Custom materials CSV (P3.7).",
+          "title": "Custom Materials"
+        },
+        "macro_schedule": {
+          "anyOf": [
+            {
+              "description": "Path relative to the directory of this config file.",
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Macro schedule CSV (P3B.1).",
+          "title": "Macro Schedule"
+        },
+        "schedule_rules": {
+          "anyOf": [
+            {
+              "description": "Path relative to the directory of this config file.",
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Schedule rules JSON (P3B.2).",
+          "title": "Schedule Rules"
+        },
+        "exports": {
+          "default": "exports",
+          "description": "Directory for Revit exports.",
+          "minLength": 1,
+          "title": "Exports",
+          "type": "string"
+        }
+      },
+      "title": "FilesSection",
+      "type": "object"
+    },
+    "Models": {
+      "additionalProperties": false,
+      "description": "Model names per agent role (D6: provider still open).",
+      "properties": {
+        "router": {
+          "description": "Model for the router agent.",
+          "minLength": 1,
+          "title": "Router",
+          "type": "string"
+        },
+        "subagent": {
+          "description": "Model for the subagents.",
+          "minLength": 1,
+          "title": "Subagent",
+          "type": "string"
+        },
+        "tts": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Text-to-speech model (optional).",
+          "title": "Tts"
+        }
+      },
+      "required": [
+        "router",
+        "subagent"
+      ],
+      "title": "Models",
+      "type": "object"
+    },
+    "ProjectSection": {
+      "additionalProperties": false,
+      "description": "General project data.",
+      "properties": {
+        "name": {
+          "description": "Project name, e.g. the building name.",
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "team_name": {
+          "description": "Team name as shown in dashboards and answers.",
+          "minLength": 1,
+          "title": "Team Name",
+          "type": "string"
+        },
+        "location": {
+          "description": "City, region/country of the site.",
+          "minLength": 1,
+          "title": "Location",
+          "type": "string"
+        },
+        "currency": {
+          "default": "USD",
+          "description": "ISO 4217 currency code of all amounts in this file.",
+          "pattern": "^[A-Z]{3}$",
+          "title": "Currency",
+          "type": "string"
+        },
+        "units": {
+          "const": "imperial",
+          "default": "imperial",
+          "description": "Unit system of quantities (only imperial, as in the course workbooks).",
+          "title": "Units",
+          "type": "string"
+        },
+        "gross_sf": {
+          "description": "Gross floor area in square feet ($/SF index).",
+          "exclusiveMinimum": 0,
+          "title": "Gross Sf",
+          "type": "number"
+        },
+        "completion_date": {
+          "description": "Planned project completion (YYYY-MM-DD).",
+          "format": "date",
+          "title": "Completion Date",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "team_name",
+        "location",
+        "gross_sf",
+        "completion_date"
+      ],
+      "title": "ProjectSection",
+      "type": "object"
+    },
+    "ReferenceColumn": {
+      "additionalProperties": false,
+      "description": "One reference column of the course \"TVD Targets\" sheet (RSMeans reference or a\nprevious project).",
+      "properties": {
+        "name": {
+          "description": "Column label, e.g. 'RSMeans' or 'Project 1'.",
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "shares": {
+          "additionalProperties": {
+            "maximum": 1,
+            "minimum": 0,
+            "type": "number"
+          },
+          "description": "Share per course cluster A-H; the eight shares must sum to 1.0.",
+          "propertyNames": {
+            "$ref": "#/$defs/CourseCluster"
+          },
+          "title": "Shares",
+          "type": "object"
+        }
+      },
+      "required": [
+        "name",
+        "shares"
+      ],
+      "title": "ReferenceColumn",
+      "type": "object"
+    },
+    "STVSection": {
+      "additionalProperties": false,
+      "description": "Sustainable Target Value (life-cycle carbon, energy, water).",
+      "properties": {
+        "course_team": {
+          "$ref": "#/$defs/CourseTeam",
+          "description": "Team row of the course STV workbook used for the targets."
+        },
+        "lifetime_years": {
+          "default": 50,
+          "description": "Building lifetime.",
+          "exclusiveMinimum": 0,
+          "maximum": 200,
+          "title": "Lifetime Years",
+          "type": "integer"
+        },
+        "course_workbook_env": {
+          "default": "COURSE_STV_XLSX",
+          "description": "Env var that holds the local path to the course STV workbook.",
+          "pattern": "^[A-Z_][A-Z0-9_]*$",
+          "title": "Course Workbook Env",
+          "type": "string"
+        },
+        "use_phase": {
+          "$ref": "#/$defs/UsePhase"
+        },
+        "custom_materials_file": {
+          "anyOf": [
+            {
+              "description": "Path relative to the directory of this config file.",
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional custom materials CSV (P3.7). Same as files.custom_materials; if both are set they must be the same path.",
+          "title": "Custom Materials File"
+        }
+      },
+      "required": [
+        "course_team",
+        "use_phase"
+      ],
+      "title": "STVSection",
+      "type": "object"
+    },
+    "ScheduleSection": {
+      "additionalProperties": false,
+      "description": "Schedule inputs (P3B.7).",
+      "properties": {
+        "start_date": {
+          "description": "Construction start.",
+          "format": "date",
+          "title": "Start Date",
+          "type": "string"
+        },
+        "calendar": {
+          "$ref": "#/$defs/Calendar"
+        },
+        "blocked_windows": {
+          "description": "Periods without site work (weather, shutdowns).",
+          "items": {
+            "$ref": "#/$defs/BlockedWindow"
+          },
+          "title": "Blocked Windows",
+          "type": "array"
+        },
+        "target_completion": {
+          "description": "Target completion of construction.",
+          "format": "date",
+          "title": "Target Completion",
+          "type": "string"
+        },
+        "rooms_per_zone": {
+          "default": 1,
+          "description": "Takt planner: rooms per zone.",
+          "minimum": 1,
+          "title": "Rooms Per Zone",
+          "type": "integer"
+        },
+        "trade_sequence": {
+          "description": "Takt trade order (default = the engine's current fixed sequence).",
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Trade Sequence",
+          "type": "array"
+        },
+        "adapters": {
+          "$ref": "#/$defs/Adapters"
+        }
+      },
+      "required": [
+        "start_date",
+        "target_completion"
+      ],
+      "title": "ScheduleSection",
+      "type": "object"
+    },
+    "TVDSection": {
+      "additionalProperties": false,
+      "description": "Target Value Design: total target, cluster split, custom clusters.",
+      "properties": {
+        "total_target": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Total target amount. Give this OR `budget` + `target`, not both.",
+          "title": "Total Target"
+        },
+        "budget": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Budget"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Course budget formula inputs (requires `target`)."
+        },
+        "target": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Target set by the team, used together with `budget`.",
+          "title": "Target"
+        },
+        "cluster_split": {
+          "description": "How the total is split into clusters A-H.",
+          "discriminator": {
+            "mapping": {
+              "derive_from_references": "#/$defs/DeriveFromReferences",
+              "explicit": "#/$defs/ExplicitSplit"
+            },
+            "propertyName": "method"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/ExplicitSplit"
+            },
+            {
+              "$ref": "#/$defs/DeriveFromReferences"
+            }
+          ],
+          "title": "Cluster Split"
+        },
+        "custom_clusters": {
+          "description": "Optional non-course clusters.",
+          "items": {
+            "$ref": "#/$defs/CustomCluster"
+          },
+          "title": "Custom Clusters",
+          "type": "array"
+        },
+        "target_sum_tolerance": {
+          "default": 0.001,
+          "description": "Allowed difference between the sum of the cluster targets and the total target, as a fraction of the total target (0.001 = 0.1 %).",
+          "exclusiveMaximum": 1,
+          "minimum": 0,
+          "title": "Target Sum Tolerance",
+          "type": "number"
+        }
+      },
+      "required": [
+        "cluster_split"
+      ],
+      "title": "TVDSection",
+      "type": "object"
+    },
+    "UsePhase": {
+      "additionalProperties": false,
+      "description": "Operational energy and water per year. Every value is required (0 is allowed but must\nbe stated) unless `not_modeled` is true.",
+      "properties": {
+        "not_modeled": {
+          "default": false,
+          "description": "true = the use phase is not modeled; the STV result then covers construction only (reported as a warning).",
+          "title": "Not Modeled",
+          "type": "boolean"
+        },
+        "grid_kwh": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Grid electricity (kWh/yr).",
+          "title": "Grid Kwh"
+        },
+        "onsite_renewable_kwh": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "On-site renewable electricity, e.g. PV (kWh/yr).",
+          "title": "Onsite Renewable Kwh"
+        },
+        "natural_gas_m3": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Natural gas (m3/yr).",
+          "title": "Natural Gas M3"
+        },
+        "cogeneration": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Cogeneration"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Cogeneration inputs; the key must be present (`null` = no cogeneration)."
+        },
+        "water": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/WaterUse"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Water fixtures and volumes."
+        }
+      },
+      "title": "UsePhase",
+      "type": "object"
+    },
+    "WaterUse": {
+      "additionalProperties": false,
+      "description": "Water fixtures and yearly volumes (course STV workbook, water block).",
+      "properties": {
+        "toilet_gpf": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Toilet flush (gal/flush).",
+          "title": "Toilet Gpf"
+        },
+        "urinal_gpf": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Urinal flush (gal/flush). `null` = no urinals (toilet factor 1.0); an explicit `0` = course behaviour (the course applies the 0.75 toilet factor whenever the urinal cell is non-blank). The key must be present unless not_modeled is true. See docs/decisions.md.",
+          "title": "Urinal Gpf"
+        },
+        "wc_sink_gpm": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "WC sink (gal/min).",
+          "title": "Wc Sink Gpm"
+        },
+        "lab_sink_gpm": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Lab sink (gal/min).",
+          "title": "Lab Sink Gpm"
+        },
+        "kitchen_sink_gpm": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Kitchen sink (gal/min).",
+          "title": "Kitchen Sink Gpm"
+        },
+        "shower_gpm": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Shower (gal/min).",
+          "title": "Shower Gpm"
+        },
+        "landscaping_gal": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Landscaping water per year (gal).",
+          "title": "Landscaping Gal"
+        },
+        "rainwater_gal": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Rainwater collected per year (gal).",
+          "title": "Rainwater Gal"
+        }
+      },
+      "title": "WaterUse",
+      "type": "object"
+    },
+    "Weekday": {
+      "enum": [
+        "Mon",
+        "Tue",
+        "Wed",
+        "Thu",
+        "Fri",
+        "Sat",
+        "Sun"
+      ],
+      "title": "Weekday",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Concho project configuration (one file per team).",
+  "properties": {
+    "$schema": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Optional path/URL of the JSON Schema (for editor support).",
+      "title": "$Schema"
+    },
+    "project": {
+      "$ref": "#/$defs/ProjectSection"
+    },
+    "tvd": {
+      "$ref": "#/$defs/TVDSection"
+    },
+    "stv": {
+      "$ref": "#/$defs/STVSection"
+    },
+    "schedule": {
+      "$ref": "#/$defs/ScheduleSection"
+    },
+    "agent": {
+      "$ref": "#/$defs/AgentSection"
+    },
+    "files": {
+      "$ref": "#/$defs/FilesSection"
+    }
+  },
+  "required": [
+    "project",
+    "tvd",
+    "stv",
+    "schedule",
+    "agent"
+  ],
+  "title": "Concho project_config",
+  "type": "object"
+}

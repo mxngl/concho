@@ -32,6 +32,9 @@ jobs:
       - name: Lint
         run: ruff check .
 
+      - name: project_config schema drift
+        run: python scripts/export_config_schema.py --check
+
       - name: Test
         run: pytest
 
