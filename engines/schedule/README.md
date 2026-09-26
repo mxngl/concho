@@ -171,17 +171,19 @@ the bamboo design:
   `concho-schedule` on an invented mini project (`tests/schedule/mini_project.py`), plus the
   ALICE workbook conversion. The Manufacton templates are generated with the column layout
   the adapters check.
-- `tests/schedule/test_schedule_equivalence.py` (only with `IPD_CHALLENGE_DIR` set to a
-  checkout of IPD_Challenge@989a6b7): runs the original scripts in a temporary copy of the
+- `tests/schedule/test_schedule_equivalence.py` (needs the IPD_Challenge@989a6b7 checkout:
+  `IPD_CHALLENGE_DIR`, or `IPD_Challenge` in the P2.1 fixture folder from
+  `scripts/fetch_fixtures.py`; runs in the CI job `reference`, skipped elsewhere): runs the original scripts in a temporary copy of the
   checkout and the migrated CLIs on the same inputs. Every CSV/MD/HTML/XML/xlsx output of
   all 14 steps must match; only run-root paths, the random P6 GUIDs and the relative FBX
   link are masked. It also checks the §1 reference checksums (see below).
-- `tests/schedule/test_schedule_migration_diff.py` (same env var): compares each migrated
+- `tests/schedule/test_schedule_migration_diff.py` (same checkout): compares each migrated
   module with its original as an AST. Only path constants, the listed path/`None`-guard
   functions and the new CLI functions may differ.
 
 ```bash
 IPD_CHALLENGE_DIR=/path/to/IPD_Challenge pytest tests/schedule   # ~2.5 min
+# or: python scripts/fetch_fixtures.py && pytest tests/schedule
 ```
 
 **Reference checksums (roadmap §1).** Checked on 2026-09-26 with pandas 2.3.3:

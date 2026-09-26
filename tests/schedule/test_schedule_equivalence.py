@@ -1,7 +1,9 @@
 """Equivalence test: migrated schedule CLIs vs. the original IPD_Challenge scripts.
 
-Skipped unless ``IPD_CHALLENGE_DIR`` points to a local checkout of ashjs2003/IPD_Challenge at
-commit 989a6b7. Nothing from that checkout is copied into this repo.
+Uses the IPD_Challenge@989a6b7 checkout from ``IPD_CHALLENGE_DIR`` if set, else
+``IPD_Challenge`` in the shared fixture root (``CONCHO_FIXTURES_DIR`` or ``.fixtures/``, see
+``tests/conftest.py``); skipped without it (fails in the CI job ``reference``). Nothing from
+that checkout is copied into this repo.
 
 The original scripts run, in pipeline order, inside a temporary copy of the checkout (they
 write next to themselves). The migrated steps run via ``python -m engines.schedule <step>``
@@ -30,14 +32,6 @@ import sys
 from pathlib import Path
 
 import pytest
-
-IPD_DIR = (
-    Path(os.environ["IPD_CHALLENGE_DIR"]).resolve()
-    if os.environ.get("IPD_CHALLENGE_DIR")
-    else None
-)
-
-pytestmark = pytest.mark.skipif(IPD_DIR is None, reason="IPD_CHALLENGE_DIR not set")
 
 PE = "src/Planning_engine"
 ALICE_OUT = f"{PE}/ALICE_BIM_mapper/outputs"
@@ -299,24 +293,25 @@ MIGRATED_DIRS = {
 
 
 @pytest.fixture(scope="module")
-def runs(tmp_path_factory: pytest.TempPathFactory) -> dict[str, object]:
+def runs(
+    tmp_path_factory: pytest.TempPathFactory, ipd_challenge_dir: Path
+) -> dict[str, object]:
     """Run the original pipeline and the migrated pipeline once; return roots + results."""
-    assert IPD_DIR is not None
     base = tmp_path_factory.mktemp("schedule_equivalence")
     orig = base / "original"
     new = base / "migrated"
-    shutil.copytree(IPD_DIR, orig, ignore=shutil.ignore_patterns(".git"))
+    shutil.copytree(ipd_challenge_dir, orig, ignore=shutil.ignore_patterns(".git"))
 
     results: dict[str, dict[str, subprocess.CompletedProcess[str]]] = {"orig": {}, "new": {}}
     for step, script in ORIGINAL_SCRIPTS.items():
         results["orig"][step] = _run(script, cwd=orig)
-    for step, args in _migrated_args(IPD_DIR, new).items():
+    for step, args in _migrated_args(ipd_challenge_dir, new).items():
         results["new"][step] = _run(["-m", "engines.schedule", step, *args], cwd=base)
-    return {"orig": orig, "new": new, "results": results}
+    return {"orig": orig, "new": new, "ipd": ipd_challenge_dir, "results": results}
 
 
 def _normalize(text: str, runs: dict[str, object]) -> str:
-    for root in (runs["orig"], IPD_DIR, runs["new"]):
+    for root in (runs["orig"], runs["ipd"], runs["new"]):
         text = text.replace(str(root), "<ROOT>")
     text = _GUID.sub("{GUID}", text)
     return _FBX_PATH.sub('"<FBX>"', text)
@@ -367,10 +362,9 @@ def _sha256(data: bytes) -> str:
 
 
 @pytest.mark.parametrize("relative", list(REFERENCE_SHA256))
-def test_checkout_has_reference_outputs(relative: str) -> None:
+def test_checkout_has_reference_outputs(ipd_challenge_dir: Path, relative: str) -> None:
     """The checkout is the P0.4 reference state (docs/ROADMAP.md §1)."""
-    assert IPD_DIR is not None
-    assert _sha256((IPD_DIR / relative).read_bytes()) == REFERENCE_SHA256[relative]
+    assert _sha256((ipd_challenge_dir / relative).read_bytes()) == REFERENCE_SHA256[relative]
 
 
 def test_macro_schedule_reproduces_reference_checksum(runs: dict[str, object]) -> None:
@@ -389,12 +383,12 @@ def test_central_bim_model_reproduces_reference_checksum(runs: dict[str, object]
     The committed file was written on the author's machine; its folder prefix is read from
     the committed file itself and substituted for this run's prefix before hashing.
     """
-    assert IPD_DIR is not None
+    ipd = runs["ipd"]
     relative = f"{ZONES_OUT}/central_bim_model_with_takt.csv"
-    committed = (IPD_DIR / relative).read_text(encoding="utf-8")
+    committed = (ipd / relative).read_text(encoding="utf-8")
     match = re.search(r",([^,\n]*[\\/])01_Island_MEP_Concept2_MEP_TakeOff\.csv,", committed)
     assert match, "no source_schedule path found in the committed file"
-    current_dir = IPD_DIR / "revit_schedules" / "Current"
+    current_dir = ipd / "revit_schedules" / "Current"
     regenerated = (runs["new"] / "takt_zones" / "central_bim_model_with_takt.csv").read_text(
         encoding="utf-8"
     )

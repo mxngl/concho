@@ -6,7 +6,8 @@ data and are never committed; tests that need them are skipped when they are mis
 
 Fixture root: ``$CONCHO_FIXTURES_DIR`` if set, else ``.fixtures/`` in the repo root if it
 exists. ``$AUTOTVD_DIR`` still overrides the AutoTVD checkout (backwards compatible with the
-P1.3 equivalence test). With ``CONCHO_REQUIRE_FIXTURES=1`` (CI job ``reference``) a missing
+P1.3 equivalence test), ``$IPD_CHALLENGE_DIR`` the IPD_Challenge checkout (P1.7). With
+``CONCHO_REQUIRE_FIXTURES=1`` (CI job ``reference``) a missing
 fixture fails the test instead of skipping it.
 """
 
@@ -71,4 +72,4 @@ def autostv_dir() -> Path:
 
 @pytest.fixture(scope="session")
 def ipd_challenge_dir() -> Path:
-    return _require("IPD_Challenge")
+    return _require("IPD_Challenge", override_env="IPD_CHALLENGE_DIR")

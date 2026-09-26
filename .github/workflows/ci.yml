@@ -53,7 +53,7 @@ jobs:
       - name: Install
         run: |
           python -m pip install --upgrade pip
-          pip install -e ".[dev,stv]"
+          pip install -e ".[dev,stv,schedule]"
 
       - name: Fetch reference fixtures
         run: python scripts/fetch_fixtures.py

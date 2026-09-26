@@ -1,7 +1,7 @@
 """The migrated schedule modules differ from IPD_Challenge@989a6b7 only where P1.7 allows.
 
-Skipped unless ``IPD_CHALLENGE_DIR`` points to a local checkout of ashjs2003/IPD_Challenge at
-commit 989a6b7.
+Uses the IPD_Challenge@989a6b7 checkout from ``IPD_CHALLENGE_DIR`` or the shared fixture root
+(see ``tests/conftest.py``); skipped without it (fails in the CI job ``reference``).
 
 Every top-level function, class and constant of each original script is compared (as AST, so
 comments and formatting are ignored) with the migrated module. Allowed differences:
@@ -18,19 +18,10 @@ Everything else (rules, constants, task logic) must be identical.
 from __future__ import annotations
 
 import ast
-import os
 import re
 from pathlib import Path
 
 import pytest
-
-IPD_DIR = (
-    Path(os.environ["IPD_CHALLENGE_DIR"]).resolve()
-    if os.environ.get("IPD_CHALLENGE_DIR")
-    else None
-)
-
-pytestmark = pytest.mark.skipif(IPD_DIR is None, reason="IPD_CHALLENGE_DIR not set")
 
 REPO = Path(__file__).resolve().parents[2]
 SCHEDULE = REPO / "engines" / "schedule"
@@ -99,10 +90,9 @@ def _top_level(path: Path) -> dict[str, str | None]:
 
 
 @pytest.mark.parametrize("original", list(MODULES), ids=list(MODULES.values()))
-def test_only_paths_and_cli_changed(original: str) -> None:
-    assert IPD_DIR is not None
+def test_only_paths_and_cli_changed(ipd_challenge_dir: Path, original: str) -> None:
     migrated = MODULES[original]
-    old = _top_level(IPD_DIR / original)
+    old = _top_level(ipd_challenge_dir / original)
     new = _top_level(SCHEDULE / migrated)
 
     changed = {name for name in old if name in new and old[name] != new[name]}
