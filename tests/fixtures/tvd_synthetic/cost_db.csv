@@ -1,0 +1,19 @@
+Cluster Name,Assembly Code,Assembly Group Name,Description             ,Unit             ,Total O&P,Fixed Quantity
+Substructure,A1010,Standard Foundations,Invented footing,CY,"$100,00",
+Substructure,A1030,Slab on Grade,Invented slab,SF,"$10,00",
+Substructure,A2020,Basement Walls,Invented wall (not in takeoff),SF,"$20,00",
+Shell,B1010,Floor Construction,Invented floor,SF,,
+Shell,B1020,Roof Construction,Invented roof,SF,"$30,00",500
+Shell,B2010.CW,Exterior Walls,Invented curtain wall,SF,"$1.200,50",
+Shell,B2010.PW,Exterior Walls,Invented plaster wall,SF,"50.25",
+Shell,B3010,Roof Coverings,Invented roof covering (mirror of fixed B1020),SF,"$5,00",
+Interiors,C1010,Partitions,Invented partition,SF,"$15,00",
+Interiors,C1020,Interior Doors,Invented door,EA,"$800,00",
+Interiors,C1030,Fittings,Invented toilet partition,EA,"$1.000,00",
+Interiors,C2010,Stair Construction,Invented handrail,LF,"$40,00",
+Interiors,C3010,Wall Finishes,Invented paint (mirror of C1010),SF,"$2,00",
+Interiors,C3020,Floor Finishes,Invented floor finish (mirror source missing),SF,"$4,00",
+Services,D2010,Plumbing Fixtures,Invented fixtures (no fixed qty),EA,"$500,00",
+Services,D5010,Electrical,Invented electrical allowance,LS,"$1,000.00",2
+General Conditions,Z1010,General Conditions,Invented GC lump sum,LS,"$12.345,67",1
+,,,,,,

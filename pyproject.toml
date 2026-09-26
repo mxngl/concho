@@ -25,12 +25,15 @@ stv = [
     "matplotlib==3.11.2",
 ]
 
+[project.scripts]
+concho-tvd = "engines.tvd.cli:main"
+
 [project.urls]
 Repository = "https://github.com/mxngl/concho"
 
-# src-less layout: only the `engines` package is importable.
+# src-less layout: only the `engines` and `dashboards` packages are importable.
 [tool.setuptools.packages.find]
-include = ["engines", "engines.*"]
+include = ["engines", "engines.*", "dashboards", "dashboards.*"]
 
 [tool.ruff]
 target-version = "py311"
@@ -39,8 +42,12 @@ line-length = 100
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "UP"]
 
+[tool.ruff.lint.per-file-ignores]
+# Verbatim copy of the AutoTVD HTML f-string (P1.3); replaced by a static page in P7.1.
+"dashboards/tvd/legacy_render.py" = ["E501", "W605"]
+
 [tool.ruff.lint.isort]
-known-first-party = ["engines", "check_forbidden"]
+known-first-party = ["engines", "dashboards", "check_forbidden"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
