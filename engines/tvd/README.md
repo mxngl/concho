@@ -112,12 +112,13 @@ The new cost DB format with plain numbers and a validator comes in P3.4.
   project values (targets, GSF, names) in the results JSON and the dashboard.
 - `tests/tvd/test_tvd_equivalence.py`: runs this engine and the original `tvd_analysis.py` on
   `AUTOTVD_DIR/qto/*.csv` + `AUTOTVD_DIR/cost_data.csv` and compares the results JSON (all fields
-  except timestamps, label, paths and the project/team names), the history snapshot and the
+  except timestamps, label, paths, the project/team names and the `target_consistency` block),
+  the history snapshot and the
   dashboard HTML. The new engine runs with `engines/common/examples/island_2026.project_config.json`.
   Masked since P3.2: the cluster name (`Special Contruction` → `Special Construction`), the team
   name and the GSF expressions in the dashboard. With the reference inputs it also checks grand
-  total 16,065,644.29, `unmapped_count` 1693 and `dnc_count` 75. Skipped unless `AUTOTVD_DIR`
-  is set:
+  total 16,065,644.29, `unmapped_count` 1693 and `dnc_count` 75, and pins the Island
+  `target_consistency` block separately (P3.3). Skipped unless `AUTOTVD_DIR` is set:
 
   ```bash
   git clone --branch island-2026-final https://github.com/mxngl/AutoTVD /tmp/AutoTVD
@@ -134,3 +135,7 @@ The new cost DB format with plain numbers and a validator comes in P3.4.
 - The webhook env vars are read when the alert fires, not at import time.
 - P3.2: project values (targets, GSF, project/team name) come from `project_config`
   (`--config`) instead of constants; course clusters use canonical names (`Special Construction`).
+- P3.3: the engine checks the cluster targets against the total target (fails outside
+  `tvd.target_sum_tolerance` unless `tvd.target_sum_override` is set) and writes a
+  `target_consistency` block into the results JSON
+  ([docs/config.md](../../docs/config.md#cluster-target-consistency-p33)).
