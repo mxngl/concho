@@ -1,0 +1,48 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "concho"
+version = "0.0.0"
+description = "AI project agent and TVD/STV/schedule engines for AEC Global Teamwork teams (prototype)."
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [
+    { name = "Max Nagel" },
+    { name = "Ashmitha Jaysi Sivakumar" },
+]
+# No license declared yet: decision D4 is pending (see docs/decisions.md).
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+    "pytest==9.1.1",
+    "ruff==0.16.9",
+]
+stv = [
+    "openpyxl==3.1.5",
+    "matplotlib==3.11.2",
+]
+
+[project.urls]
+Repository = "https://github.com/mxngl/concho"
+
+# src-less layout: only the `engines` package is importable.
+[tool.setuptools.packages.find]
+include = ["engines", "engines.*"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["engines", "check_forbidden"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["scripts"]
+addopts = "-ra"

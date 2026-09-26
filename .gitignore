@@ -1,0 +1,21 @@
+# Build artifacts (Revit add-in)
+bin/
+obj/
+
+# Python
+__pycache__/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+build/
+dist/
+.venv/
+
+# Local tooling / secrets
+.claude/
+.env
+
+# Large or licensed data (never commit course workbooks or raw exports)
+*.fbx
+*.xlsx
+exports/**/raw/
