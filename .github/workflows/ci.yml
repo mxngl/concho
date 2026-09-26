@@ -34,3 +34,29 @@ jobs:
 
       - name: Test
         run: pytest
+
+  reference:
+    # P2.1: golden / equivalence tests on the Island 2026 reference fixtures (public repos
+    # cloned at island-2026-final / 989a6b7, checksums verified). Missing fixtures fail
+    # instead of skip here; course-workbook tests (COURSE_STV_XLSX) still skip.
+    runs-on: ubuntu-latest
+    env:
+      CONCHO_FIXTURES_DIR: ${{ github.workspace }}/.fixtures
+      CONCHO_REQUIRE_FIXTURES: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev,stv]"
+
+      - name: Fetch reference fixtures
+        run: python scripts/fetch_fixtures.py
+
+      - name: Test (incl. golden and equivalence tests)
+        run: pytest
