@@ -107,7 +107,7 @@ One exception today: `prefab-walls` sits in the Manufacton adapter although step
 ## Install and run
 
 ```bash
-pip install -e ".[schedule]"   # pandas 2.3.3 pinned: the micro schedule fails under pandas 3
+pip install -e ".[schedule]"   # pandas 2.3.x or 3.x (see Tests, "pandas")
 concho-schedule                # lists the steps
 concho-schedule micro-schedule --help
 ```
@@ -175,22 +175,46 @@ the bamboo design:
 
 - `tests/schedule/test_schedule_pipeline.py` (runs in CI): all 15 steps run through
   `concho-schedule` on an invented mini project (`tests/schedule/mini_project.py`), plus the
-  ALICE workbook conversion. The Manufacton templates are generated with the column layout
-  the adapters check.
+  ALICE workbook conversion and unit tests of the P3B.8 fixes. The Manufacton templates are
+  generated with the column layout the adapters check.
+- `tests/schedule/test_schedule_golden.py` (P2.6; needs the IPD_Challenge@989a6b7 inputs,
+  runs in the CI jobs `reference` and `reference-pandas3`, skipped elsewhere): reruns all 15
+  steps on the Island inputs (+ `examples/island/`) and compares every output with
+  `tests/fixtures/schedule_golden.json`: exit status per step, the set of output files,
+  masked sha256 per file and readable metrics (rows, dates, per-task windows, takt zones and
+  hours, delivery peaks, …; a failure prints `key: golden -> actual`). It does not need the
+  original scripts. After an **intended** output change, regenerate the JSON and put the
+  metric diff into the commit / PR (see `docs/engines/schedule.md`):
+
+  ```bash
+  python tests/schedule/test_schedule_golden.py --update
+  git diff tests/fixtures/schedule_golden.json
+  ```
 - `tests/schedule/test_schedule_equivalence.py` (needs the IPD_Challenge@989a6b7 checkout:
   `IPD_CHALLENGE_DIR`, or `IPD_Challenge` in the P2.1 fixture folder from
-  `scripts/fetch_fixtures.py`; runs in the CI job `reference`, skipped elsewhere): runs the original scripts in a temporary copy of the
-  checkout and the migrated CLIs on the same inputs. Every CSV/MD/HTML/XML/xlsx output of
-  all 14 original steps must match; only run-root paths, the random P6 GUIDs and the relative FBX
-  link are masked. It also checks the §1 reference checksums (see below).
+  `scripts/fetch_fixtures.py`; runs in the CI job `reference`, skipped elsewhere): runs the
+  original scripts in a temporary copy of the checkout, then each migrated step on the
+  original run's intermediate files (per step in isolation, since P3B.8). Every
+  CSV/MD/HTML/XML/xlsx output of the 14 original steps must match; only run-root paths, the
+  random P6 GUIDs and the relative FBX link are masked. Outputs that a P3B.8 fix changes on
+  purpose are checked by a dedicated function instead (`P3B8_CHANGED_OUTPUTS`). It also checks
+  the §1 reference checksums (see below). Needs pandas 2 (the original scripts fail on
+  pandas 3): on pandas 3 it is skipped locally and fails in CI (`CONCHO_REQUIRE_FIXTURES=1`).
 - `tests/schedule/test_schedule_migration_diff.py` (same checkout): compares each migrated
   module with its original as an AST. Only path constants, the listed path/`None`-guard
-  functions and the new CLI functions may differ.
+  functions, the new CLI functions and the P3B.8 fixes (`P3B8_*`) may differ.
 
 ```bash
-IPD_CHALLENGE_DIR=/path/to/IPD_Challenge pytest tests/schedule   # ~2.5 min
-# or: python scripts/fetch_fixtures.py && pytest tests/schedule
+python scripts/fetch_fixtures.py && pytest tests/schedule   # ~2.5 min
+# or: IPD_CHALLENGE_DIR=/path/to/IPD_Challenge pytest tests/schedule
 ```
+
+**pandas.** The `schedule` extra accepts pandas 2.3.x and 3.x (`pandas>=2.3.3,<4`, since
+P3B.8 fix 6); both give the golden outputs. The original IPD scripts still need pandas 2, so
+the CI job `reference` installs with `pip install -c ci/constraints-pandas2.txt` (pandas
+2.3.3) and fails if pandas 3 slipped in; the job `reference-pandas3` runs the golden and
+pipeline tests on pandas 3. To run the equivalence test locally on a pandas 3 setup:
+`pip install -c ci/constraints-pandas2.txt -e ".[dev,schedule]"`.
 
 **Reference checksums (roadmap §1).** Checked on 2026-09-26 with pandas 2.3.3:
 
@@ -198,12 +222,13 @@ IPD_CHALLENGE_DIR=/path/to/IPD_Challenge pytest tests/schedule   # ~2.5 min
 |---|---|
 | `Macro_Schedule.csv` | yes, byte-identical (`d267a9…`) |
 | `Takt_Schedule.csv` | yes, byte-identical (`17fa80…`) with `--rooms-per-zone 2` |
-| `central_bim_model_with_takt.csv` | yes (`ff0087…`) after the `source_schedule` column's machine-specific folder prefix is replaced by the committed one |
+| `central_bim_model_with_takt.csv` | yes (`ff0087…`) after the `source_schedule` column's machine-specific folder prefix is replaced by the committed one, and (since P3B.8 fix 1) with the committed `takt_id` values put back: fix 1 changes 901 of them |
 | `Micro_Schedule.csv` | **no**, neither by the original code nor by the migrated code: the committed file predates the committed central BIM model (commit c071034 changed all of them at once). The committed run has 93 micro-task nodes / 6,457 rows, and its Ceiling task covers 3 plain ceilings; today's model gives 123 nodes / 6,625 rows, with 95 ceiling elements (mostly ceiling parts). Pinned as a strict `xfail`. |
 
 The committed `central_bim_model_llm_context.csv` (2,556 rows × 24 columns) and
 `Prefab_Wall_Mapping.csv` (750 rows) are also older than the code (which gives 3,971 × 33 and
-801). P2.6 should pin the regenerated outputs. Island facts from the regenerated run:
+801). The regenerated outputs are pinned by the golden test (P2.6). Island facts from the
+regenerated run:
 37 macro tasks, 2029-10-01 → 2030-07-05; micro schedule 2029-10-01 09:00 → 2030-03-15 19:40;
 takt plan L 1 has 16 zones and 192.36 working hours.
 
@@ -378,7 +403,8 @@ parsed as `float64`. pandas 2 silently upcast such a column to `object` on the f
 'float64'`. The fix upcasts the five room columns to `object` before the loop, which is what
 pandas 2 did implicitly, so values and output stay the same. Checked on the Island data: all
 15 steps give the golden file unchanged on pandas 2.3.3 and on pandas 3.0.6 (the pandas 2
-FutureWarning is gone).
+FutureWarning is gone). The P1.7 pin `pandas==2.3.3` became `pandas>=2.3.3,<4`; CI runs the
+golden test on both (see Tests, "pandas").
 
 ## Findings (kept as-is, for Phase 3B)
 

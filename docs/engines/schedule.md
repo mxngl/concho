@@ -17,7 +17,7 @@ column). It compares every output with `tests/fixtures/schedule_golden.json`:
 - **Exit status per step.** All 15 steps succeed. Before P3B.8, `manufacton-orders` failed
   on this data and `delivery-windows` read the committed Manufacton workbooks; since fix 3
   it reads the regenerated ones.
-- **The set of output files** (44).
+- **The set of output files** (48).
 - **sha256 per file**, after the P1.7 masking: run-root paths, random P6 GUIDs and the
   relative FBX link. xlsx files are hashed by cell values. The 8 PNG charts only have to
   exist, because matplotlib rendering is not stable across machines.
@@ -28,7 +28,9 @@ column). It compares every output with `tests/fixtures/schedule_golden.json`:
 
 No output files are committed. The reference is the JSON file, not the original scripts,
 so the test keeps working after IPD_Challenge is archived: only its inputs are read, through
-the P2.1 fixture. The test runs in the CI job `reference` (~50 s) and is skipped elsewhere.
+the P2.1 fixture. The test runs in the CI jobs `reference` (pandas 2.3.3) and
+`reference-pandas3` (~50 s each; since P3B.8 both pandas versions must give the same golden
+file) and is skipped elsewhere.
 
 The **current** `Micro_Schedule.csv` is the golden micro schedule. It is regenerated from the
 current central BIM model: 6,625 rows, 37 tasks, 120 micro-task ids, 2,496 BIM elements,
