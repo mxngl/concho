@@ -1,0 +1,854 @@
+{
+  "name": "Island AI Agent (legacy reference, 2026-09-26)",
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "connections": {
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Router Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ],
+      "main": [
+        [
+          {
+            "node": "Send debug msg1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "get_micro_schedule": {
+      "ai_tool": [
+        [
+          {
+            "node": "Schedule Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "get_alice_macro": {
+      "ai_tool": [
+        [
+          {
+            "node": "Schedule Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "get_stv_dashboard": {
+      "ai_tool": [
+        [
+          {
+            "node": "Carbon Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Simple Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "Router Agent",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ],
+      "main": [
+        [
+          {
+            "node": "Send debug msg",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "get_central_model": {
+      "ai_tool": [
+        [
+          {
+            "node": "BIM Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "get_material_data": {
+      "ai_tool": [
+        []
+      ]
+    },
+    "Cost Agent Brain": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Cost Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Carbon Agent Brain": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Carbon Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule Agent Brain": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Schedule Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "BIM Agent Brain": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "BIM Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Router Agent": {
+      "main": [
+        [
+          {
+            "node": "Switch",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Switch": {
+      "main": [
+        [
+          {
+            "node": "Cost Agent",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Carbon Agent",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Schedule Agent",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "BIM Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Send a message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "BIM Agent": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Carbon Agent": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Schedule Agent": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Cost Agent": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 3
+          }
+        ]
+      ]
+    },
+    "get_tvd_dashboard": {
+      "ai_tool": [
+        [
+          {
+            "node": "Cost Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge2": {
+      "main": [
+        [
+          {
+            "node": "Router Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields Discord": {
+      "main": [
+        [
+          {
+            "node": "Merge2",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Webhook w/ Auth": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields Discord",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "nodes": [
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-4o",
+          "mode": "list",
+          "cachedResultName": "gpt-4o"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        1056,
+        304
+      ],
+      "id": "018e5838-5e9c-4c47-9331-c9fb90103233",
+      "name": "OpenAI Chat Model",
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "toolDescription": "Returns the detailed micro-schedule with construction activities and timings",
+        "url": "https://raw.githubusercontent.com/ashjs2003/IPD_Challenge/main/src/Planning_engine/Micro_Schedule_Generator/outputs/Micro_Schedule.csv",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.4,
+      "position": [
+        2128,
+        304
+      ],
+      "id": "17bc76be-32cf-4c09-b5cf-dde5c1ed34a4",
+      "name": "get_micro_schedule"
+    },
+    {
+      "parameters": {
+        "toolDescription": "Returns macro-level planning and sequencing data in XLSX format",
+        "url": "https://raw.githubusercontent.com/ashjs2003/IPD_Challenge/main/src/Planning_engine/ALICE_BIM_mapper/inputs/ALICE_macro.xlsx",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.4,
+      "position": [
+        2128,
+        464
+      ],
+      "id": "00437376-dd31-46b9-98d1-11f8d74d399e",
+      "name": "get_alice_macro"
+    },
+    {
+      "parameters": {
+        "toolDescription": "Returns the current STV dashboard data",
+        "url": "https://raw.githubusercontent.com/mxngl/AutoSTV/refs/heads/main/outputs/stv_project/stv_results.json",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.4,
+      "position": [
+        2560,
+        -96
+      ],
+      "id": "56616816-9783-4662-bc91-7500f222e7ee",
+      "name": "get_stv_dashboard"
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "guildId": {
+          "__rl": true,
+          "value": "={{ $env.DISCORD_GUILD_ID }}",
+          "mode": "id"
+        },
+        "channelId": {
+          "__rl": true,
+          "value": "={{ $env.DISCORD_CHANNEL_ID_ASK }}",
+          "mode": "id"
+        },
+        "content": "={{ $json.output }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.discord",
+      "typeVersion": 2,
+      "position": [
+        3232,
+        -128
+      ],
+      "id": "b26091ac-4a70-44b9-9783-f45a286eabec",
+      "name": "Send a message"
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $('Webhook w/ Auth').item.json.body.author_id }}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [
+        1408,
+        304
+      ],
+      "id": "a365a837-727b-41ac-8f18-412f1feec2e3",
+      "name": "Simple Memory",
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "sendAndWait",
+        "guildId": {
+          "__rl": true,
+          "value": "={{ $env.DISCORD_GUILD_ID }}",
+          "mode": "id"
+        },
+        "channelId": {
+          "__rl": true,
+          "value": "={{ $env.DISCORD_CHANNEL_ID_DEBUG }}",
+          "mode": "id"
+        },
+        "message": "There was an error while trying to execute the workflow on n8n!",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.discord",
+      "typeVersion": 2,
+      "position": [
+        1408,
+        464
+      ],
+      "id": "85bcf271-4134-4604-bcac-3831cfe97b45",
+      "name": "Send debug msg"
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "sendAndWait",
+        "guildId": {
+          "__rl": true,
+          "value": "={{ $env.DISCORD_GUILD_ID }}",
+          "mode": "id"
+        },
+        "channelId": {
+          "__rl": true,
+          "value": "={{ $env.DISCORD_CHANNEL_ID_DEBUG }}",
+          "mode": "id"
+        },
+        "message": "There was an error while trying to execute the workflow on n8n!",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.discord",
+      "typeVersion": 2,
+      "position": [
+        1056,
+        464
+      ],
+      "id": "68810ea0-d034-41e1-942b-1206f2e474bd",
+      "name": "Send debug msg1"
+    },
+    {
+      "parameters": {
+        "toolDescription": "Returns takt zone definitions and assignments from the central BIM model",
+        "url": "https://raw.githubusercontent.com/ashjs2003/IPD_Challenge/refs/heads/main/outputs/takt_zones/central_bim_model_llm_context.csv",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.4,
+      "position": [
+        2128,
+        -112
+      ],
+      "id": "ebeb9158-3b4a-497b-81bb-baf495390d8f",
+      "name": "get_central_model"
+    },
+    {
+      "parameters": {
+        "toolDescription": "Retrieves a material database with cost (USD/SF) and embodied carbon (kgCO2e/SF) for common construction materials used in the Island 2026 project. Use this tool when asked about material alternatives, cost comparisons, substitutions, or embodied carbon of specific materials.",
+        "url": "https://raw.githubusercontent.com/mxngl/AutoTVD/refs/heads/main/materials.json",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.4,
+      "position": [
+        2640,
+        496
+      ],
+      "id": "b29d9b4d-0a42-46db-8cd4-22ea1a16ddd7",
+      "name": "get_material_data",
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=You are a cost and budget assistant for the Island Team 2026 — a university building project in San Juan, Puerto Rico.\n\nTOOLS:\n- get_tvd_dashboard → cost estimates, budget, $/SF, Uniformat clusters, TVD targets\n- get_material_data → material unit costs, cost comparisons, substitutions\n\nROUTING:\n- Any cost, budget, or financial question → get_tvd_dashboard\n- Any material cost comparison or substitution → get_material_data\n- If both cost and material comparison are needed → call both (max 2 tools)\n\nMATERIAL COMPARISONS:\n- Always show cost/SF and delta vs. current spec\n- Format: Current: X — $Y/SF → Alternative: Y — $Z/SF → Delta (area SF): +$...\n- All values are estimates for schematic design comparison only\n\nRULES:\n- Answer in the same language the user writes in\n- Cite specific dollar values from the data\n- Never use LaTeX. Plain text only.\n- If cost information is not in the data: say so clearly, do not guess\n- Maximum 2 tool calls total\n- Keep responses concise. Maximum 1800 characters.\n- Write like a knowledgeable teammate, not a formal report. No \"Summary:\" or \"Key notes:\" headers. Cite numbers inline.\n\nUser Message:\n{{ $('Edit Fields Discord').item.json.message }}",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        2400,
+        112
+      ],
+      "id": "52f6f1a7-8880-49d1-822e-9d5f4514ed54",
+      "name": "Cost Agent"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-4o-mini",
+          "mode": "list",
+          "cachedResultName": "gpt-4o-mini"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        2400,
+        304
+      ],
+      "id": "d9644552-8257-4d9c-bbf7-5922234c61b3",
+      "name": "Cost Agent Brain"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=You are a sustainability and embodied carbon assistant for the Island Team 2026 — a university building project in San Juan, Puerto Rico.\n\nTOOLS:\n- get_stv_dashboard → embodied carbon (kgCO2e), energy (kWh), water (L), sustainability metrics\n- get_material_data → material carbon comparisons, embodied carbon per SF, substitutions\n\nROUTING:\n- Any carbon, CO2, emissions, energy, or water question → get_stv_dashboard\n- Any material carbon comparison or substitution → get_material_data\n- If both carbon data and material comparison are needed → call both (max 2 tools)\n\nMATERIAL COMPARISONS:\n- Always show carbon/SF and delta vs. current spec\n- Format: Current: X — Z kgCO2e/SF → Alternative: Y — Z kgCO2e/SF → Delta (area SF): +... kgCO2e\n- All values are estimates for schematic design comparison only\n\nRULES:\n- Answer in the same language the user writes in\n- Cite specific values in kgCO2e, kWh, or L from the data\n- Never use LaTeX. Plain text only.\n- If carbon information is not in the data: say so clearly, do not guess\n- Maximum 2 tool calls total\n- Keep responses concise. Maximum 1800 characters.\n- Write like a knowledgeable teammate, not a formal report. No \"Summary:\" or \"Key notes:\" headers. Cite numbers inline.\n\nUser Message:\n{{ $('Edit Fields Discord').item.json.message }}",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        2416,
+        -288
+      ],
+      "id": "08518a06-0e03-43f2-9000-c617fec5e541",
+      "name": "Carbon Agent"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-4o-mini",
+          "mode": "list",
+          "cachedResultName": "gpt-4o-mini"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        2400,
+        -96
+      ],
+      "id": "496222ef-16cb-46f3-b6f3-cb34c0bf0da2",
+      "name": "Carbon Agent Brain"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=You are a construction scheduling assistant for the Island Team 2026 — a university building project in San Juan, Puerto Rico, targeting completion by September 30, 2030.\n\nTOOLS:\n- get_alice_macro → project phases, overall timeline, phase start/end dates, sequencing\n- get_micro_schedule → element-level detail, exact installation dates, task durations, daily schedule\n\nROUTING:\n- \"how long does the project take?\" / \"what is the sequence?\" / \"when does phase X start?\" → get_alice_macro\n- \"when does element X get installed?\" / \"what happens on day Y?\" / \"how many hours for task X?\" → get_micro_schedule\n- NEVER call both tools in the same response — pick the one that best fits the question\n- WARNING: get_micro_schedule is a large file — only call when element-level detail is explicitly needed\n\nRULES:\n- Answer in the same language the user writes in\n- Cite specific dates, durations, and task names from the data\n- Never use LaTeX. Plain text only.\n- If schedule information is not in the data: say so clearly, do not guess\n- Maximum 1 tool call total\n- Keep responses concise. Maximum 1800 characters.\n- Write like a knowledgeable teammate, not a formal report. No \"Summary:\" or \"Key notes:\" headers. Cite numbers inline.\n\nUser Message:\n{{ $('Edit Fields Discord').item.json.message }}",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        1984,
+        112
+      ],
+      "id": "ddccea67-644a-45a3-b9a0-93aef798525e",
+      "name": "Schedule Agent"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-4o-mini",
+          "mode": "list",
+          "cachedResultName": "gpt-4o-mini"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        1984,
+        304
+      ],
+      "id": "1f24123f-5e2f-41a8-867e-54c01d6018bc",
+      "name": "Schedule Agent Brain"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=You are a BIM data assistant for the Island Team 2026 — a university building project in San Juan, Puerto Rico.\n\nTOOLS:\n- get_central_model → full list of BIM elements, categories, levels, families, quantities\n- get_alice_bim_map → mapping of BIM elements to ALICE planning activities, productivity rates\n\nROUTING:\n- \"how many X are on level Y?\" / \"what elements are in zone X?\" / \"total area/volume of X?\" → get_central_model\n- \"which BIM elements belong to task X?\" / \"what is the productivity rate for X?\" / \"how is X mapped in ALICE?\" → get_alice_bim_map\n- If both element data and task mapping are needed → call both (max 2 tools)\n\nRULES:\n- Answer in the same language the user writes in\n- Cite specific element IDs, quantities, levels, and categories from the data\n- Never use LaTeX. Plain text only.\n- If BIM information is not in the data: say so clearly, do not guess\n- Maximum 2 tool calls total\n- Keep responses concise. Maximum 1800 characters.\n- Write like a knowledgeable teammate, not a formal report. No \"Summary:\" or \"Key notes:\" headers. Cite numbers inline.\n\nUser Message:\n{{ $('Edit Fields Discord').item.json.message }}",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        1984,
+        -288
+      ],
+      "id": "5bc965a5-93a2-4567-ba28-ea8066f2874a",
+      "name": "BIM Agent"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-4o",
+          "mode": "list",
+          "cachedResultName": "gpt-4o"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        1984,
+        -112
+      ],
+      "id": "f7a0faad-a4bd-4745-a1be-7913d4c0e79e",
+      "name": "BIM Agent Brain"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Classify the following user message into exactly one category:\n\n- COST: questions about price, budget, dollar amounts, estimates, $/SF, \n  how much something costs, financial tracking, over/under budget, \n  Uniformat clusters (substructure, shell, interiors, services, sitework)\n- CARBON: questions about CO2, kgCO2e, emissions, embodied carbon, \n  energy consumption, kWh, water usage, sustainability, STV, green performance\n- SCHEDULE: questions about timeline, sequencing, phases, duration, \n  when something starts or ends, construction tasks, installation order\n- BIM: questions about building elements, quantities, levels, zones, \n  families, categories, takt, ALICE mapping\n- MATERIAL: questions about material alternatives, substitutions, \n  comparing materials, what if we used X instead of Y\n\nReply with only the category word in capitals. Nothing else. No explanation.\n\nMessage: {{ $json.message }}",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        1280,
+        64
+      ],
+      "id": "99cd9d74-4247-4b2e-8b69-a6cb2af37e19",
+      "name": "Router Agent",
+      "retryOnFail": true
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.output }}",
+                    "rightValue": "COST",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "f777f11f-d148-4382-9edf-3994fada0c11"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Cost"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "aa69e0af-8a26-4c59-8e90-4a4196035a8d",
+                    "leftValue": "={{ $json.output }}",
+                    "rightValue": "CARBON",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Carbon"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "74ab0007-0c34-4169-9ef4-395ab222ca73",
+                    "leftValue": "={{ $json.output }}",
+                    "rightValue": "SCHEDULE",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Schedule"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "7baf92f0-b7f7-4601-9695-c1c66f3c9eed",
+                    "leftValue": "={{ $json.output }}",
+                    "rightValue": "BIM",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "BIM"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "bb3ba781-d451-430f-90f8-a5a4961d5d6d",
+                    "leftValue": "={{ $json.output }}",
+                    "rightValue": "MATERIAL",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Material"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        1648,
+        -16
+      ],
+      "id": "fb9bdccd-e332-40f0-a89f-b2e6cf2ad262",
+      "name": "Switch"
+    },
+    {
+      "parameters": {
+        "numberInputs": 5
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        2912,
+        -176
+      ],
+      "id": "6185ced5-2473-42eb-aabc-92143e0cabe4",
+      "name": "Merge"
+    },
+    {
+      "parameters": {
+        "toolDescription": "Returns the current Target Value Design dashboard with cost estimates and budget tracking",
+        "url": "https://raw.githubusercontent.com/mxngl/AutoTVD/refs/heads/main/results/latest.json",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.4,
+      "position": [
+        2560,
+        304
+      ],
+      "id": "d953f395-fab1-4bdd-8a88-f4e0bb2fdf3b",
+      "name": "get_tvd_dashboard"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        1104,
+        64
+      ],
+      "id": "a4264bbb-90bf-4bcc-a43c-720514aad0e4",
+      "name": "Merge2"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "dfccc689-3bcf-47b5-9ab2-3709b1ed86ad",
+              "name": "message",
+              "value": "={{ $json.body.content }}",
+              "type": "string"
+            },
+            {
+              "id": "9cb5994d-bd27-44f1-9dba-1f8602489024",
+              "name": "source",
+              "value": "discord",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        512,
+        80
+      ],
+      "id": "18ab3dce-2069-46d4-9be6-580699588217",
+      "name": "Edit Fields Discord"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "REPLACE_WITH_RANDOM_WEBHOOK_PATH",
+        "authentication": "headerAuth",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        160,
+        80
+      ],
+      "id": "fbb37a77-18bc-4b03-a3bf-e5e40466f354",
+      "name": "Webhook w/ Auth"
+    }
+  ]
+}
