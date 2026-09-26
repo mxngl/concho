@@ -4,6 +4,8 @@ Target Value Design (cost) engine, migrated from [AutoTVD](https://github.com/mx
 (tag `island-2026-final`, `tvd_analysis.py`) in P1.3. It reads Revit quantity take-off (QTO)
 CSV exports and a cost database, prices every cost line item and compares the estimate with the
 TVD targets per cluster. Results are identical to AutoTVD (see "Tests" below).
+Line totals are rounded to cents when computed; see
+[docs/engines/tvd.md](../../docs/engines/tvd.md) for where and why.
 
 > ⚠️ **Never commit cost data.** The Island `cost_data.csv` is RSMeans-derived (licensed).
 > Cost DBs, QTO exports, `results/`, `history/` and generated dashboards stay outside this repo.
