@@ -15,8 +15,8 @@ LibreOffice headless (``soffice --convert-to xlsx``). The course results are com
 - cluster sums (cluster sheet ``T14``),
 - "TVD Summary" subcode, cluster and total rows (column C).
 
-Quantities reach the engine either through takeoff elements (clusters A-C) or through the
-cost DB's Fixed Quantity (all other clusters), as in the Island cost DB. The engine rounds
+Quantities reach the engine either through takeoff elements (``quantity_rule`` ``takeoff``) or
+as a ``fixed`` quantity in the cost DB (``cost_db.csv`` format since P3.4). The engine rounds
 quantities and line totals to cents (the A1020 line below: 240.75 x 215.5 = 51,881.625), so
 lines are kept large enough for that to stay within the 1e-6 tolerance. All unit costs,
 quantities and descriptions are invented; they are not RSMeans or course data.
@@ -46,6 +46,7 @@ pytestmark = pytest.mark.skipif(
 openpyxl = pytest.importorskip("openpyxl")
 
 from engines.common.config import load_config  # noqa: E402
+from engines.tvd.cost_db import cost_db_from_dicts  # noqa: E402
 from engines.tvd.engine import compute  # noqa: E402
 from engines.tvd.summary import grand_total_of  # noqa: E402
 
@@ -58,7 +59,7 @@ ISLAND_CONFIG = (
 )
 
 # Cluster letter -> (course sheet, engine cluster name). Engine names are the canonical
-# course cluster names; clusters A-C use takeoff quantities (engines/tvd/rules.py).
+# course cluster names.
 CLUSTERS = {
     "A": ("A Substructure", "Substructure"),
     "B": ("B Shell", "Shell"),
@@ -88,8 +89,8 @@ SUMMARY_SUBCODE_ROWS = {
 
 @dataclass
 class Item:
-    """One line item. ``elements`` are takeoff quantity strings (clusters A-C); without
-    them the quantity goes to the engine as Fixed Quantity."""
+    """One line item. ``elements`` are takeoff quantity strings (rule ``takeoff``); without
+    them the quantity goes to the engine as a ``fixed`` quantity."""
 
     ac: str
     unit: str
@@ -158,19 +159,18 @@ CASES = {"all_clusters": ALL_CLUSTERS, "ceiling_and_roof_coverings": CEILING_AND
 
 
 def _engine_rows(items: list[Item]) -> tuple[list[dict], list[dict]]:
-    """Takeoff rows and cost DB rows (AutoTVD CSV column names) for the items."""
+    """Takeoff rows and cost DB rows (cost_db.csv columns) for the items."""
     takeoff, cost = [], []
     for i, item in enumerate(items):
-        fixed = "" if item.elements else f"{item.qty}"
         cost.append(
             {
-                "Cluster Name": CLUSTERS[item.cluster][1],
-                "Assembly Code": item.ac,
-                "Assembly Group Name": "",
-                "Description             ": f"Invented item {i}",
-                "Unit             ": item.unit,
-                "Total O&P": f"{item.total_op}",
-                "Fixed Quantity": fixed,
+                "cluster": CLUSTERS[item.cluster][1],
+                "assembly_code": item.ac,
+                "description": f"Invented item {i}",
+                "unit": item.unit,
+                "unit_cost": f"{item.total_op:.2f}",
+                "quantity_rule": "takeoff" if item.elements else "fixed",
+                "quantity_value": "" if item.elements else f"{item.qty}",
             }
         )
         for j, element in enumerate(item.elements):
@@ -191,7 +191,7 @@ def _engine_rows(items: list[Item]) -> tuple[list[dict], list[dict]]:
 
 def _engine(items: list[Item]):
     takeoff, cost = _engine_rows(items)
-    run = compute(takeoff, [], cost, load_config(ISLAND_CONFIG))
+    run = compute(takeoff, [], cost_db_from_dicts(cost), load_config(ISLAND_CONFIG))
     assert len(run.results) == len(items)
     subcodes: dict[str, float] = defaultdict(float)
     for r in run.results:

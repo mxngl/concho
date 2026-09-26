@@ -21,6 +21,7 @@ def build_results_payload(
     project_name: str = "",
     team_name: str = "",
     target_consistency: dict | None = None,
+    cost_db_validation: dict | None = None,
 ) -> dict:
     """
     Build the structured results dict of a run.
@@ -37,6 +38,9 @@ def build_results_payload(
                         gap_pct, gap_incl_on_top, tolerance, tolerance_amount, status
                         (ok | within_tolerance | override | failed), override_reason,
                         carved_out_clusters, on_top_clusters
+    cost_db_validation – cost DB validation result (P3.4; only if given): status
+                        (ok | warnings), rows, error_count, warning_count, warnings,
+                        unpriced [{row, cluster, assembly_code}], not_rated {column: count}
     line_items        – dict of cluster → list of full line-item rows
     """
     ts       = ts or datetime.now()
@@ -104,6 +108,8 @@ def build_results_payload(
     }
     if target_consistency is not None:
         payload["target_consistency"] = target_consistency
+    if cost_db_validation is not None:
+        payload["cost_db_validation"] = cost_db_validation
     payload["line_items"] = grouped
     return payload
 

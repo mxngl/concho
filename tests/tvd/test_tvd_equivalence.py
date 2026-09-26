@@ -5,11 +5,14 @@ fixture root (``CONCHO_FIXTURES_DIR`` or ``.fixtures/``, see ``tests/conftest.py
 ``scripts/fetch_fixtures.py``); skipped if neither exists. Nothing from that checkout is
 copied into this repo: ``cost_data.csv`` is RSMeans-derived.
 
-Both implementations run in CI mode on ``AUTOTVD_DIR/qto/*.csv`` +
-``AUTOTVD_DIR/cost_data.csv`` inside ``tmp_path``; the new engine reads the project values
-from the Island example config (``engines/common/examples/island_2026.project_config.json``).
+Both implementations run in CI mode on ``AUTOTVD_DIR/qto/*.csv`` inside ``tmp_path``; the
+original reads ``AUTOTVD_DIR/cost_data.csv``, the new engine (P3.4) the same file converted
+to ``cost_db.csv`` by ``scripts/migrate_cost_data.py`` into ``tmp_path`` (never committed:
+RSMeans-derived). The new engine reads the project values from the Island example config
+(``engines/common/examples/island_2026.project_config.json``).
 Compared: the results JSON (all fields except run timestamps, run label, input paths, the
-project/team names added in P3.2 and the ``target_consistency`` block added in P3.3), the
+project/team names added in P3.2, the ``target_consistency`` block added in P3.3 and the
+``cost_db_validation`` block added in P3.4), the
 history snapshot (except its date) and the dashboard HTML (with timestamps and data source
 masked).
 
@@ -33,6 +36,7 @@ import sys
 from pathlib import Path
 
 import pytest
+from migrate_cost_data import migrate
 
 SNAPSHOT_LABEL = "Equivalence check"
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -93,6 +97,8 @@ def _strip_meta(payload: dict) -> dict:
     payload = json.loads(json.dumps(payload))
     # P3.3: new block, not in the original; tested in test_island_target_consistency.
     payload.pop("target_consistency", None)
+    # P3.4: new block, not in the original; tested in test_island_cost_db_validation.
+    payload.pop("cost_db_validation", None)
     for key in ("generated_at", "date", "label", "data_source", "project_name", "team_name"):
         payload["meta"].pop(key, None)
     return payload
@@ -116,7 +122,12 @@ def outputs(tmp_path_factory, autotvd_dir) -> dict[str, Path]:
     shutil.copy(base / "tvd_analysis.py", orig / "tvd_analysis.py")
     _run([sys.executable, "tvd_analysis.py", "--ci", "--snapshot", SNAPSHOT_LABEL, *flags], orig)
 
+    # P3.4: the new engine reads the converted cost DB (tmp only, never committed).
     new = tmp_path_factory.mktemp("new")
+    cost_db = new / "cost_db.csv"
+    migration, db = migrate(inputs["cost"], cost_db, custom_clusters=["Equipment Rental"])
+    assert db is not None and db.ok, migration.errors + (db.errors if db else [])
+    flags[flags.index("--cost") + 1] = str(cost_db)
     _run([sys.executable, "-m", "engines.tvd", "--ci", "--snapshot", SNAPSHOT_LABEL, *flags,
           "--config", str(ISLAND_CONFIG), "--out", str(new)], new)
     return {"orig": orig, "new": new}
@@ -196,3 +207,20 @@ def test_island_target_consistency(outputs):
     assert new["target_consistency"] == ISLAND_TARGET_CONSISTENCY
     orig = _load(outputs["orig"] / "results" / "latest.json")
     assert "target_consistency" not in orig
+
+
+# P3.4: the converted Island cost DB validates with 0 errors; the placeholder rows are
+# listed as unpriced, the D5030/D5090 mislabels as warnings (codes kept).
+def test_island_cost_db_validation(outputs):
+    block = _load(outputs["new"] / "results" / "latest.json")["cost_db_validation"]
+    assert block["error_count"] == 0 and block["status"] == "warnings"
+    assert block["rows"] == 48
+    assert block["not_rated"] == {"qty_reliability": 48, "cost_reliability": 48}
+    assert [(u["cluster"], u["assembly_code"]) for u in block["unpriced"]] == [
+        ("Substructure", "A1020"), ("Interiors", "C3030"), ("Special Construction", "F1000"),
+    ]
+    warnings = "\n".join(block["warnings"])
+    assert "(D5030): description: 'Fire Protection Systems' suggests D40" in warnings
+    assert "(D5090): description: 'HVAC Systems' suggests D30" in warnings
+    assert "cluster 'Equipment Rental' is a custom cluster" in warnings
+    assert block["warning_count"] == len(block["warnings"]) == 8

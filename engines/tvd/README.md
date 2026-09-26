@@ -15,7 +15,7 @@ Line totals are rounded to cents when computed; see
 | Module | Content |
 |---|---|
 | `loading.py` | CSV reading (BOM cleanup), quantity string parsing, `merge_takeoffs` (dedup by `ElementId`, structural wins) |
-| `cost_db.py` | cost DB parsing incl. German number format (`$6.184,22`) |
+| `cost_db.py` | `cost_db.csv` format (P3.4): pydantic row model, loader, validator (`concho costdb validate`) |
 | `quantities.py` | aggregation (DNC marker, excluded categories, keyword AC split) and quantity rules |
 | `summary.py` | cluster summary, console formatting |
 | `engine.py` | `compute()` / `run_files()`: inputs + project config → `TvdRun` (line items, summary, counts, results dict) |
@@ -24,25 +24,23 @@ Line totals are rounded to cents when computed; see
 | `results_writer.py` | results JSON (`<timestamp>.json` + `latest.json`, schema = AutoTVD `results/SCHEMA.md`) |
 | `history.py` | named history snapshots |
 | `alert.py` | budget-overrun webhook (env vars, see below) |
-| `rules.py` | engine default rule tables (takeoff clusters, mirrors, keyword split, toilet codes, excluded categories); move to the cost DB in P3.4 |
+| `rules.py` | excluded categories (the quantity rules live in the cost DB since P3.4) |
 | `cli.py` | `python -m engines.tvd` / `concho-tvd` |
 
 The HTML/PDF dashboard is rendered by `dashboards/tvd/legacy_render.py` (copy of the AutoTVD
 renderer; team name and GSF come from the config since P3.2; replaced in P7.1).
 
-### Quantity rules (priority order)
+### Quantity rules
 
-1. **Fixed Quantity** in the cost DB always wins.
-2. **Toilet count**: `C1030` = number of elements with an AC in `TOILET_ACS` (all categories,
-   incl. excluded ones).
-3. Clusters outside `TAKEOFF_CLUSTERS` (course clusters A–C) without a fixed quantity → 0.
-4. **Quantity mirror** (`QUANTITY_MIRRORS`): take another AC's takeoff area, or its fixed quantity.
-5. **Takeoff lookup** by unit: `SF`/`GSF` → Area, `MSF` → Area/1000, `LF` → Length,
-   `EA`/`Flight` → count, `CY` → Volume/27, `CF` → Volume.
+Since P3.4 each cost DB row names its rule (`quantity_rule`: `takeoff`, `fixed`, `per_gsf`,
+`pct_of_subtotal`, `mirror:<AC>`, `count_codes:<AC,...>`); keyword splits come from
+`split_keywords`. Format, rules and examples:
+[docs/engines/tvd.md](../../docs/engines/tvd.md#cost-db-format-cost_dbcsv-p34).
 
 Before aggregation: elements with `DNC` in Family/Type/Mark/Comments are skipped, elements in
-`EXCLUDE_CATEGORIES` don't contribute quantities, and `AC_KEYWORD_SPLIT` routes one AC to
-sub-codes by keywords in Category + Family + Type (e.g. `B2010` → `B2010.CW` / `B2010.PW`).
+`EXCLUDE_CATEGORIES` don't contribute quantities (they still count for `count_codes`), and the
+keyword split routes elements of a base code to its sub-codes (e.g. `B2010` → `B2010.CW` /
+`B2010.PW`).
 
 ## How to run
 
@@ -51,7 +49,7 @@ pip install -e .
 concho-tvd --config path/to/project_config.json \
            --arch path/to/Architecture_TakeOff.csv \
            --struct path/to/Structural_Schedule.csv \
-           --cost path/to/cost_data.csv \
+           --cost path/to/cost_db.csv \
            --out path/to/output            # or: python -m engines.tvd ...
 ```
 
@@ -59,7 +57,7 @@ concho-tvd --config path/to/project_config.json \
 |---|---|
 | `--config FILE` | `project_config` JSON (**required**): targets, GSF, project/team name ([docs/config.md](../../docs/config.md)) |
 | `--arch`, `--struct` | QTO exports (**required**, local paths only) |
-| `--cost` | cost DB; default `files.cost_db` of the config |
+| `--cost` | cost DB (`cost_db.csv`); default `files.cost_db` of the config. Validated first: errors stop the run |
 | `--out DIR` | output folder (**required**): `DIR/results/`, `DIR/history/`, `DIR/TVD_Dashboard.html` |
 | `--ci` | CI mode: dashboard to `DIR/docs/index.html`, no browser, no demo snapshot |
 | `--snapshot LABEL` | save a named snapshot to the history folder |
@@ -91,24 +89,21 @@ the engine POSTs a `budget_overrun` event there, with `CONCHO_ALERT_WEBHOOK_TOKE
 `Mark`, `Material` and `Comments` are optional; they appear in the unmapped-elements download,
 and `Mark`/`Comments` are checked for the `DNC` marker. Other columns are ignored.
 
-**Cost DB CSV** (AutoTVD `cost_data.csv` format):
-
-| Column | Notes |
-|---|---|
-| `Cluster Name` | course cluster letter (`A`–`H`) or name (`Substructure` … `General Conditions`; the legacy typo `Special Contruction` is read as `Special Construction`), or the name of a custom cluster from the config |
-| `Assembly Code` | Uniformat code or synthetic sub-code (`B2010.CW`); blank rows are skipped |
-| `Assembly Group Name` | group label |
-| `Description             ` | description; **the header has 13 trailing spaces** |
-| `Unit             ` | unit (see rules above); **the header has 13 trailing spaces** |
-| `Total O&P` | unit cost; `$6.184,22`, `$25,00`, `$1,000.00` and `750` all parse |
-| `Fixed Quantity` | optional; overrides the takeoff |
-
-The new cost DB format with plain numbers and a validator comes in P3.4.
+**Cost DB CSV**: `cost_db.csv` format (P3.4), see
+[docs/engines/tvd.md](../../docs/engines/tvd.md#cost-db-format-cost_dbcsv-p34). An old AutoTVD
+`cost_data.csv` is rejected with a pointer to `scripts/migrate_cost_data.py`, which converts
+it.
 
 ## Tests
 
-- `tests/tvd/test_tvd_units.py`: every quantity rule and the dedup, on the invented fixture in
+- `tests/tvd/test_tvd_units.py`: quantity rules and the dedup, on the invented fixture in
   `tests/fixtures/tvd_synthetic/`.
+- `tests/tvd/test_tvd_quantity_rules.py` (P3.4): each `quantity_rule`, the keyword split,
+  `qty_label`, the `cost_db_validation` block and the stop on an invalid cost DB, on a small
+  synthetic project.
+- `tests/tvd/test_cost_db_migration.py` (P3.4): `scripts/migrate_cost_data.py` on invented
+  old-format rows; in reference mode it converts the fetched Island `cost_data.csv` (0 errors,
+  D5030/D5090 mislabel warnings). Validator unit tests: `tests/common/test_cost_db.py`.
 - `tests/tvd/test_tvd_project_config.py` (P3.2): the Island example config vs. an invented
   second config (`tests/fixtures/configs/river_test.project_config.json`) change exactly the
   project values (targets, GSF, names) in the results JSON and the dashboard.
@@ -116,8 +111,10 @@ The new cost DB format with plain numbers and a validator comes in P3.4.
   the gap in $ and %, `target_sum_override` passes with status `override`, `carved_out` vs.
   `on_top`) and the `target_consistency` block, on the invented fixture.
 - `tests/tvd/test_tvd_equivalence.py`: runs this engine and the original `tvd_analysis.py` on
-  `AUTOTVD_DIR/qto/*.csv` + `AUTOTVD_DIR/cost_data.csv` and compares the results JSON (all fields
-  except timestamps, label, paths, the project/team names and the `target_consistency` block),
+  `AUTOTVD_DIR/qto/*.csv` + `AUTOTVD_DIR/cost_data.csv` (this engine: converted to `cost_db.csv`
+  in a temporary folder, P3.4) and compares the results JSON (all fields
+  except timestamps, label, paths, the project/team names and the `target_consistency` and
+  `cost_db_validation` blocks),
   the history snapshot and the
   dashboard HTML. The new engine runs with `engines/common/examples/island_2026.project_config.json`.
   Masked since P3.2: the cluster name (`Special Contruction` → `Special Construction`), the team
@@ -144,3 +141,7 @@ The new cost DB format with plain numbers and a validator comes in P3.4.
   `tvd.target_sum_tolerance` unless `tvd.target_sum_override` is set) and writes a
   `target_consistency` block into the results JSON
   ([docs/config.md](../../docs/config.md#cluster-target-consistency-p33)).
+- P3.4: the cost DB is a `cost_db.csv` with plain numbers and one `quantity_rule` per row; the
+  hardcoded rule tables (takeoff clusters, `QUANTITY_MIRRORS`, `TOILET_ACS`,
+  `AC_KEYWORD_SPLIT`) are gone from the engine (only in the migration script). The engine
+  validates the cost DB before the run and writes a `cost_db_validation` block.

@@ -14,7 +14,7 @@ from dashboards.tvd.legacy_render import generate_html
 from engines.common.config import CourseCluster, load_config
 from engines.tvd.cli import main
 from engines.tvd.clusters import course_cluster, display_name
-from engines.tvd.cost_db import load_cost_data
+from engines.tvd.cost_db import cost_db_from_dicts
 from engines.tvd.engine import run_files
 from engines.tvd.targets import ProjectTargets
 
@@ -56,10 +56,12 @@ def test_cluster_names(label, cluster, name):
 
 
 def test_cost_db_normalises_cluster_names():
-    rows = [{"Cluster Name": "Special Contruction", "Assembly Code": "F1010"},
-            {"Cluster Name": "Crane Rental", "Assembly Code": "Z9"}]
-    assert [r["cluster"] for r in load_cost_data(rows)] == ["Special Construction",
-                                                             "Crane Rental"]
+    base = {"description": "x", "unit": "LS", "unit_cost": "1", "quantity_rule": "fixed"}
+    rows = [{**base, "cluster": "Special Contruction", "assembly_code": "F1010"},
+            {**base, "cluster": "Crane Rental", "assembly_code": "Z9000"}]
+    db = cost_db_from_dicts(rows, custom_clusters=["Crane Rental"])
+    assert [line.display_cluster for line in db.lines] == ["Special Construction",
+                                                           "Crane Rental"]
 
 
 # ── targets from config ─────────────────────────────────────────────────────

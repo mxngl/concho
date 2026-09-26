@@ -5,6 +5,10 @@ Subcommands:
 - ``concho config validate FILE``: validate a project_config file; prints errors and
   warnings. Exit code 0 when valid (warnings allowed), 1 on any error.
 - ``concho config schema``: print the project_config JSON Schema.
+- ``concho costdb validate FILE [--config CONFIG]`` (P3.4): validate a TVD ``cost_db.csv``;
+  with ``--config``, clusters must be course clusters or ``tvd.custom_clusters`` of that
+  config. Exit code 0 when valid (warnings allowed), 1 on any error.
+- ``concho costdb schema``: print the JSON Schema of one cost DB row.
 
 The engine CLIs stay separate for now (``concho-tvd``, ``concho-stv``, ``concho-schedule``).
 """
@@ -15,6 +19,7 @@ import argparse
 import sys
 
 from engines.common.config import json_schema_text, validate_config_file
+from engines.tvd import cost_db
 
 
 class _Parser(argparse.ArgumentParser):
@@ -37,11 +42,20 @@ def build_parser() -> argparse.ArgumentParser:
     validate.add_argument("file", help="path to the project_config JSON file")
 
     config_sub.add_parser("schema", help="print the project_config JSON Schema")
+
+    costdb = sub.add_parser("costdb", help="TVD cost DB tools")
+    costdb_sub = costdb.add_subparsers(dest="costdb_command", required=True,
+                                       parser_class=_Parser)
+    cvalidate = costdb_sub.add_parser("validate", help="validate a cost_db.csv file")
+    cvalidate.add_argument("file", help="path to the cost_db.csv file")
+    cvalidate.add_argument("--config", metavar="FILE",
+                           help="project_config JSON: its tvd.custom_clusters are the only "
+                                "allowed non-course clusters")
+    costdb_sub.add_parser("schema", help="print the JSON Schema of one cost DB row")
     return parser
 
 
-def _validate(path: str) -> int:
-    report = validate_config_file(path)
+def _print_report(path: str, report) -> int:
     for msg in report.errors:
         print(f"error: {msg}")
     for msg in report.warnings:
@@ -55,6 +69,21 @@ def _validate(path: str) -> int:
     return 1
 
 
+def _validate(path: str) -> int:
+    return _print_report(path, validate_config_file(path))
+
+
+def _validate_costdb(path: str, config_path: str | None) -> int:
+    custom = None
+    if config_path is not None:
+        config = validate_config_file(config_path)
+        if not config.ok:
+            print(f"error: {config_path}: invalid project_config (run concho config validate).")
+            return 1
+        custom = [c.name for c in config.config.tvd.custom_clusters]
+    return _print_report(path, cost_db.validate_cost_db_file(path, custom_clusters=custom))
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     if args.command == "config":
@@ -62,6 +91,12 @@ def main(argv: list[str] | None = None) -> int:
             return _validate(args.file)
         if args.config_command == "schema":
             sys.stdout.write(json_schema_text())
+            return 0
+    if args.command == "costdb":
+        if args.costdb_command == "validate":
+            return _validate_costdb(args.file, args.config)
+        if args.costdb_command == "schema":
+            sys.stdout.write(cost_db.json_schema_text())
             return 0
     return 1  # pragma: no cover (argparse enforces the subcommands)
 

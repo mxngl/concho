@@ -472,7 +472,7 @@
             }
           ],
           "default": null,
-          "description": "TVD cost DB CSV (P3.4).",
+          "description": "TVD cost DB (cost_db.csv format, P3.4; see docs/engines/tvd.md). The TVD engine validates it before the run.",
           "title": "Cost Db"
         },
         "stv_mapping": {

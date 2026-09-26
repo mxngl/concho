@@ -2,7 +2,17 @@
 
 The per-team data repo template (project config, cost DB, STV mapping, custom materials, macro schedule, exports, pipeline workflow). Ships without any course or RSMeans data.
 
-Filled by: Phase 5 (P5.1, P5.2). Already here: `project_config.example.json` (P3.1).
+Filled by: Phase 5 (P5.1, P5.2). Already here: `project_config.example.json` (P3.1),
+`cost_db.csv` and `examples/cost_db.example.csv` (P3.4).
+
+## `cost_db.csv`
+
+The TVD cost DB, shipped **empty** (header only): no RSMeans or course data. Fill in one row
+per cost line item (format and rules: [`docs/engines/tvd.md`](../docs/engines/tvd.md)), set
+`files.cost_db` in the config and check it with `concho costdb validate cost_db.csv --config
+project_config.json`. `examples/cost_db.example.csv` shows five invented rows with comments
+(takeoff, mirror, counted codes, lump sum, percent of subtotal). A team with an old AutoTVD
+`cost_data.csv` converts it with `python scripts/migrate_cost_data.py`.
 
 ## `project_config.example.json`
 
