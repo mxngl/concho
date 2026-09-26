@@ -1,22 +1,32 @@
+"""ALICE adapter: macro schedule + resources from an ALICE export workbook (step ``alice-inputs``).
+
+Reads the sheets ``Tasks``, ``Crews``, ``Equipment``, ``Task Crews`` and ``Task Equipment``
+of the ALICE workbook (``--workbook``, e.g. ``ALICE_macro.xlsx``; never committed) and writes
+``Macro_Schedule.csv``, ``Crew.csv``, ``Equipment.csv``, ``Tasks.csv`` and
+``Missing_data.md`` to ``OUT_DIR``.
+
+Migrated from IPD_Challenge@989a6b7
+``src/Planning_engine/ALICE_BIM_mapper/generate_inputs.py`` (P1.7): logic unchanged, the
+repo-relative paths became CLI arguments.
+"""
+
 from __future__ import annotations
 
+import argparse
 from pathlib import Path
 import re
 
 import pandas as pd
 
 
-BASE_DIR = Path(__file__).resolve().parent
-INPUTS_DIR = BASE_DIR / "inputs"
-OUTPUTS_DIR = BASE_DIR / "outputs"
-
-WORKBOOK_PATH = INPUTS_DIR / "ALICE_macro.xlsx"
-
-MACRO_SCHEDULE_PATH = OUTPUTS_DIR / "Macro_Schedule.csv"
-CREW_PATH = OUTPUTS_DIR / "Crew.csv"
-EQUIPMENT_PATH = OUTPUTS_DIR / "Equipment.csv"
-TASKS_PATH = OUTPUTS_DIR / "Tasks.csv"
-MISSING_DATA_PATH = OUTPUTS_DIR / "Missing_data.md"
+# P1.7: set by configure() (was derived from the IPD_Challenge repo layout).
+OUTPUTS_DIR: Path
+WORKBOOK_PATH: Path
+MACRO_SCHEDULE_PATH: Path
+CREW_PATH: Path
+EQUIPMENT_PATH: Path
+TASKS_PATH: Path
+MISSING_DATA_PATH: Path
 
 def slugify(value: str) -> str:
     text = re.sub(r"[^a-z0-9]+", "_", str(value).strip().lower())
@@ -236,7 +246,36 @@ def write_missing_data_report(missing: dict[str, list[str]]) -> None:
     MISSING_DATA_PATH.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
-if __name__ == "__main__":
+def configure(*, workbook: Path, out_dir: Path) -> None:
+    """Set the input/output paths used by the functions of this module."""
+    global OUTPUTS_DIR, WORKBOOK_PATH, MACRO_SCHEDULE_PATH, CREW_PATH, EQUIPMENT_PATH
+    global TASKS_PATH, MISSING_DATA_PATH
+    OUTPUTS_DIR = Path(out_dir)
+    WORKBOOK_PATH = Path(workbook)
+    MACRO_SCHEDULE_PATH = OUTPUTS_DIR / "Macro_Schedule.csv"
+    CREW_PATH = OUTPUTS_DIR / "Crew.csv"
+    EQUIPMENT_PATH = OUTPUTS_DIR / "Equipment.csv"
+    TASKS_PATH = OUTPUTS_DIR / "Tasks.csv"
+    MISSING_DATA_PATH = OUTPUTS_DIR / "Missing_data.md"
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="concho-schedule alice-inputs",
+        description="Convert an ALICE export workbook into the macro schedule and resource CSVs.",
+    )
+    parser.add_argument("--workbook", type=Path, required=True, metavar="XLSX",
+                        help="ALICE export workbook (e.g. ALICE_macro.xlsx; never committed)")
+    parser.add_argument("--out-dir", type=Path, required=True, metavar="DIR",
+                        help="output folder")
+    return parser
+
+
+def main(argv: list[str] | None = None) -> None:
+    args = build_parser().parse_args(argv)
+    configure(workbook=args.workbook, out_dir=args.out_dir)
+    # P1.7: create the output folder (the original wrote into its existing outputs/ folder).
+    OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
     missing_data = build_outputs()
     write_missing_data_report(missing_data)
     print(f"Wrote {MACRO_SCHEDULE_PATH.name}")
@@ -244,3 +283,7 @@ if __name__ == "__main__":
     print(f"Wrote {EQUIPMENT_PATH.name}")
     print(f"Wrote {TASKS_PATH.name}")
     print(f"Wrote {MISSING_DATA_PATH.name}")
+
+
+if __name__ == "__main__":
+    main()

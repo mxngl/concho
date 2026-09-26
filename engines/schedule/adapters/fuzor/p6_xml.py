@@ -1,5 +1,19 @@
+"""Fuzor adapter: 4D P6 XML micro schedule + Revit build-code map (step ``fuzor-xml``).
+
+Groups ``Micro_Schedule.csv`` into Fuzor 4D activities (build codes), attaches crews and
+equipment from ``Tasks.csv`` / ``Crew.csv`` / ``Equipment.csv`` and writes
+``Fuzor_Micro_Schedule.xml`` (P6 XML for Fuzor; ~16 MB for Island, never committed) and
+``Revit_4D_Build_Code_Map.csv`` (element -> build code, pushed back into Revit) to
+``OUT_DIR``. GUIDs are random per run.
+
+Migrated from IPD_Challenge@989a6b7
+``src/Planning_engine/Fuzor_Mapper/generate_fuzor_p6_xml.py`` (P1.7): logic unchanged, the
+repo-relative paths became CLI arguments.
+"""
+
 from __future__ import annotations
 
+import argparse
 import json
 from pathlib import Path
 import uuid
@@ -8,17 +22,15 @@ import xml.etree.ElementTree as ET
 import pandas as pd
 
 
-BASE_DIR = Path(__file__).resolve().parent
-INPUTS_DIR = BASE_DIR / "inputs"
-OUTPUTS_DIR = BASE_DIR / "outputs"
-PLANNING_ENGINE_DIR = BASE_DIR.parent
-MICRO_SCHEDULE_PATH = PLANNING_ENGINE_DIR / "Micro_Schedule_Generator" / "outputs" / "Micro_Schedule.csv"
-ALICE_OUTPUTS_DIR = PLANNING_ENGINE_DIR / "ALICE_BIM_mapper" / "outputs"
-TASKS_PATH = ALICE_OUTPUTS_DIR / "Tasks.csv"
-CREW_PATH = ALICE_OUTPUTS_DIR / "Crew.csv"
-EQUIPMENT_PATH = ALICE_OUTPUTS_DIR / "Equipment.csv"
-OUTPUT_XML_PATH = OUTPUTS_DIR / "Fuzor_Micro_Schedule.xml"
-REVIT_BUILD_CODE_MAP_PATH = OUTPUTS_DIR / "Revit_4D_Build_Code_Map.csv"
+# P1.7: set by configure() (was derived from the IPD_Challenge repo layout; the unused
+# INPUTS_DIR was dropped).
+OUTPUTS_DIR: Path
+MICRO_SCHEDULE_PATH: Path
+TASKS_PATH: Path
+CREW_PATH: Path
+EQUIPMENT_PATH: Path
+OUTPUT_XML_PATH: Path
+REVIT_BUILD_CODE_MAP_PATH: Path
 
 NS = "http://xmlns.oracle.com/Primavera/P6/V25.12/API/BusinessObjects"
 XSI = "http://www.w3.org/2001/XMLSchema-instance"
@@ -721,7 +733,43 @@ def write_revit_build_code_map(activities: pd.DataFrame) -> None:
     pushback_map.to_csv(REVIT_BUILD_CODE_MAP_PATH, index=False)
 
 
-if __name__ == "__main__":
+def configure(*, micro_schedule: Path, tasks: Path, crew: Path, equipment: Path, out_dir: Path) -> None:
+    """Set the input/output paths used by the functions of this module."""
+    global OUTPUTS_DIR, MICRO_SCHEDULE_PATH, TASKS_PATH, CREW_PATH, EQUIPMENT_PATH
+    global OUTPUT_XML_PATH, REVIT_BUILD_CODE_MAP_PATH
+    OUTPUTS_DIR = Path(out_dir)
+    MICRO_SCHEDULE_PATH = Path(micro_schedule)
+    TASKS_PATH = Path(tasks)
+    CREW_PATH = Path(crew)
+    EQUIPMENT_PATH = Path(equipment)
+    OUTPUT_XML_PATH = OUTPUTS_DIR / "Fuzor_Micro_Schedule.xml"
+    REVIT_BUILD_CODE_MAP_PATH = OUTPUTS_DIR / "Revit_4D_Build_Code_Map.csv"
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="concho-schedule fuzor-xml",
+        description="Write the Fuzor 4D P6 XML and the Revit build-code map from the micro schedule.",
+    )
+    parser.add_argument("--micro-schedule", type=Path, required=True, metavar="CSV",
+                        help="Micro_Schedule.csv (step micro-schedule)")
+    parser.add_argument("--tasks", type=Path, required=True, metavar="CSV", help="Tasks.csv")
+    parser.add_argument("--crew", type=Path, required=True, metavar="CSV", help="Crew.csv")
+    parser.add_argument("--equipment", type=Path, required=True, metavar="CSV", help="Equipment.csv")
+    parser.add_argument("--out-dir", type=Path, required=True, metavar="DIR",
+                        help="output folder")
+    return parser
+
+
+def main(argv: list[str] | None = None) -> None:
+    args = build_parser().parse_args(argv)
+    configure(
+        micro_schedule=args.micro_schedule,
+        tasks=args.tasks,
+        crew=args.crew,
+        equipment=args.equipment,
+        out_dir=args.out_dir,
+    )
     OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
     activities = build_activity_table()
     tree = build_xml()
@@ -730,3 +778,7 @@ if __name__ == "__main__":
     write_revit_build_code_map(activities)
     print(f"Wrote {OUTPUT_XML_PATH.name}")
     print(f"Wrote {REVIT_BUILD_CODE_MAP_PATH.name}")
+
+
+if __name__ == "__main__":
+    main()

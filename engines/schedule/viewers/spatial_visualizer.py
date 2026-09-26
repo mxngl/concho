@@ -1,5 +1,15 @@
+"""HTML viewer: 30-minute spatial playback of the superstructure (step ``spatial-viewer``).
+
+Writes ``OUT_DIR/spatial_visualizer_micro.html`` (self-contained; the floor plan PNGs given
+with ``--floor-plan LEVEL=PNG`` are embedded as data URIs) from ``Micro_Schedule.csv``.
+
+Migrated from IPD_Challenge@989a6b7 ``src/Planning_engine/generate_spatial_visualizer.py``
+(P1.7): logic unchanged, the repo-relative paths became CLI arguments.
+"""
+
 from __future__ import annotations
 
+import argparse
 import base64
 import json
 from pathlib import Path
@@ -7,19 +17,11 @@ from pathlib import Path
 import pandas as pd
 
 
-BASE_DIR = Path(__file__).resolve().parent
-PROJECT_DIR = BASE_DIR.parent.parent
-
-MICRO_SCHEDULE_PATH = BASE_DIR / "Micro_Schedule_Generator" / "outputs" / "Micro_Schedule.csv"
-OUTPUT_HTML_PATH = BASE_DIR / "spatial_visualizer_micro.html"
-
-FLOOR_PLAN_DIR = PROJECT_DIR / "floor_plans" / "cropped_png"
-
-BACKGROUND_BY_LEVEL = {
-    "L -1": FLOOR_PLAN_DIR / "04_Island_ARCH_ConceptB_Level -1_Mar6_page_0_cropped.png",
-    "L 0": FLOOR_PLAN_DIR / "04_Island_ARCH_ConceptB_Level 0_Mar6 (1)_page_0_cropped.png",
-    "L 1": FLOOR_PLAN_DIR / "04_Island_ARCH_ConceptB_Level 1_Mar6_page_0_cropped.png",
-}
+# P1.7: set by configure() (was derived from the IPD_Challenge repo layout). The original
+# used floor_plans/cropped_png/04_Island_ARCH_ConceptB_Level {-1,0,1}_Mar6..._cropped.png.
+MICRO_SCHEDULE_PATH: Path
+OUTPUT_HTML_PATH: Path
+BACKGROUND_BY_LEVEL: dict[str, Path]
 
 TASK_COLORS = {
     "Frame: Columns + Beams": "#c2410c",
@@ -620,7 +622,49 @@ def build_html(payload: dict[str, object]) -> str:
 """
 
 
-if __name__ == "__main__":
+def configure(*, micro_schedule: Path, out_dir: Path, floor_plans: dict[str, Path] | None = None) -> None:
+    """Set the input/output paths used by the functions of this module."""
+    global MICRO_SCHEDULE_PATH, OUTPUT_HTML_PATH, BACKGROUND_BY_LEVEL
+    MICRO_SCHEDULE_PATH = Path(micro_schedule)
+    OUTPUT_HTML_PATH = Path(out_dir) / "spatial_visualizer_micro.html"
+    BACKGROUND_BY_LEVEL = {level: Path(path) for level, path in (floor_plans or {}).items()}
+
+
+def parse_floor_plan(value: str) -> tuple[str, Path]:
+    level, separator, path = value.partition("=")
+    if not separator or not level.strip() or not path.strip():
+        raise argparse.ArgumentTypeError(f"expected LEVEL=PNG, got {value!r}")
+    return level.strip(), Path(path.strip())
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="concho-schedule spatial-viewer",
+        description="Write the spatial playback viewer (HTML) of the micro schedule.",
+    )
+    parser.add_argument("--micro-schedule", type=Path, required=True, metavar="CSV",
+                        help="Micro_Schedule.csv (step micro-schedule)")
+    parser.add_argument("--floor-plan", type=parse_floor_plan, action="append", default=[],
+                        metavar="LEVEL=PNG",
+                        help='optional: cropped floor plan per level, e.g. "L 1=L1.png" (repeatable)')
+    parser.add_argument("--out-dir", type=Path, required=True, metavar="DIR",
+                        help="output folder")
+    return parser
+
+
+def main(argv: list[str] | None = None) -> None:
+    args = build_parser().parse_args(argv)
+    configure(
+        micro_schedule=args.micro_schedule,
+        out_dir=args.out_dir,
+        floor_plans=dict(args.floor_plan),
+    )
+    # P1.7: create the output folder (the original wrote next to the script).
+    OUTPUT_HTML_PATH.parent.mkdir(parents=True, exist_ok=True)
     payload = build_payload()
     OUTPUT_HTML_PATH.write_text(build_html(payload), encoding="utf-8")
     print(f"Wrote {OUTPUT_HTML_PATH.name}")
+
+
+if __name__ == "__main__":
+    main()

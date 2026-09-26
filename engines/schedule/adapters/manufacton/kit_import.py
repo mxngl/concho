@@ -1,5 +1,18 @@
+"""Manufacton adapter: production orders + Revit push maps (step ``manufacton-orders``).
+
+Turns the Fuzor build codes into Manufacton production orders (kits) and order items, and
+writes ``Production_Order.xlsx``, ``Production_Order_Items.xlsx`` (filled copies of the
+Manufacton order/item templates; never committed), ``Revit_Assembly_Id_Map.csv`` and
+``Revit_Kit_Parameter_Map.csv`` (pushed back into Revit) to ``OUT_DIR``.
+
+Migrated from IPD_Challenge@989a6b7
+``src/Planning_engine/Prefab_BIM_Mapper/generate_kit_import.py`` (P1.7): logic unchanged,
+the repo-relative paths became CLI arguments.
+"""
+
 from __future__ import annotations
 
+import argparse
 from pathlib import Path
 import re
 import math
@@ -9,21 +22,21 @@ import pandas as pd
 from openpyxl import load_workbook
 
 
-BASE_DIR = Path(__file__).resolve().parent
-ORDER_TEMPLATE_PATH = BASE_DIR / "inputs" / "ORDER IMPORT TEMPLATE.xlsx"
-ITEM_TEMPLATE_PATH = BASE_DIR / "inputs" / "ITEM IMPORT TEMPLATE.xlsx"
-VENDORS_PATH = BASE_DIR / "inputs" / "vendors.csv"
-MAPPING_PATH = BASE_DIR / "inputs" / "4d_build_code_to_assembly_id_mapping.csv"
-ASSEMBLY_IMPORT_PATH = BASE_DIR / "outputs" / "Assembly_Import.xlsx"
-PARTS_SUMMARY_PATH = BASE_DIR / "outputs" / "Parts_Summary.csv"
-BUILD_CODE_MAP_PATH = BASE_DIR.parent / "Fuzor_Mapper" / "outputs" / "Revit_4D_Build_Code_Map.csv"
-MICRO_SCHEDULE_PATH = BASE_DIR.parent / "Micro_Schedule_Generator" / "outputs" / "Micro_Schedule.csv"
-OUTPUTS_DIR = BASE_DIR / "outputs"
-OUTPUT_XLSX_PATH = OUTPUTS_DIR / "Production_Order.xlsx"
-ITEM_OUTPUT_XLSX_PATH = OUTPUTS_DIR / "Production_Order_Items.xlsx"
-ASSEMBLY_PUSH_MAP_PATH = OUTPUTS_DIR / "Revit_Assembly_Id_Map.csv"
-KIT_PUSH_MAP_PATH = OUTPUTS_DIR / "Revit_Kit_Parameter_Map.csv"
-CENTRAL_BIM_CONTEXT_PATH = BASE_DIR.parent.parent.parent / "outputs" / "takt_zones" / "central_bim_model_llm_context.csv"
+# P1.7: set by configure() (was derived from the IPD_Challenge repo layout).
+ORDER_TEMPLATE_PATH: Path
+ITEM_TEMPLATE_PATH: Path
+VENDORS_PATH: Path
+MAPPING_PATH: Path
+ASSEMBLY_IMPORT_PATH: Path
+PARTS_SUMMARY_PATH: Path
+BUILD_CODE_MAP_PATH: Path
+MICRO_SCHEDULE_PATH: Path
+OUTPUTS_DIR: Path
+OUTPUT_XLSX_PATH: Path
+ITEM_OUTPUT_XLSX_PATH: Path
+ASSEMBLY_PUSH_MAP_PATH: Path
+KIT_PUSH_MAP_PATH: Path
+CENTRAL_BIM_CONTEXT_PATH: Path
 
 CONCRETE_TRUCK_VOLUME_CF = 400
 CONCRETE_TRUCK_ASSEMBLY_ID = "CONC_400CF_TRUCK_ASSEMBLY"
@@ -693,7 +706,82 @@ def write_item_import(output: pd.DataFrame) -> None:
     workbook.save(ITEM_OUTPUT_XLSX_PATH)
 
 
-if __name__ == "__main__":
+def configure(
+    *,
+    order_template: Path,
+    item_template: Path,
+    vendors: Path,
+    mapping: Path,
+    assembly_import: Path,
+    parts_summary: Path,
+    build_code_map: Path,
+    micro_schedule: Path,
+    llm_context: Path,
+    out_dir: Path,
+) -> None:
+    """Set the input/output paths used by the functions of this module."""
+    global ORDER_TEMPLATE_PATH, ITEM_TEMPLATE_PATH, VENDORS_PATH, MAPPING_PATH
+    global ASSEMBLY_IMPORT_PATH, PARTS_SUMMARY_PATH, BUILD_CODE_MAP_PATH, MICRO_SCHEDULE_PATH
+    global OUTPUTS_DIR, OUTPUT_XLSX_PATH, ITEM_OUTPUT_XLSX_PATH, ASSEMBLY_PUSH_MAP_PATH
+    global KIT_PUSH_MAP_PATH, CENTRAL_BIM_CONTEXT_PATH
+    ORDER_TEMPLATE_PATH = Path(order_template)
+    ITEM_TEMPLATE_PATH = Path(item_template)
+    VENDORS_PATH = Path(vendors)
+    MAPPING_PATH = Path(mapping)
+    ASSEMBLY_IMPORT_PATH = Path(assembly_import)
+    PARTS_SUMMARY_PATH = Path(parts_summary)
+    BUILD_CODE_MAP_PATH = Path(build_code_map)
+    MICRO_SCHEDULE_PATH = Path(micro_schedule)
+    OUTPUTS_DIR = Path(out_dir)
+    OUTPUT_XLSX_PATH = OUTPUTS_DIR / "Production_Order.xlsx"
+    ITEM_OUTPUT_XLSX_PATH = OUTPUTS_DIR / "Production_Order_Items.xlsx"
+    ASSEMBLY_PUSH_MAP_PATH = OUTPUTS_DIR / "Revit_Assembly_Id_Map.csv"
+    KIT_PUSH_MAP_PATH = OUTPUTS_DIR / "Revit_Kit_Parameter_Map.csv"
+    CENTRAL_BIM_CONTEXT_PATH = Path(llm_context)
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="concho-schedule manufacton-orders",
+        description="Write the Manufacton production orders/items and the Revit push maps.",
+    )
+    parser.add_argument("--order-template", type=Path, required=True, metavar="XLSX",
+                        help="Manufacton 'ORDER IMPORT TEMPLATE.xlsx' (never committed)")
+    parser.add_argument("--item-template", type=Path, required=True, metavar="XLSX",
+                        help="Manufacton 'ITEM IMPORT TEMPLATE.xlsx' (never committed)")
+    parser.add_argument("--vendors", type=Path, required=True, metavar="CSV",
+                        help="vendors.csv: Template_ID, Location, Building_System")
+    parser.add_argument("--mapping", type=Path, required=True, metavar="CSV",
+                        help="4d_build_code_to_assembly_id_mapping.csv: build_code, assembly_id")
+    parser.add_argument("--assembly-import", type=Path, required=True, metavar="XLSX",
+                        help="Assembly_Import.xlsx (step manufacton-assemblies)")
+    parser.add_argument("--parts-summary", type=Path, required=True, metavar="CSV",
+                        help="Parts_Summary.csv (step manufacton-parts)")
+    parser.add_argument("--build-code-map", type=Path, required=True, metavar="CSV",
+                        help="Revit_4D_Build_Code_Map.csv (step fuzor-xml)")
+    parser.add_argument("--micro-schedule", type=Path, required=True, metavar="CSV",
+                        help="Micro_Schedule.csv (step micro-schedule)")
+    parser.add_argument("--llm-context", type=Path, required=True, metavar="CSV",
+                        help="central_bim_model_llm_context.csv (step llm-context)")
+    parser.add_argument("--out-dir", type=Path, required=True, metavar="DIR",
+                        help="output folder")
+    return parser
+
+
+def main(argv: list[str] | None = None) -> None:
+    args = build_parser().parse_args(argv)
+    configure(
+        order_template=args.order_template,
+        item_template=args.item_template,
+        vendors=args.vendors,
+        mapping=args.mapping,
+        assembly_import=args.assembly_import,
+        parts_summary=args.parts_summary,
+        build_code_map=args.build_code_map,
+        micro_schedule=args.micro_schedule,
+        llm_context=args.llm_context,
+        out_dir=args.out_dir,
+    )
     OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
 
     template_columns = load_template_columns()
@@ -731,3 +819,7 @@ if __name__ == "__main__":
     print(f"Wrote {KIT_PUSH_MAP_PATH.name}")
     print(f"Rows: {len(output)}")
     print(f"Item rows: {len(item_output)}")
+
+
+if __name__ == "__main__":
+    main()

@@ -1,5 +1,16 @@
+"""HTML viewer: micro schedule as a takt train per zone/room (step ``takt-viewer``).
+
+Writes ``OUT_DIR/Micro_Schedule_Takt_Viewer.html`` (self-contained, data embedded) from
+``Micro_Schedule.csv``; the optional ALICE workbook adds WBS phase names.
+
+Migrated from IPD_Challenge@989a6b7
+``src/Planning_engine/Micro_Schedule_Generator/generate_takt_viewer.py`` (P1.7): logic
+unchanged, the repo-relative paths became CLI arguments.
+"""
+
 from __future__ import annotations
 
+import argparse
 import json
 from pathlib import Path
 import re
@@ -7,13 +18,11 @@ import re
 import pandas as pd
 
 
-BASE_DIR = Path(__file__).resolve().parent
-PLANNING_ENGINE_DIR = BASE_DIR.parent
-ALICE_BIM_MAPPER_DIR = PLANNING_ENGINE_DIR / "ALICE_BIM_mapper"
-
-MICRO_SCHEDULE_PATH = BASE_DIR / "outputs" / "Micro_Schedule.csv"
-VIEWER_PATH = BASE_DIR / "outputs" / "Micro_Schedule_Takt_Viewer.html"
-ALICE_WORKBOOK_PATH = ALICE_BIM_MAPPER_DIR / "inputs" / "ALICE_macro.xlsx"
+# P1.7: set by configure() (was derived from the IPD_Challenge repo layout).
+# ALICE_WORKBOOK_PATH is optional (None when not given); the original checked whether it existed.
+MICRO_SCHEDULE_PATH: Path
+VIEWER_PATH: Path
+ALICE_WORKBOOK_PATH: Path | None
 
 
 WBS_COLORS = {
@@ -77,7 +86,7 @@ def fallback_wbs(task_name: str) -> str:
 
 
 def load_wbs_by_task_id() -> dict[str, str]:
-    if not ALICE_WORKBOOK_PATH.exists():
+    if ALICE_WORKBOOK_PATH is None or not ALICE_WORKBOOK_PATH.exists():
         return {}
 
     workbook = pd.ExcelFile(ALICE_WORKBOOK_PATH)
@@ -498,7 +507,35 @@ def build_html() -> str:
 """
 
 
-def main() -> None:
+def configure(*, micro_schedule: Path, out_dir: Path, alice_workbook: Path | None = None) -> None:
+    """Set the input/output paths used by the functions of this module."""
+    global MICRO_SCHEDULE_PATH, VIEWER_PATH, ALICE_WORKBOOK_PATH
+    MICRO_SCHEDULE_PATH = Path(micro_schedule)
+    VIEWER_PATH = Path(out_dir) / "Micro_Schedule_Takt_Viewer.html"
+    ALICE_WORKBOOK_PATH = Path(alice_workbook) if alice_workbook else None
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="concho-schedule takt-viewer",
+        description="Write the micro schedule takt viewer (HTML).",
+    )
+    parser.add_argument("--micro-schedule", type=Path, required=True, metavar="CSV",
+                        help="Micro_Schedule.csv (step micro-schedule)")
+    parser.add_argument("--alice-workbook", type=Path, metavar="XLSX",
+                        help="optional: ALICE export workbook (WBS phase names)")
+    parser.add_argument("--out-dir", type=Path, required=True, metavar="DIR",
+                        help="output folder")
+    return parser
+
+
+def main(argv: list[str] | None = None) -> None:
+    args = build_parser().parse_args(argv)
+    configure(
+        micro_schedule=args.micro_schedule,
+        out_dir=args.out_dir,
+        alice_workbook=args.alice_workbook,
+    )
     VIEWER_PATH.parent.mkdir(parents=True, exist_ok=True)
     VIEWER_PATH.write_text(build_html(), encoding="utf-8")
     print(f"Wrote {VIEWER_PATH}")

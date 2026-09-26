@@ -1,3 +1,16 @@
+"""Room-zone takt planner for the interior finish sequence (step ``takt-plan``).
+
+Groups the rooms of one level (``room_takt_zones.csv``) into takt zones, allocates the
+interior elements of ``central_bim_model.csv`` to them and schedules the trade sequence
+Interior Walls -> MEP -> Ceiling -> Doors -> Interior Finishes. Writes ``Takt_*.csv``,
+``Takt_Report.md``, the zone map PNG, ``Takt_Planner.html`` and ``Takt_Model_Viewer.html``
+to ``OUT_DIR``.
+
+Migrated from IPD_Challenge@989a6b7 ``src/Takt_engine/takt_planner.py`` (P1.7): logic
+unchanged, the repo-relative paths became CLI arguments. The HTML writers stay in this
+module for now (JSON output instead of HTML is P3B.4).
+"""
+
 from __future__ import annotations
 
 import argparse
@@ -17,15 +30,17 @@ from matplotlib.patches import Polygon
 import pandas as pd
 
 
-PROJECT_DIR = Path(__file__).resolve().parents[2]
-CENTRAL_BIM_PATH = PROJECT_DIR / "outputs" / "takt_zones" / "central_bim_model.csv"
-ROOM_TAKT_ZONES_PATH = PROJECT_DIR / "outputs" / "room_boundaries" / "room_takt_zones.csv"
-ROOM_BOUNDARIES_GLOB = "*_Room_Boundaries.csv"
-FBX_GLOB = "*.fbx"
-CREW_PATH = PROJECT_DIR / "src" / "Planning_engine" / "ALICE_BIM_mapper" / "outputs" / "Crew.csv"
-EQUIPMENT_PATH = PROJECT_DIR / "src" / "Planning_engine" / "ALICE_BIM_mapper" / "outputs" / "Equipment.csv"
-OUTPUT_DIR = PROJECT_DIR / "src" / "Takt_engine" / "outputs"
-PRODUCTIVITY_RATES_PATH = OUTPUT_DIR / "Takt_Productivity_Rates.csv"
+# P1.7: set by configure() (was derived from the IPD_Challenge repo layout).
+# Optional inputs are None when not given (the original checked whether the file existed).
+CENTRAL_BIM_PATH: Path
+ROOM_TAKT_ZONES_PATH: Path
+ROOM_BOUNDARIES_PATH: Path | None
+FBX_PATH: Path | None
+CREW_PATH: Path
+EQUIPMENT_PATH: Path | None
+OUTPUT_DIR: Path
+# Input rates; the original read them from (and wrote them back to) OUTPUT_DIR.
+PRODUCTIVITY_RATES_PATH: Path | None
 
 DEFAULT_PRODUCTIVITY_ROWS = [
     {"task": "Interior Walls", "planning_crew": "interior_walls_crew", "rate": 1.0, "unit": "EA/crew-hour"},
@@ -152,21 +167,13 @@ def parse_measure(value: object) -> float:
 
 
 def latest_room_boundaries_path() -> Path | None:
-    candidates = sorted(
-        (PROJECT_DIR / "revit_schedules").glob(ROOM_BOUNDARIES_GLOB),
-        key=lambda path: path.stat().st_mtime,
-        reverse=True,
-    )
-    return candidates[0] if candidates else None
+    # P1.7: explicit --room-boundaries instead of the newest revit_schedules/*_Room_Boundaries.csv.
+    return ROOM_BOUNDARIES_PATH
 
 
 def latest_fbx_path() -> Path | None:
-    candidates = sorted(
-        (PROJECT_DIR / "revit_schedules").glob(FBX_GLOB),
-        key=lambda path: path.stat().st_mtime,
-        reverse=True,
-    )
-    return candidates[0] if candidates else None
+    # P1.7: explicit --fbx instead of the newest revit_schedules/*.fbx.
+    return FBX_PATH
 
 
 def load_room_polygons() -> dict[str, list[tuple[float, float]]]:
@@ -636,14 +643,14 @@ def load_crews() -> pd.DataFrame:
 
 
 def load_equipment() -> pd.DataFrame:
-    if not EQUIPMENT_PATH.exists():
+    if EQUIPMENT_PATH is None or not EQUIPMENT_PATH.exists():
         return pd.DataFrame(columns=["equipment_type", "count", "cost"])
     return pd.read_csv(EQUIPMENT_PATH, dtype=str).fillna("")
 
 
 def productivity_rates_frame() -> pd.DataFrame:
     default_rates = pd.DataFrame(DEFAULT_PRODUCTIVITY_ROWS)
-    if not PRODUCTIVITY_RATES_PATH.exists():
+    if PRODUCTIVITY_RATES_PATH is None or not PRODUCTIVITY_RATES_PATH.exists():
         return default_rates
 
     rates = pd.read_csv(PRODUCTIVITY_RATES_PATH, dtype=str).fillna("")
@@ -1580,7 +1587,7 @@ def run(rooms_per_zone: int, level: str = "L 1") -> dict[str, Path | float | int
     schedule_path = OUTPUT_DIR / "Takt_Schedule.csv"
     idle_path = OUTPUT_DIR / "Takt_Crew_Idle_Report.csv"
     equipment_path = OUTPUT_DIR / "Takt_Equipment_Inputs.csv"
-    productivity_path = PRODUCTIVITY_RATES_PATH
+    productivity_path = OUTPUT_DIR / "Takt_Productivity_Rates.csv"
     report_path = OUTPUT_DIR / "Takt_Report.md"
     html_path = OUTPUT_DIR / "Takt_Planner.html"
     model_viewer_path = OUTPUT_DIR / "Takt_Model_Viewer.html"
@@ -1613,15 +1620,69 @@ def run(rooms_per_zone: int, level: str = "L 1") -> dict[str, Path | float | int
     }
 
 
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Generate a room-zone takt planner.")
+def configure(
+    *,
+    central_bim: Path,
+    room_takt_zones: Path,
+    crew: Path,
+    out_dir: Path,
+    equipment: Path | None = None,
+    productivity_rates: Path | None = None,
+    room_boundaries: Path | None = None,
+    fbx: Path | None = None,
+) -> None:
+    """Set the input/output paths used by the functions of this module."""
+    global CENTRAL_BIM_PATH, ROOM_TAKT_ZONES_PATH, ROOM_BOUNDARIES_PATH, FBX_PATH, CREW_PATH
+    global EQUIPMENT_PATH, OUTPUT_DIR, PRODUCTIVITY_RATES_PATH
+    CENTRAL_BIM_PATH = Path(central_bim)
+    ROOM_TAKT_ZONES_PATH = Path(room_takt_zones)
+    ROOM_BOUNDARIES_PATH = Path(room_boundaries) if room_boundaries else None
+    FBX_PATH = Path(fbx) if fbx else None
+    CREW_PATH = Path(crew)
+    EQUIPMENT_PATH = Path(equipment) if equipment else None
+    OUTPUT_DIR = Path(out_dir)
+    PRODUCTIVITY_RATES_PATH = Path(productivity_rates) if productivity_rates else None
+
+
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        prog="concho-schedule takt-plan",
+        description="Generate a room-zone takt planner.",
+    )
     parser.add_argument("--level", default="L 1", help="Level to plan. Default: L 1.")
     parser.add_argument("--rooms-per-zone", type=int, default=1, help="Number of neighboring rooms to group into each takt zone.")
-    return parser.parse_args()
+    parser.add_argument("--central-bim", type=Path, required=True, metavar="CSV",
+                        help="central_bim_model.csv (step takt-zones)")
+    parser.add_argument("--room-takt-zones", type=Path, required=True, metavar="CSV",
+                        help="room_takt_zones.csv: room_takt_id, room_id, room_number, room_name, "
+                             "level, area_sf, volume_cf, location_x/y/z_ft")
+    parser.add_argument("--crew", type=Path, required=True, metavar="CSV",
+                        help="Crew.csv: crew_type, count, cost, hours")
+    parser.add_argument("--equipment", type=Path, metavar="CSV",
+                        help="optional: Equipment.csv (copied into the report)")
+    parser.add_argument("--productivity-rates", type=Path, metavar="CSV",
+                        help="optional: task, planning_crew, rate, unit (default: built-in rates)")
+    parser.add_argument("--room-boundaries", type=Path, metavar="CSV",
+                        help="optional: *_Room_Boundaries.csv Revit export (room polygons)")
+    parser.add_argument("--fbx", type=Path, metavar="FBX",
+                        help="optional: FBX model linked from Takt_Model_Viewer.html")
+    parser.add_argument("--out-dir", type=Path, required=True, metavar="DIR",
+                        help="output folder")
+    return parser.parse_args(argv)
 
 
-def main() -> None:
-    args = parse_args()
+def main(argv: list[str] | None = None) -> None:
+    args = parse_args(argv)
+    configure(
+        central_bim=args.central_bim,
+        room_takt_zones=args.room_takt_zones,
+        crew=args.crew,
+        out_dir=args.out_dir,
+        equipment=args.equipment,
+        productivity_rates=args.productivity_rates,
+        room_boundaries=args.room_boundaries,
+        fbx=args.fbx,
+    )
     result = run(args.rooms_per_zone, args.level)
     print(json.dumps({key: str(value) for key, value in result.items()}, indent=2))
 

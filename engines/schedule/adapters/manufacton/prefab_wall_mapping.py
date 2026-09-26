@@ -1,18 +1,27 @@
+"""Manufacton adapter: prefab wall groups (step ``prefab-walls``).
+
+Groups exterior host walls with the curtain panels / mullions inside their bounding box
+(``central_bim_model_with_takt.csv``) and writes ``OUT_DIR/Prefab_Wall_Mapping.csv``. The
+micro schedule schedules each group as one prefab unit.
+
+Migrated from IPD_Challenge@989a6b7
+``src/Planning_engine/Prefab_BIM_Mapper/generate_prefab_wall_mapping.py`` (P1.7): logic
+unchanged, the repo-relative paths became CLI arguments.
+"""
+
 from __future__ import annotations
 
+import argparse
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
 
-BASE_DIR = Path(__file__).resolve().parent
-OUTPUTS_DIR = BASE_DIR / "outputs"
-PLANNING_ENGINE_DIR = BASE_DIR.parent
-PROJECT_DIR = PLANNING_ENGINE_DIR.parent.parent
-
-CENTRAL_BIM_WITH_TAKT_PATH = PROJECT_DIR / "outputs" / "takt_zones" / "central_bim_model_with_takt.csv"
-PREFAB_MAPPING_OUTPUT_PATH = OUTPUTS_DIR / "Prefab_Wall_Mapping.csv"
+# P1.7: set by configure() (was derived from the IPD_Challenge repo layout).
+OUTPUTS_DIR: Path
+CENTRAL_BIM_WITH_TAKT_PATH: Path
+PREFAB_MAPPING_OUTPUT_PATH: Path
 
 HOST_CATEGORIES = {"Walls"}
 ATTACHED_CATEGORIES = {"Curtain Panels", "Curtain Wall Mullions"}
@@ -236,7 +245,29 @@ def build_prefab_wall_mapping(
     ]
 
 
-def main() -> None:
+def configure(*, central_bim_with_takt: Path, out_dir: Path) -> None:
+    """Set the input/output paths used by the functions of this module."""
+    global OUTPUTS_DIR, CENTRAL_BIM_WITH_TAKT_PATH, PREFAB_MAPPING_OUTPUT_PATH
+    OUTPUTS_DIR = Path(out_dir)
+    CENTRAL_BIM_WITH_TAKT_PATH = Path(central_bim_with_takt)
+    PREFAB_MAPPING_OUTPUT_PATH = OUTPUTS_DIR / "Prefab_Wall_Mapping.csv"
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="concho-schedule prefab-walls",
+        description="Group exterior walls with their curtain panels/mullions into prefab units.",
+    )
+    parser.add_argument("--central-bim-with-takt", type=Path, required=True, metavar="CSV",
+                        help="central_bim_model_with_takt.csv (step takt-zones)")
+    parser.add_argument("--out-dir", type=Path, required=True, metavar="DIR",
+                        help="output folder")
+    return parser
+
+
+def main(argv: list[str] | None = None) -> None:
+    args = build_parser().parse_args(argv)
+    configure(central_bim_with_takt=args.central_bim_with_takt, out_dir=args.out_dir)
     OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
     bim_df = load_central_bim()
     prefab_df = build_prefab_wall_mapping(bim_df)

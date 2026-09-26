@@ -1,5 +1,21 @@
+"""Takt-zone calibration and the central BIM model (step ``takt-zones``).
+
+Combines the current Revit schedule exports (``*.csv`` in ``--schedules-dir``) into
+``OUT_DIR/central_bim_model.csv`` and assigns every element to a takt zone polygon
+(``OUT_DIR/central_bim_model_with_takt.csv``).
+
+The zones come from ``--takt-zones`` (an existing ``takt_zones.json``). Without it, an
+interactive matplotlib session calibrates each floor plan PNG (``--floor-plan LEVEL=PNG``)
+against the wall centre lines of ``--plot-schedule`` CSVs and lets you draw the zones; the
+result is written to ``OUT_DIR/takt_zones.json``. Needs a GUI matplotlib backend.
+
+Migrated from IPD_Challenge@989a6b7 ``src/takt_zone_calibrator.py`` (P1.7): logic unchanged,
+the repo-relative paths became CLI arguments.
+"""
+
 from __future__ import annotations
 
+import argparse
 import json
 from pathlib import Path
 
@@ -11,66 +27,21 @@ import numpy as np
 import pandas as pd
 
 
-PROJECT_DIR = Path(__file__).resolve().parent.parent
-OUTPUT_PATH = PROJECT_DIR / "outputs" / "takt_zones" / "takt_zones.json"
-CENTRAL_BIM_OUTPUT_PATH = PROJECT_DIR / "outputs" / "takt_zones" / "central_bim_model.csv"
-CENTRAL_BIM_WITH_TAKT_OUTPUT_PATH = PROJECT_DIR / "outputs" / "takt_zones" / "central_bim_model_with_takt.csv"
-
-BACKGROUND_BY_LEVEL = {
-    "L -1": PROJECT_DIR / "floor_plans" / "L-1.png",
-    "L 0": PROJECT_DIR / "floor_plans" / "L0.png",
-    "L 1": PROJECT_DIR / "floor_plans" / "L1.png",
-}
-
-ARCHITECTURE_SCHEDULE_PATH = (
-    PROJECT_DIR
-    / "revit_schedules"
-    / "Arch"
-    / "04_Island_ARCH_Concept2_V24_2026-04-23_04-35-08pm_detached_Architecture_TakeOff.csv"
-)
-STRUCT_ARCHITECTURE_SCHEDULE_PATH = (
-    PROJECT_DIR
-    / "revit_schedules"
-    / "Struct"
-    / "STR_Wall_Bamboo_Concept2_amd03_V3_2026-04-24_08-20-35am_detached_Architecture_TakeOff.csv"
-)
-ARCHITECTURE_STRUCTURAL_SCHEDULE_PATH = (
-    PROJECT_DIR
-    / "revit_schedules"
-    / "Arch"
-    / "04_Island_ARCH_Concept2_V24_2026-04-23_04-35-08pm_detached_Structural_Schedule.csv"
-)
-STRUCT_STRUCTURAL_SCHEDULE_PATH = (
-    PROJECT_DIR
-    / "revit_schedules"
-    / "Struct"
-    / "STR_Wall_Bamboo_Concept2_amd03_V3_2026-04-24_08-20-35am_detached_Structural_Schedule.csv"
-)
-ARCHITECTURE_MEP_SCHEDULE_PATH = (
-    PROJECT_DIR
-    / "revit_schedules"
-    / "Arch"
-    / "04_Island_ARCH_Concept2_V24_2026-04-23_04-35-08pm_detached_MEP_TakeOff.csv"
-)
-
-MEP_SCHEDULE_PATH = (
-PROJECT_DIR
-    / "revit_schedules"
-    / "MEP"
-    / "01_Island_MEP_Concept2_V4_2026-04-08_11-47-28am_detached_MEP_TakeOff.csv"
-)
-
-CURRENT_SCHEDULES_DIR = PROJECT_DIR / "revit_schedules" / "Current"
+# P1.7: set by configure() (was derived from the IPD_Challenge repo layout). The original
+# hardcoded the Island Revit exports: plot schedules = Arch V24 + Struct V3
+# Architecture_TakeOff, floor plans = floor_plans/L-1.png, L0.png, L1.png, central BIM
+# schedules = revit_schedules/Current/*.csv. Its unused BIM_SCHEDULE_PATHS /
+# *_STRUCTURAL_/*_MEP_SCHEDULE_PATH constants were dropped.
+OUTPUT_PATH: Path
+EXISTING_TAKT_ZONES_PATH: Path | None
+CENTRAL_BIM_OUTPUT_PATH: Path
+CENTRAL_BIM_WITH_TAKT_OUTPUT_PATH: Path
+BACKGROUND_BY_LEVEL: dict[str, Path]
+PLOT_SCHEDULE_PATHS: list[Path]
+CURRENT_SCHEDULES_DIR: Path
 
 LEVEL_SEQUENCE = ["L -1", "L 0", "L 1"]
 ZONE_FACE_COLORS = ["#ff6b6b", "#4dabf7", "#51cf66", "#ffd43b", "#b197fc", "#ffa94d"]
-BIM_SCHEDULE_PATHS = [
-    ARCHITECTURE_SCHEDULE_PATH,
-    STRUCT_ARCHITECTURE_SCHEDULE_PATH,
-    ARCHITECTURE_STRUCTURAL_SCHEDULE_PATH,
-    STRUCT_STRUCTURAL_SCHEDULE_PATH,
-    ARCHITECTURE_MEP_SCHEDULE_PATH,
-]
 
 
 def current_bim_schedule_paths() -> list[Path]:
@@ -656,13 +627,72 @@ def save_prefab_mapping(prefab_df: pd.DataFrame) -> None:
 
 
 def load_existing_takt_zones() -> dict[str, object] | None:
-    if not OUTPUT_PATH.exists():
+    # P1.7: read from --takt-zones; the original read (and wrote) outputs/takt_zones/takt_zones.json.
+    if EXISTING_TAKT_ZONES_PATH is None or not EXISTING_TAKT_ZONES_PATH.exists():
         return None
-    return json.loads(OUTPUT_PATH.read_text(encoding="utf-8"))
+    return json.loads(EXISTING_TAKT_ZONES_PATH.read_text(encoding="utf-8"))
 
 
-def main() -> None:
-    plot_schedule_paths = [ARCHITECTURE_SCHEDULE_PATH, STRUCT_ARCHITECTURE_SCHEDULE_PATH]
+def configure(
+    *,
+    schedules_dir: Path,
+    out_dir: Path,
+    takt_zones: Path | None = None,
+    plot_schedules: list[Path] | None = None,
+    floor_plans: dict[str, Path] | None = None,
+) -> None:
+    """Set the input/output paths used by the functions of this module."""
+    global OUTPUT_PATH, EXISTING_TAKT_ZONES_PATH, CENTRAL_BIM_OUTPUT_PATH
+    global CENTRAL_BIM_WITH_TAKT_OUTPUT_PATH, BACKGROUND_BY_LEVEL, PLOT_SCHEDULE_PATHS
+    global CURRENT_SCHEDULES_DIR
+    out_dir = Path(out_dir)
+    OUTPUT_PATH = out_dir / "takt_zones.json"
+    EXISTING_TAKT_ZONES_PATH = Path(takt_zones) if takt_zones else None
+    CENTRAL_BIM_OUTPUT_PATH = out_dir / "central_bim_model.csv"
+    CENTRAL_BIM_WITH_TAKT_OUTPUT_PATH = out_dir / "central_bim_model_with_takt.csv"
+    BACKGROUND_BY_LEVEL = {level: Path(path) for level, path in (floor_plans or {}).items()}
+    PLOT_SCHEDULE_PATHS = [Path(path) for path in plot_schedules or []]
+    CURRENT_SCHEDULES_DIR = Path(schedules_dir)
+
+
+def parse_floor_plan(value: str) -> tuple[str, Path]:
+    level, separator, path = value.partition("=")
+    if not separator or not level.strip() or not path.strip():
+        raise argparse.ArgumentTypeError(f"expected LEVEL=PNG, got {value!r}")
+    return level.strip(), Path(path.strip())
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="concho-schedule takt-zones",
+        description="Combine the Revit schedules into the central BIM model and assign takt zones.",
+    )
+    parser.add_argument("--schedules-dir", type=Path, required=True, metavar="DIR",
+                        help="folder with the current Revit schedule CSVs (all *.csv are combined)")
+    parser.add_argument("--takt-zones", type=Path, metavar="JSON",
+                        help="existing takt_zones.json; without it the zones are drawn interactively")
+    parser.add_argument("--plot-schedule", type=Path, action="append", default=[], metavar="CSV",
+                        help="interactive mode: Architecture_TakeOff CSV whose walls are plotted "
+                             "for calibration (repeatable)")
+    parser.add_argument("--floor-plan", type=parse_floor_plan, action="append", default=[],
+                        metavar="LEVEL=PNG",
+                        help='interactive mode: cropped floor plan per level, e.g. "L 1=L1.png" '
+                             "(repeatable)")
+    parser.add_argument("--out-dir", type=Path, required=True, metavar="DIR",
+                        help="output folder")
+    return parser
+
+
+def main(argv: list[str] | None = None) -> None:
+    args = build_parser().parse_args(argv)
+    configure(
+        schedules_dir=args.schedules_dir,
+        out_dir=args.out_dir,
+        takt_zones=args.takt_zones,
+        plot_schedules=args.plot_schedule,
+        floor_plans=dict(args.floor_plan),
+    )
+    plot_schedule_paths = PLOT_SCHEDULE_PATHS
     central_bim_schedule_paths = current_bim_schedule_paths()
     all_elements = load_plot_elements(plot_schedule_paths)
     existing_zone_data = load_existing_takt_zones()
@@ -700,7 +730,7 @@ def main() -> None:
         }
         save_zones(central_bim_schedule_paths, existing_zone_data)
     else:
-        print(f"Using existing takt zones from: {OUTPUT_PATH}")
+        print(f"Using existing takt zones from: {EXISTING_TAKT_ZONES_PATH}")
 
     combined_bim_df = load_and_combine_bim_schedules(central_bim_schedule_paths)
     if combined_bim_df.empty:

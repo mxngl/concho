@@ -1,15 +1,22 @@
+"""Compact LLM context export of the central BIM model (step ``llm-context``).
+
+Reads ``central_bim_model_with_takt.csv`` (step ``takt-zones``) and writes
+``OUT_DIR/central_bim_model_llm_context.csv``.
+
+Migrated from IPD_Challenge@989a6b7 ``src/Planning_engine/generate_llm_bim_context.py``
+(P1.7): logic unchanged, the repo-relative paths became CLI arguments.
+"""
+
 from __future__ import annotations
 
+import argparse
 from pathlib import Path
 
 import pandas as pd
 
-
-BASE_DIR = Path(__file__).resolve().parent
-PROJECT_DIR = BASE_DIR.parent.parent
-
-INPUT_PATH = PROJECT_DIR / "outputs" / "takt_zones" / "central_bim_model_with_takt.csv"
-OUTPUT_PATH = PROJECT_DIR / "outputs" / "takt_zones" / "central_bim_model_llm_context.csv"
+# P1.7: set by configure() (was derived from the IPD_Challenge repo layout).
+INPUT_PATH: Path
+OUTPUT_PATH: Path
 
 
 KEEP_COLUMNS = [
@@ -195,10 +202,35 @@ def build_llm_context() -> pd.DataFrame:
     return compact
 
 
-if __name__ == "__main__":
+def configure(*, central_bim_with_takt: Path, out_dir: Path) -> None:
+    """Set the input/output paths used by the functions of this module."""
+    global INPUT_PATH, OUTPUT_PATH
+    INPUT_PATH = Path(central_bim_with_takt)
+    OUTPUT_PATH = Path(out_dir) / "central_bim_model_llm_context.csv"
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="concho-schedule llm-context",
+        description="Write a compact LLM context CSV of the central BIM model.",
+    )
+    parser.add_argument("--central-bim-with-takt", type=Path, required=True, metavar="CSV",
+                        help="central_bim_model_with_takt.csv (step takt-zones)")
+    parser.add_argument("--out-dir", type=Path, required=True, metavar="DIR",
+                        help="output folder")
+    return parser
+
+
+def main(argv: list[str] | None = None) -> None:
+    args = build_parser().parse_args(argv)
+    configure(central_bim_with_takt=args.central_bim_with_takt, out_dir=args.out_dir)
     OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     llm_context = build_llm_context()
     llm_context.to_csv(OUTPUT_PATH, index=False)
     print(f"Wrote {OUTPUT_PATH}")
     print(f"Rows: {len(llm_context)}")
     print(f"Columns: {len(llm_context.columns)}")
+
+
+if __name__ == "__main__":
+    main()

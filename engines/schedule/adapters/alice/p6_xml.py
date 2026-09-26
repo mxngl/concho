@@ -1,5 +1,18 @@
+"""ALICE adapter: P6 XML task schedule aggregated from the micro schedule (step ``alice-p6-xml``).
+
+Aggregates ``Micro_Schedule.csv`` per task and level into P6 activities (finish-to-start
+relationships inferred from dates) and writes ``ALICE_Task_Schedule.xml`` and
+``ALICE_Task_Schedule_Macro_View.csv`` to ``OUT_DIR``. The optional ALICE workbook adds the
+WBS names/codes. GUIDs are random per run.
+
+Migrated from IPD_Challenge@989a6b7
+``src/Planning_engine/ALICE_BIM_mapper/generate_p6_task_schedule_xml.py`` (P1.7): logic
+unchanged, the repo-relative paths became CLI arguments.
+"""
+
 from __future__ import annotations
 
+import argparse
 from pathlib import Path
 import uuid
 import xml.etree.ElementTree as ET
@@ -7,15 +20,13 @@ import xml.etree.ElementTree as ET
 import pandas as pd
 
 
-BASE_DIR = Path(__file__).resolve().parent
-INPUTS_DIR = BASE_DIR / "inputs"
-OUTPUTS_DIR = BASE_DIR / "outputs"
-PLANNING_ENGINE_DIR = BASE_DIR.parent
-
-WORKBOOK_PATH = INPUTS_DIR / "ALICE_macro.xlsx"
-MICRO_SCHEDULE_PATH = PLANNING_ENGINE_DIR / "Micro_Schedule_Generator" / "outputs" / "Micro_Schedule.csv"
-OUTPUT_XML_PATH = OUTPUTS_DIR / "ALICE_Task_Schedule.xml"
-OUTPUT_MACRO_VIEW_PATH = OUTPUTS_DIR / "ALICE_Task_Schedule_Macro_View.csv"
+# P1.7: set by configure() (was derived from the IPD_Challenge repo layout).
+# WORKBOOK_PATH is optional (None when not given); the original checked whether it existed.
+OUTPUTS_DIR: Path
+WORKBOOK_PATH: Path | None
+MICRO_SCHEDULE_PATH: Path
+OUTPUT_XML_PATH: Path
+OUTPUT_MACRO_VIEW_PATH: Path
 
 NS = "http://xmlns.oracle.com/Primavera/P6/V25.12/API/BusinessObjects"
 XSI = "http://www.w3.org/2001/XMLSchema-instance"
@@ -82,7 +93,7 @@ def elapsed_hours_between(start: pd.Timestamp, finish: pd.Timestamp) -> float:
 
 
 def load_wbs_lookup() -> pd.DataFrame:
-    if not WORKBOOK_PATH.exists():
+    if WORKBOOK_PATH is None or not WORKBOOK_PATH.exists():
         return pd.DataFrame(columns=["task_id", "wbs_name", "wbs_code"])
 
     workbook = pd.ExcelFile(WORKBOOK_PATH)
@@ -441,9 +452,39 @@ def build_xml() -> ET.ElementTree:
     return ET.ElementTree(root)
 
 
-if __name__ == "__main__":
+def configure(*, micro_schedule: Path, out_dir: Path, workbook: Path | None = None) -> None:
+    """Set the input/output paths used by the functions of this module."""
+    global OUTPUTS_DIR, WORKBOOK_PATH, MICRO_SCHEDULE_PATH, OUTPUT_XML_PATH, OUTPUT_MACRO_VIEW_PATH
+    OUTPUTS_DIR = Path(out_dir)
+    WORKBOOK_PATH = Path(workbook) if workbook else None
+    MICRO_SCHEDULE_PATH = Path(micro_schedule)
+    OUTPUT_XML_PATH = OUTPUTS_DIR / "ALICE_Task_Schedule.xml"
+    OUTPUT_MACRO_VIEW_PATH = OUTPUTS_DIR / "ALICE_Task_Schedule_Macro_View.csv"
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="concho-schedule alice-p6-xml",
+        description="Write a P6 XML task schedule (task x level) from the micro schedule.",
+    )
+    parser.add_argument("--micro-schedule", type=Path, required=True, metavar="CSV",
+                        help="Micro_Schedule.csv (step micro-schedule)")
+    parser.add_argument("--workbook", type=Path, metavar="XLSX",
+                        help="optional: ALICE export workbook for WBS names/codes")
+    parser.add_argument("--out-dir", type=Path, required=True, metavar="DIR",
+                        help="output folder")
+    return parser
+
+
+def main(argv: list[str] | None = None) -> None:
+    args = build_parser().parse_args(argv)
+    configure(micro_schedule=args.micro_schedule, out_dir=args.out_dir, workbook=args.workbook)
     OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
     tree = build_xml()
     ET.indent(tree, space="  ")
     tree.write(OUTPUT_XML_PATH, encoding="utf-8", xml_declaration=True)
     print(f"Wrote {OUTPUT_XML_PATH.name}")
+
+
+if __name__ == "__main__":
+    main()

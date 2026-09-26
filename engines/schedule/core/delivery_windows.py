@@ -1,5 +1,17 @@
+"""Delivery-window analysis: daily vs. 3-day vs. weekly deliveries (step ``delivery-windows``).
+
+Derives delivery units from the Manufacton production orders (step ``manufacton-orders``)
+and, for elements they do not cover, from the micro schedule (+ LLM context volumes/areas).
+Writes the delivery CSVs and PNG charts to ``OUT_DIR``.
+
+Migrated from IPD_Challenge@989a6b7
+``src/Planning_engine/Logistics_Analysis/compare_delivery_windows.py`` (P1.7): logic
+unchanged, the repo-relative paths became CLI arguments.
+"""
+
 from __future__ import annotations
 
+import argparse
 import re
 from pathlib import Path
 
@@ -10,15 +22,17 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 
-ROOT = Path(__file__).resolve().parents[3]
-MICRO_SCHEDULE_PATH = ROOT / "src" / "Planning_engine" / "Micro_Schedule_Generator" / "outputs" / "Micro_Schedule.csv"
-BIM_CONTEXT_PATH = ROOT / "outputs" / "takt_zones" / "central_bim_model_llm_context.csv"
-PREFAB_OUTPUTS_DIR = ROOT / "src" / "Planning_engine" / "Prefab_BIM_Mapper" / "outputs"
-PRODUCTION_ORDER_PATH = PREFAB_OUTPUTS_DIR / "Production_Order.xlsx"
-PRODUCTION_ORDER_ITEMS_PATH = PREFAB_OUTPUTS_DIR / "Production_Order_Items.xlsx"
-KIT_MAP_PATH = PREFAB_OUTPUTS_DIR / "Revit_Kit_Parameter_Map.csv"
-ASSEMBLY_MAP_PATH = PREFAB_OUTPUTS_DIR / "Revit_Assembly_Id_Map.csv"
-OUTPUT_DIR = ROOT / "outputs" / "delivery_window_analysis"
+# P1.7: set by configure() (was derived from the IPD_Challenge repo layout).
+# The four Manufacton outputs are required: without them the original skips the production
+# orders but then fails in production_order_window_series() (KeyError 'source'; see
+# engines/schedule/README.md, "Findings").
+MICRO_SCHEDULE_PATH: Path
+BIM_CONTEXT_PATH: Path
+PRODUCTION_ORDER_PATH: Path
+PRODUCTION_ORDER_ITEMS_PATH: Path
+KIT_MAP_PATH: Path
+ASSEMBLY_MAP_PATH: Path
+OUTPUT_DIR: Path
 
 CONCRETE_TRUCK_ASSEMBLY_ID = "CONC_400CF_TRUCK_ASSEMBLY"
 CONCRETE_TRUCK_VOLUME_CF = 400.0
@@ -689,7 +703,61 @@ def plot_production_order_windows(delivery_units: pd.DataFrame) -> pd.DataFrame:
     return series
 
 
-def main() -> None:
+def configure(
+    *,
+    micro_schedule: Path,
+    llm_context: Path,
+    production_order: Path,
+    production_order_items: Path,
+    kit_map: Path,
+    assembly_map: Path,
+    out_dir: Path,
+) -> None:
+    """Set the input/output paths used by the functions of this module."""
+    global MICRO_SCHEDULE_PATH, BIM_CONTEXT_PATH, PRODUCTION_ORDER_PATH
+    global PRODUCTION_ORDER_ITEMS_PATH, KIT_MAP_PATH, ASSEMBLY_MAP_PATH, OUTPUT_DIR
+    MICRO_SCHEDULE_PATH = Path(micro_schedule)
+    BIM_CONTEXT_PATH = Path(llm_context)
+    PRODUCTION_ORDER_PATH = Path(production_order)
+    PRODUCTION_ORDER_ITEMS_PATH = Path(production_order_items)
+    KIT_MAP_PATH = Path(kit_map)
+    ASSEMBLY_MAP_PATH = Path(assembly_map)
+    OUTPUT_DIR = Path(out_dir)
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="concho-schedule delivery-windows",
+        description="Compare daily, 3-day and weekly delivery windows.",
+    )
+    parser.add_argument("--micro-schedule", type=Path, required=True, metavar="CSV",
+                        help="Micro_Schedule.csv (step micro-schedule)")
+    parser.add_argument("--llm-context", type=Path, required=True, metavar="CSV",
+                        help="central_bim_model_llm_context.csv (step llm-context)")
+    parser.add_argument("--production-order", type=Path, required=True, metavar="XLSX",
+                        help="Production_Order.xlsx (step manufacton-orders)")
+    parser.add_argument("--production-order-items", type=Path, required=True, metavar="XLSX",
+                        help="Production_Order_Items.xlsx (step manufacton-orders)")
+    parser.add_argument("--kit-map", type=Path, required=True, metavar="CSV",
+                        help="Revit_Kit_Parameter_Map.csv (step manufacton-orders)")
+    parser.add_argument("--assembly-map", type=Path, required=True, metavar="CSV",
+                        help="Revit_Assembly_Id_Map.csv (step manufacton-orders)")
+    parser.add_argument("--out-dir", type=Path, required=True, metavar="DIR",
+                        help="output folder")
+    return parser
+
+
+def main(argv: list[str] | None = None) -> None:
+    args = build_parser().parse_args(argv)
+    configure(
+        micro_schedule=args.micro_schedule,
+        llm_context=args.llm_context,
+        production_order=args.production_order,
+        production_order_items=args.production_order_items,
+        kit_map=args.kit_map,
+        assembly_map=args.assembly_map,
+        out_dir=args.out_dir,
+    )
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     delivery_units = load_delivery_units()
     delivery_units.to_csv(OUTPUT_DIR / "delivery_units_by_micro_schedule.csv", index=False)

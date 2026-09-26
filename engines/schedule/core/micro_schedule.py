@@ -1,5 +1,19 @@
+"""Rule-driven micro schedule: macro tasks x BIM elements (step ``micro-schedule``).
+
+Inputs: the macro schedule, ``Tasks.csv`` / ``Crew.csv`` / ``Equipment.csv`` (step
+``alice-inputs`` or hand-written), the task -> BIM selector map (``ALICE_BIM_Map.csv``) and
+``central_bim_model_with_takt.csv``; optional: the LLM context (discipline lookup), the
+prefab wall mapping, ``micro_schedule_rules.json`` and a ``*_Room_Boundaries.csv`` export.
+Writes ``OUT_DIR/Micro_Schedule.csv`` and ``OUT_DIR/Micro_Schedule_Log.md``.
+
+Migrated from IPD_Challenge@989a6b7
+``src/Planning_engine/Micro_Schedule_Generator/generate_micro_schedule.py`` (P1.7): rules,
+constants and task logic unchanged; the repo-relative paths became CLI arguments.
+"""
+
 from __future__ import annotations
 
+import argparse
 from dataclasses import dataclass
 import json
 from pathlib import Path
@@ -9,33 +23,21 @@ from typing import Any, cast
 import pandas as pd
 
 
-BASE_DIR = Path(__file__).resolve().parent
-OUTPUTS_DIR = BASE_DIR / "outputs"
-PLANNING_ENGINE_DIR = BASE_DIR.parent
-PROJECT_DIR = PLANNING_ENGINE_DIR.parent.parent
-ALICE_BIM_MAPPER_DIR = PLANNING_ENGINE_DIR / "ALICE_BIM_mapper"
-ALICE_BIM_INPUTS_DIR = ALICE_BIM_MAPPER_DIR / "inputs"
-ALICE_BIM_OUTPUTS_DIR = ALICE_BIM_MAPPER_DIR / "outputs"
-
-MACRO_SCHEDULE_PATH = ALICE_BIM_OUTPUTS_DIR / "Macro_Schedule.csv"
-LOCAL_INPUTS_DIR = BASE_DIR / "inputs"
-LOCAL_ALICE_BIM_MAP_PATH = LOCAL_INPUTS_DIR / "ALICE_BIM_Map.csv"
-ALICE_BIM_MAP_PATH = (
-    LOCAL_ALICE_BIM_MAP_PATH
-    if LOCAL_ALICE_BIM_MAP_PATH.exists()
-    else ALICE_BIM_INPUTS_DIR / "ALICE_BIM_Map.csv"
-)
-TASKS_PATH = ALICE_BIM_OUTPUTS_DIR / "Tasks.csv"
-CREW_PATH = ALICE_BIM_OUTPUTS_DIR / "Crew.csv"
-EQUIPMENT_PATH = ALICE_BIM_OUTPUTS_DIR / "Equipment.csv"
-
-CENTRAL_BIM_PATH = PROJECT_DIR / "outputs" / "takt_zones" / "central_bim_model_with_takt.csv"
-CENTRAL_BIM_CONTEXT_PATH = PROJECT_DIR / "outputs" / "takt_zones" / "central_bim_model_llm_context.csv"
-REVIT_SCHEDULES_DIR = PROJECT_DIR / "revit_schedules"
-PREFAB_MAPPING_PATH = PLANNING_ENGINE_DIR / "Prefab_BIM_Mapper" / "outputs" / "Prefab_Wall_Mapping.csv"
-MICRO_SCHEDULE_PATH = OUTPUTS_DIR / "Micro_Schedule.csv"
-MICRO_LOG_PATH = OUTPUTS_DIR / "Micro_Schedule_Log.md"
-MICRO_RULES_PATH = BASE_DIR / "inputs" / "micro_schedule_rules.json"
+# P1.7: set by configure() (was derived from the IPD_Challenge repo layout).
+# Optional inputs are None when not given (the original checked whether the file existed).
+OUTPUTS_DIR: Path
+MACRO_SCHEDULE_PATH: Path
+ALICE_BIM_MAP_PATH: Path
+TASKS_PATH: Path
+CREW_PATH: Path
+EQUIPMENT_PATH: Path
+CENTRAL_BIM_PATH: Path
+CENTRAL_BIM_CONTEXT_PATH: Path | None
+ROOM_BOUNDARIES_PATH: Path | None
+PREFAB_MAPPING_PATH: Path | None
+MICRO_SCHEDULE_PATH: Path
+MICRO_LOG_PATH: Path
+MICRO_RULES_PATH: Path | None
 
 
 @dataclass
@@ -395,12 +397,8 @@ def choose_coord(row: pd.Series, primary: str, fallback: str) -> float:
 
 
 def latest_room_boundaries_path() -> Path | None:
-    candidates = sorted(
-        REVIT_SCHEDULES_DIR.glob("*_Room_Boundaries.csv"),
-        key=lambda path: path.stat().st_mtime,
-        reverse=True,
-    )
-    return candidates[0] if candidates else None
+    # P1.7: explicit --room-boundaries instead of the newest revit_schedules/*_Room_Boundaries.csv.
+    return ROOM_BOUNDARIES_PATH
 
 
 def polygon_contains_point(points: list[tuple[float, float]], x: float, y: float) -> bool:
@@ -588,7 +586,7 @@ def infer_discipline(row: pd.Series) -> str:
 
 
 def load_element_discipline_lookup() -> dict[str, str]:
-    if not CENTRAL_BIM_CONTEXT_PATH.exists():
+    if CENTRAL_BIM_CONTEXT_PATH is None or not CENTRAL_BIM_CONTEXT_PATH.exists():
         return {}
 
     context = pd.read_csv(CENTRAL_BIM_CONTEXT_PATH, dtype=str).fillna("")
@@ -1283,7 +1281,7 @@ def load_resource_counts() -> tuple[dict[str, int], dict[str, int]]:
 
 
 def load_prefab_mapping() -> tuple[dict[str, list[str]], set[str], dict[str, str], set[str]]:
-    if not PREFAB_MAPPING_PATH.exists():
+    if PREFAB_MAPPING_PATH is None or not PREFAB_MAPPING_PATH.exists():
         return {}, set(), {}, set()
 
     mapping = pd.read_csv(PREFAB_MAPPING_PATH, dtype=str).fillna("")
@@ -1315,7 +1313,7 @@ def load_prefab_mapping() -> tuple[dict[str, list[str]], set[str], dict[str, str
 
 
 def load_micro_rules() -> dict[str, Any]:
-    if not MICRO_RULES_PATH.exists():
+    if MICRO_RULES_PATH is None or not MICRO_RULES_PATH.exists():
         return DEFAULT_MICRO_RULES
 
     with MICRO_RULES_PATH.open(encoding="utf-8") as file:
@@ -1902,10 +1900,92 @@ def write_log(log_lines: list[str]) -> None:
     MICRO_LOG_PATH.write_text("\n".join(content) + "\n", encoding="utf-8")
 
 
-if __name__ == "__main__":
+def configure(
+    *,
+    macro_schedule: Path,
+    tasks: Path,
+    crew: Path,
+    equipment: Path,
+    bim_map: Path,
+    central_bim_with_takt: Path,
+    out_dir: Path,
+    llm_context: Path | None = None,
+    prefab_wall_mapping: Path | None = None,
+    rules: Path | None = None,
+    room_boundaries: Path | None = None,
+) -> None:
+    """Set the input/output paths used by the functions of this module."""
+    global OUTPUTS_DIR, MACRO_SCHEDULE_PATH, ALICE_BIM_MAP_PATH, TASKS_PATH, CREW_PATH
+    global EQUIPMENT_PATH, CENTRAL_BIM_PATH, CENTRAL_BIM_CONTEXT_PATH, ROOM_BOUNDARIES_PATH
+    global PREFAB_MAPPING_PATH, MICRO_SCHEDULE_PATH, MICRO_LOG_PATH, MICRO_RULES_PATH
+    OUTPUTS_DIR = Path(out_dir)
+    MACRO_SCHEDULE_PATH = Path(macro_schedule)
+    ALICE_BIM_MAP_PATH = Path(bim_map)
+    TASKS_PATH = Path(tasks)
+    CREW_PATH = Path(crew)
+    EQUIPMENT_PATH = Path(equipment)
+    CENTRAL_BIM_PATH = Path(central_bim_with_takt)
+    CENTRAL_BIM_CONTEXT_PATH = Path(llm_context) if llm_context else None
+    ROOM_BOUNDARIES_PATH = Path(room_boundaries) if room_boundaries else None
+    PREFAB_MAPPING_PATH = Path(prefab_wall_mapping) if prefab_wall_mapping else None
+    MICRO_SCHEDULE_PATH = OUTPUTS_DIR / "Micro_Schedule.csv"
+    MICRO_LOG_PATH = OUTPUTS_DIR / "Micro_Schedule_Log.md"
+    MICRO_RULES_PATH = Path(rules) if rules else None
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="concho-schedule micro-schedule",
+        description="Generate the element-level micro schedule from the macro schedule.",
+    )
+    parser.add_argument("--macro-schedule", type=Path, required=True, metavar="CSV",
+                        help="Macro_Schedule.csv (step alice-inputs) or an ALICE export CSV "
+                             "with Task ID/Task Name/Start Date/End Date")
+    parser.add_argument("--tasks", type=Path, required=True, metavar="CSV",
+                        help="Tasks.csv: task_name, crew_type, crew_num_req, equipment_type")
+    parser.add_argument("--crew", type=Path, required=True, metavar="CSV",
+                        help="Crew.csv: crew_type, count, cost, hours")
+    parser.add_argument("--equipment", type=Path, required=True, metavar="CSV",
+                        help="Equipment.csv: equipment_type, count, cost")
+    parser.add_argument("--bim-map", type=Path, required=True, metavar="CSV",
+                        help="ALICE_BIM_Map.csv: task -> BIM element selectors + productivity")
+    parser.add_argument("--central-bim-with-takt", type=Path, required=True, metavar="CSV",
+                        help="central_bim_model_with_takt.csv (step takt-zones)")
+    parser.add_argument("--llm-context", type=Path, metavar="CSV",
+                        help="optional: central_bim_model_llm_context.csv (discipline lookup)")
+    parser.add_argument("--prefab-wall-mapping", type=Path, metavar="CSV",
+                        help="optional: Prefab_Wall_Mapping.csv (step prefab-walls)")
+    parser.add_argument("--rules", type=Path, metavar="JSON",
+                        help="optional: micro_schedule_rules.json (default: built-in rules)")
+    parser.add_argument("--room-boundaries", type=Path, metavar="CSV",
+                        help="optional: *_Room_Boundaries.csv Revit export (room takt ids)")
+    parser.add_argument("--out-dir", type=Path, required=True, metavar="DIR",
+                        help="output folder")
+    return parser
+
+
+def main(argv: list[str] | None = None) -> None:
+    args = build_parser().parse_args(argv)
+    configure(
+        macro_schedule=args.macro_schedule,
+        tasks=args.tasks,
+        crew=args.crew,
+        equipment=args.equipment,
+        bim_map=args.bim_map,
+        central_bim_with_takt=args.central_bim_with_takt,
+        out_dir=args.out_dir,
+        llm_context=args.llm_context,
+        prefab_wall_mapping=args.prefab_wall_mapping,
+        rules=args.rules,
+        room_boundaries=args.room_boundaries,
+    )
     OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
     micro_df, logs = build_micro_schedule()
     micro_df.to_csv(MICRO_SCHEDULE_PATH, index=False)
     write_log(logs)
     print(f"Wrote {MICRO_SCHEDULE_PATH.name}")
     print(f"Wrote {MICRO_LOG_PATH.name}")
+
+
+if __name__ == "__main__":
+    main()

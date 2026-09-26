@@ -1,20 +1,36 @@
+"""Manufacton adapter: parts import workbook (step ``manufacton-parts``).
+
+Builds the Manufacton parts catalog (structural columns/framing/floors, walls, mesh, MEP,
+envelope assemblies) from the central BIM model and the micro schedule and writes
+``Parts_Import.xlsx``, ``Parts_Import.csv`` and ``Parts_Summary.csv`` to ``OUT_DIR``. The
+column layout is checked against the Manufacton template (``--template``, e.g.
+``Parts Import.xlsx``; never committed).
+
+Migrated from IPD_Challenge@989a6b7
+``src/Planning_engine/Prefab_BIM_Mapper/generate_parts_import.py`` (P1.7): logic unchanged,
+the repo-relative paths became CLI arguments.
+"""
+
 from __future__ import annotations
 
+import argparse
 import hashlib
 from pathlib import Path
 
 import pandas as pd
 
 
-BASE_DIR = Path(__file__).resolve().parent
-INPUT_TEMPLATE_PATH = BASE_DIR / "inputs" / "Parts Import.xlsx"
-OUTPUTS_DIR = BASE_DIR / "outputs"
-OUTPUT_XLSX_PATH = OUTPUTS_DIR / "Parts_Import.xlsx"
-OUTPUT_CSV_PATH = OUTPUTS_DIR / "Parts_Import.csv"
-OUTPUT_SUMMARY_CSV_PATH = OUTPUTS_DIR / "Parts_Summary.csv"
-CENTRAL_BIM_PATH = BASE_DIR.parent.parent.parent / "outputs" / "takt_zones" / "central_bim_model_with_takt.csv"
-MICRO_SCHEDULE_PATH = BASE_DIR.parent / "Micro_Schedule_Generator" / "outputs" / "Micro_Schedule.csv"
-ASSEMBLY_PUSH_MAP_PATH = OUTPUTS_DIR / "Revit_Assembly_Id_Map.csv"
+# P1.7: set by configure() (was derived from the IPD_Challenge repo layout).
+# ASSEMBLY_PUSH_MAP_PATH is an optional input (None when not given): the original read the
+# Revit_Assembly_Id_Map.csv that step manufacton-orders had left in its outputs/ folder.
+INPUT_TEMPLATE_PATH: Path
+OUTPUTS_DIR: Path
+OUTPUT_XLSX_PATH: Path
+OUTPUT_CSV_PATH: Path
+OUTPUT_SUMMARY_CSV_PATH: Path
+CENTRAL_BIM_PATH: Path
+MICRO_SCHEDULE_PATH: Path
+ASSEMBLY_PUSH_MAP_PATH: Path | None
 
 OUTPUT_COLUMNS = [
     "ID",
@@ -682,7 +698,7 @@ def build_part_element_rows() -> pd.DataFrame:
                     }
                 )
 
-        if ASSEMBLY_PUSH_MAP_PATH.exists():
+        if ASSEMBLY_PUSH_MAP_PATH is not None and ASSEMBLY_PUSH_MAP_PATH.exists():
             assembly_map = pd.read_csv(ASSEMBLY_PUSH_MAP_PATH, dtype=str).fillna("")
             if {"element_id", "assembly_id"}.issubset(assembly_map.columns):
                 element_lookup = bim_df.set_index("ElementId", drop=False)
@@ -911,9 +927,61 @@ def write_parts_import() -> tuple[Path, Path, Path]:
     return OUTPUT_XLSX_PATH, OUTPUT_CSV_PATH, OUTPUT_SUMMARY_CSV_PATH
 
 
-if __name__ == "__main__":
+def configure(
+    *,
+    template: Path,
+    central_bim_with_takt: Path,
+    micro_schedule: Path,
+    out_dir: Path,
+    assembly_id_map: Path | None = None,
+) -> None:
+    """Set the input/output paths used by the functions of this module."""
+    global INPUT_TEMPLATE_PATH, OUTPUTS_DIR, OUTPUT_XLSX_PATH, OUTPUT_CSV_PATH
+    global OUTPUT_SUMMARY_CSV_PATH, CENTRAL_BIM_PATH, MICRO_SCHEDULE_PATH, ASSEMBLY_PUSH_MAP_PATH
+    INPUT_TEMPLATE_PATH = Path(template)
+    OUTPUTS_DIR = Path(out_dir)
+    OUTPUT_XLSX_PATH = OUTPUTS_DIR / "Parts_Import.xlsx"
+    OUTPUT_CSV_PATH = OUTPUTS_DIR / "Parts_Import.csv"
+    OUTPUT_SUMMARY_CSV_PATH = OUTPUTS_DIR / "Parts_Summary.csv"
+    CENTRAL_BIM_PATH = Path(central_bim_with_takt)
+    MICRO_SCHEDULE_PATH = Path(micro_schedule)
+    ASSEMBLY_PUSH_MAP_PATH = Path(assembly_id_map) if assembly_id_map else None
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="concho-schedule manufacton-parts",
+        description="Write the Manufacton parts import (xlsx + csv) and the parts summary.",
+    )
+    parser.add_argument("--template", type=Path, required=True, metavar="XLSX",
+                        help="Manufacton 'Parts Import.xlsx' template (never committed)")
+    parser.add_argument("--central-bim-with-takt", type=Path, required=True, metavar="CSV",
+                        help="central_bim_model_with_takt.csv (step takt-zones)")
+    parser.add_argument("--micro-schedule", type=Path, required=True, metavar="CSV",
+                        help="Micro_Schedule.csv (step micro-schedule)")
+    parser.add_argument("--assembly-id-map", type=Path, metavar="CSV",
+                        help="optional: Revit_Assembly_Id_Map.csv from an earlier "
+                             "manufacton-orders run (adds envelope parts)")
+    parser.add_argument("--out-dir", type=Path, required=True, metavar="DIR",
+                        help="output folder")
+    return parser
+
+
+def main(argv: list[str] | None = None) -> None:
+    args = build_parser().parse_args(argv)
+    configure(
+        template=args.template,
+        central_bim_with_takt=args.central_bim_with_takt,
+        micro_schedule=args.micro_schedule,
+        out_dir=args.out_dir,
+        assembly_id_map=args.assembly_id_map,
+    )
     xlsx_path, csv_path, summary_path = write_parts_import()
     print(f"Wrote {xlsx_path.name}")
     print(f"Wrote {csv_path.name}")
     print(f"Wrote {summary_path.name}")
     print(f"Rows: {len(build_parts_import())}")
+
+
+if __name__ == "__main__":
+    main()
