@@ -77,9 +77,12 @@ P3B8_CHANGED_FUNCTIONS = {
     "core/takt_zones.py": {"assign_takt_ids"},  # fix 1: keep the last polygon corner
     # fix 3: resolve the static 4D mapping against the current model
     "adapters/manufacton/kit_import.py": {"load_mapping", "load_dynamic_mapping"},
+    # fix 4: run without the Manufacton outputs
+    "core/delivery_windows.py": {"load_production_delivery_units"},
 }
 P3B8_NEW_FUNCTIONS: dict[str, set[str]] = {
     "adapters/manufacton/kit_import.py": {"resolve_static_mapping", "warn"},
+    "core/delivery_windows.py": {"missing_production_order_inputs"},
 }
 
 NEW_FUNCTIONS = {"configure", "build_parser", "main", "parse_floor_plan"}

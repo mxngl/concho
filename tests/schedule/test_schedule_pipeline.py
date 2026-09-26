@@ -276,6 +276,27 @@ def test_room_takt_zones(pipeline: dict[str, Path]) -> None:
         "location_y_ft": "10", "location_z_ft": "0", "boundary_segments": ""}
 
 
+def test_delivery_windows_without_manufacton(
+    pipeline: dict[str, Path], tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """P3B.8 fix 4: runs on the micro schedule alone and skips the production-order parts
+    (the original crashed with KeyError 'source' after writing most outputs)."""
+    micro = pipeline["micro"]
+    capsys.readouterr()
+    _run("delivery-windows", "--micro-schedule", micro / "Micro_Schedule.csv",
+         "--llm-context", pipeline["model"] / "central_bim_model_llm_context.csv",
+         "--out-dir", tmp_path)
+    out = capsys.readouterr().out
+    assert "Manufacton production orders not available (missing: --production-order," in out
+    units = _rows(tmp_path / "delivery_units_by_micro_schedule.csv")
+    assert units and "source" not in units[0]
+    assert {row["window"] for row in _rows(tmp_path / "delivery_window_summary_metrics.csv")} \
+        >= {"1 day", "1 week"}
+    assert not (tmp_path / "production_order_count_by_delivery_window.csv").exists()
+    assert not (tmp_path / "production_order_count_by_delivery_window.png").exists()
+    assert (tmp_path / "delivered_volume_by_takt_zone.png").exists()
+
+
 def test_takt_plan(pipeline: dict[str, Path]) -> None:
     takt = pipeline["takt"]
     assert len(_rows(takt / "Takt_Zones.csv")) == 2

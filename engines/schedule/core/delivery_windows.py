@@ -23,15 +23,15 @@ import pandas as pd
 
 
 # P1.7: set by configure() (was derived from the IPD_Challenge repo layout).
-# The four Manufacton outputs are required: without them the original skips the production
-# orders but then fails in production_order_window_series() (KeyError 'source'; see
-# engines/schedule/README.md, "Findings").
+# P3B.8 fix 4: the four Manufacton outputs are optional (None when not given). Without them
+# the analysis uses the micro schedule only and skips the production-order parts (the
+# original skipped the orders but then crashed with KeyError 'source').
 MICRO_SCHEDULE_PATH: Path
 BIM_CONTEXT_PATH: Path
-PRODUCTION_ORDER_PATH: Path
-PRODUCTION_ORDER_ITEMS_PATH: Path
-KIT_MAP_PATH: Path
-ASSEMBLY_MAP_PATH: Path
+PRODUCTION_ORDER_PATH: Path | None
+PRODUCTION_ORDER_ITEMS_PATH: Path | None
+KIT_MAP_PATH: Path | None
+ASSEMBLY_MAP_PATH: Path | None
 OUTPUT_DIR: Path
 
 CONCRETE_TRUCK_ASSEMBLY_ID = "CONC_400CF_TRUCK_ASSEMBLY"
@@ -155,8 +155,24 @@ def load_micro_delivery_units(exclude_element_ids: set[str] | None = None) -> pd
     return units
 
 
+def missing_production_order_inputs() -> list[str]:
+    """P3B.8 fix 4: CLI options of the Manufacton outputs that are not given or not found."""
+    inputs = {
+        "--production-order": PRODUCTION_ORDER_PATH,
+        "--production-order-items": PRODUCTION_ORDER_ITEMS_PATH,
+        "--kit-map": KIT_MAP_PATH,
+        "--assembly-map": ASSEMBLY_MAP_PATH,
+    }
+    return [
+        option if path is None else f"{option} {path} (not found)"
+        for option, path in inputs.items()
+        if path is None or not path.exists()
+    ]
+
+
 def load_production_delivery_units() -> pd.DataFrame:
-    if not all(path.exists() for path in [PRODUCTION_ORDER_PATH, PRODUCTION_ORDER_ITEMS_PATH, KIT_MAP_PATH, ASSEMBLY_MAP_PATH]):
+    # P3B.8 fix 4: None guard for the optional Manufacton outputs.
+    if missing_production_order_inputs():
         return pd.DataFrame()
 
     orders = pd.read_excel(PRODUCTION_ORDER_PATH, dtype=str).fillna("")
@@ -707,10 +723,10 @@ def configure(
     *,
     micro_schedule: Path,
     llm_context: Path,
-    production_order: Path,
-    production_order_items: Path,
-    kit_map: Path,
-    assembly_map: Path,
+    production_order: Path | None,
+    production_order_items: Path | None,
+    kit_map: Path | None,
+    assembly_map: Path | None,
     out_dir: Path,
 ) -> None:
     """Set the input/output paths used by the functions of this module."""
@@ -718,10 +734,10 @@ def configure(
     global PRODUCTION_ORDER_ITEMS_PATH, KIT_MAP_PATH, ASSEMBLY_MAP_PATH, OUTPUT_DIR
     MICRO_SCHEDULE_PATH = Path(micro_schedule)
     BIM_CONTEXT_PATH = Path(llm_context)
-    PRODUCTION_ORDER_PATH = Path(production_order)
-    PRODUCTION_ORDER_ITEMS_PATH = Path(production_order_items)
-    KIT_MAP_PATH = Path(kit_map)
-    ASSEMBLY_MAP_PATH = Path(assembly_map)
+    PRODUCTION_ORDER_PATH = Path(production_order) if production_order else None
+    PRODUCTION_ORDER_ITEMS_PATH = Path(production_order_items) if production_order_items else None
+    KIT_MAP_PATH = Path(kit_map) if kit_map else None
+    ASSEMBLY_MAP_PATH = Path(assembly_map) if assembly_map else None
     OUTPUT_DIR = Path(out_dir)
 
 
@@ -734,14 +750,19 @@ def build_parser() -> argparse.ArgumentParser:
                         help="Micro_Schedule.csv (step micro-schedule)")
     parser.add_argument("--llm-context", type=Path, required=True, metavar="CSV",
                         help="central_bim_model_llm_context.csv (step llm-context)")
-    parser.add_argument("--production-order", type=Path, required=True, metavar="XLSX",
-                        help="Production_Order.xlsx (step manufacton-orders)")
-    parser.add_argument("--production-order-items", type=Path, required=True, metavar="XLSX",
-                        help="Production_Order_Items.xlsx (step manufacton-orders)")
-    parser.add_argument("--kit-map", type=Path, required=True, metavar="CSV",
-                        help="Revit_Kit_Parameter_Map.csv (step manufacton-orders)")
-    parser.add_argument("--assembly-map", type=Path, required=True, metavar="CSV",
-                        help="Revit_Assembly_Id_Map.csv (step manufacton-orders)")
+    manufacton = parser.add_argument_group(
+        "Manufacton outputs (optional)",
+        "all four from step manufacton-orders; without them, deliveries come from the micro "
+        "schedule only and the production-order parts are skipped",
+    )
+    manufacton.add_argument("--production-order", type=Path, metavar="XLSX",
+                            help="Production_Order.xlsx")
+    manufacton.add_argument("--production-order-items", type=Path, metavar="XLSX",
+                            help="Production_Order_Items.xlsx")
+    manufacton.add_argument("--kit-map", type=Path, metavar="CSV",
+                            help="Revit_Kit_Parameter_Map.csv")
+    manufacton.add_argument("--assembly-map", type=Path, metavar="CSV",
+                            help="Revit_Assembly_Id_Map.csv")
     parser.add_argument("--out-dir", type=Path, required=True, metavar="DIR",
                         help="output folder")
     return parser
@@ -759,6 +780,14 @@ def main(argv: list[str] | None = None) -> None:
         out_dir=args.out_dir,
     )
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    missing_orders = missing_production_order_inputs()
+    if missing_orders:
+        print(
+            "Manufacton production orders not available (missing: "
+            + ", ".join(missing_orders)
+            + "). Delivery units come from the micro schedule only; skipped "
+            "production_order_count_by_delivery_window.csv/.png."
+        )
     delivery_units = load_delivery_units()
     delivery_units.to_csv(OUTPUT_DIR / "delivery_units_by_micro_schedule.csv", index=False)
 
@@ -774,7 +803,10 @@ def main(argv: list[str] | None = None) -> None:
     plot_element_count(daily, weekly, delivery_units)
     metrics = plot_metrics(combined)
     plot_takt_zone_weekly_peak(delivery_units)
-    order_window_series = plot_production_order_windows(delivery_units)
+    # P3B.8 fix 4: without production orders the units have no `source` column.
+    order_window_series = (
+        pd.DataFrame() if missing_orders else plot_production_order_windows(delivery_units)
+    )
 
     print(f"Delivery units: {len(delivery_units):,}")
     print(f"Total volume: {delivery_units['volume_cf'].sum():,.2f} CF")

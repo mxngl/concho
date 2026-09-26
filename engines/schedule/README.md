@@ -86,7 +86,7 @@ P3B.8) only reads the Revit room boundary export and feeds step 13 (`takt-plan`)
 | 8 | `manufacton-parts` | `adapters/manufacton/parts_import.py` | `Prefab_BIM_Mapper/generate_parts_import.py` | Manufacton parts template, `central_bim_model_with_takt.csv`, `Micro_Schedule.csv`; optional `Revit_Assembly_Id_Map.csv` of an earlier step-10 run | `Parts_Import.xlsx`, `Parts_Import.csv`, `Parts_Summary.csv` |
 | 9 | `manufacton-assemblies` | `adapters/manufacton/assembly_import.py` | `Prefab_BIM_Mapper/generate_assembly_import.py` | Manufacton assembly template, `Parts_Import.xlsx`, `Parts_Summary.csv`, `Micro_Schedule.csv`, `central_bim_model_with_takt.csv`, `Revit_4D_Build_Code_Map.csv` | `Assembly_Import.xlsx` |
 | 10 | `manufacton-orders` | `adapters/manufacton/kit_import.py` | `Prefab_BIM_Mapper/generate_kit_import.py` | Manufacton order + item templates, `vendors.csv`, `4d_build_code_to_assembly_id_mapping.csv`, `Assembly_Import.xlsx`, `Parts_Summary.csv`, `Revit_4D_Build_Code_Map.csv`, `Micro_Schedule.csv`, LLM context | `Production_Order.xlsx`, `Production_Order_Items.xlsx`, `Revit_Assembly_Id_Map.csv`, `Revit_Kit_Parameter_Map.csv` |
-| 11 | `delivery-windows` | `core/delivery_windows.py` | `Logistics_Analysis/compare_delivery_windows.py` | `Micro_Schedule.csv`, LLM context, the four step-10 outputs | `delivery_units_by_micro_schedule.csv`, `delivery_window_daily_timeseries.csv`, `delivery_window_summary_metrics.csv`, `production_order_count_by_delivery_window.csv`, 7 PNG charts |
+| 11 | `delivery-windows` | `core/delivery_windows.py` | `Logistics_Analysis/compare_delivery_windows.py` | `Micro_Schedule.csv`, LLM context; optional: the four step-10 outputs (since P3B.8) | `delivery_units_by_micro_schedule.csv`, `delivery_window_daily_timeseries.csv`, `delivery_window_summary_metrics.csv`, `production_order_count_by_delivery_window.csv` (only with the step-10 outputs), 7 PNG charts (6 without them) |
 | 12 | `room-takt-zones` | `core/room_takt_zones.py` | none (new in P3B.8; IPD_Challenge only has the committed output `outputs/room_boundaries/room_takt_zones.csv`) | `*_Room_Boundaries.csv` | `room_takt_zones.csv` (one row per room: `room_takt_id, room_id, room_number, room_name, level, area_sf, volume_cf, location_x/y/z_ft, boundary_segments`) |
 | 13 | `takt-plan` | `core/takt_planner.py` | `src/Takt_engine/takt_planner.py` | `central_bim_model.csv`, `room_takt_zones.csv`, `Crew.csv`; optional `Equipment.csv`, productivity rates CSV (else built-in), `*_Room_Boundaries.csv`, FBX | `Takt_Zones.csv`, `Takt_Schedule.csv`, `Takt_Crew_Idle_Report.csv`, `Takt_Element_Allocations.csv`, `Takt_Element_Splits.csv`, `Takt_Equipment_Inputs.csv`, `Takt_Productivity_Rates.csv`, `Takt_Report.md`, `Takt_Zone_Map_<level>.png`, `Takt_Planner.html` (+ `Takt_Model_Viewer.html` with `--fbx`) |
 | 14 | `takt-viewer` | `viewers/takt_viewer.py` | `Micro_Schedule_Generator/generate_takt_viewer.py` | `Micro_Schedule.csv`; optional ALICE workbook | `Micro_Schedule_Takt_Viewer.html` |
@@ -100,9 +100,9 @@ end_date`) plus `Tasks.csv` / `Crew.csv` / `Equipment.csv`. It also accepts an A
 CSV with `Task ID, Task Name, Start Date, End Date` (like
 `examples/island/Fuzor_Schedule_Template.csv`), but then keeps only rows with
 `WBS Outline <= "1.3.3"` (21 of that file's 33 tasks; finding 7).
-Two exceptions today: step 11 (`delivery-windows`) needs the Manufacton outputs, and
-`prefab-walls` sits in the Manufacton adapter although step 5 uses it (see
-[Findings](#findings-kept-as-is-for-phase-3b)).
+Step 11 (`delivery-windows`) also runs without the Manufacton outputs since P3B.8 (fix 4).
+One exception today: `prefab-walls` sits in the Manufacton adapter although step 5 uses it
+(see [Findings](#findings-kept-as-is-for-phase-3b)).
 
 ## Install and run
 
@@ -241,8 +241,8 @@ Deviations to review:
    Fuzor adapter's unused `INPUTS_DIR` were dropped.
 4. **`alice-inputs` and `spatial-viewer` create `--out-dir`** (the originals wrote into
    existing folders).
-5. **`delivery-windows` requires the four Manufacton outputs**, because the original crashes
-   without them (finding 2 below). Its code is unchanged.
+5. **`delivery-windows` required the four Manufacton outputs** in P1.7, because the original
+   crashes without them (finding 2 below). Since P3B.8 (fix 4) they are optional.
 6. **ALICE BIM map.** The micro schedule preferred `Micro_Schedule_Generator/inputs/ALICE_BIM_Map.csv`
    over `ALICE_BIM_mapper/inputs/ALICE_BIM_Map.csv`; only the first exists at 989a6b7, and it
    is `--bim-map` (committed as `examples/island/ALICE_BIM_Map.csv`).
@@ -338,14 +338,25 @@ original (legacy) CSV, the step now succeeds too and skips the 17 stale rows wit
 each. Tests: `test_kit_mapping_shifted_group_id_does_not_map_another_wall`,
 `test_kit_mapping_skips_unscheduled_rows`, `test_kit_mapping_rejects_two_assemblies_for_one_wall`.
 
+**Fix 4: `delivery-windows` runs without the Manufacton outputs** (`core/delivery_windows.py`,
+`load_production_delivery_units`, new `missing_production_order_inputs`, CLI). Before, the
+four step-10 outputs were required: without them the original skipped the production orders
+but `load_delivery_units()` then returned micro-schedule units without a `source` column,
+and `production_order_window_series()` raised `KeyError: 'source'` after most outputs were
+written. Now `--production-order`, `--production-order-items`, `--kit-map` and
+`--assembly-map` are optional. If any of them is not given or not found, the step prints
+which ones are missing, takes all delivery units from the micro schedule (as the original
+did), writes the delivery units, the time series, the summary metrics and 6 PNG charts, and
+skips only the production-order parts (`production_order_count_by_delivery_window.csv` and
+its PNG). With all four present nothing changes (golden file unchanged). Island without
+Manufacton: 1,589 delivery units, 2,117 elements, 53,647.84 CF. Test:
+`test_delivery_windows_without_manufacton`.
+
 ## Findings (kept as-is, for Phase 3B)
 
 1. ~~**Takt-zone polygons lose their last corner**~~ — fixed in P3B.8 (fix 1, see
    [Fixed in P3B.8](#fixed-in-p3b8)).
-2. **`delivery-windows` crashes without Manufacton outputs.** Without production orders,
-   `load_delivery_units()` returns micro-schedule units without a `source` column, and
-   `production_order_window_series()` raises `KeyError: 'source'`, after most CSVs and PNGs
-   are written.
+2. ~~**`delivery-windows` crashes without Manufacton outputs**~~ — fixed in P3B.8 (fix 4).
 3. ~~**`manufacton-orders` fails on the IPD_Challenge@989a6b7 data**~~ — fixed in P3B.8
    (fix 3). (Run on its own against the *committed* intermediate files,
    `manufacton-assemblies` still fails with `Missing part catalog id for
