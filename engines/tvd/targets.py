@@ -72,13 +72,29 @@ class ProjectTargets:
         """Sum of the course clusters A-H (all clusters that are not custom clusters)."""
         return sum(v for n, v in self.cluster_targets.items() if n not in self.custom_modes)
 
-    def _mode_sum(self, mode: str) -> float:
-        return sum(self.cluster_targets[n] for n, m in self.custom_modes.items() if m == mode)
+    def custom_clusters(self, mode: str) -> dict[str, float]:
+        """Custom clusters with ``mode`` (``carved_out`` | ``on_top``) and their targets."""
+        return {n: self.cluster_targets[n] for n, m in self.custom_modes.items() if m == mode}
+
+    @property
+    def carved_out_sum(self) -> float:
+        """Custom clusters that are part of the total target."""
+        return sum(self.custom_clusters("carved_out").values())
+
+    @property
+    def on_top_sum(self) -> float:
+        """Custom clusters outside the total target (reported separately)."""
+        return sum(self.custom_clusters("on_top").values())
 
     @property
     def gap(self) -> float:
-        """(A-H + carved-out custom clusters) − total target."""
-        return self.course_sum + self._mode_sum("carved_out") - self.total_target
+        """(A-H + carved-out custom clusters) − total target; on-top clusters excluded."""
+        return self.course_sum + self.carved_out_sum - self.total_target
+
+    @property
+    def gap_incl_on_top(self) -> float:
+        """All cluster targets (incl. on-top clusters) − total target."""
+        return self.gap + self.on_top_sum
 
     @property
     def tolerance_amount(self) -> float:
@@ -99,16 +115,22 @@ class ProjectTargets:
         pct = gap / total * 100 if total else 0.0
         return (
             f"course clusters A-H ({self.course_sum:,.2f}) + carved-out custom clusters "
-            f"({self._mode_sum('carved_out'):,.2f}) = "
-            f"{self.course_sum + self._mode_sum('carved_out'):,.2f}, gap {gap:+,.2f} "
+            f"({self.carved_out_sum:,.2f}) = "
+            f"{self.course_sum + self.carved_out_sum:,.2f}, gap {gap:+,.2f} "
             f"({pct:+.4f} %) vs. the total target {total:,.2f} (tolerance "
             f"{self.target_sum_tolerance:g} = {self.tolerance_amount:,.2f})"
         )
 
     def check(self) -> list[str]:
         """Cluster target consistency (P3.3): A-H + carved-out custom clusters must sum to
-        the total target within ``target_sum_tolerance``. Raises ``ValueError`` outside the
-        tolerance unless ``target_sum_override`` is set; returns notes otherwise."""
+        the total target within ``target_sum_tolerance``; on-top custom clusters are outside
+        the total and only reported. Raises ``ValueError`` outside the tolerance unless
+        ``target_sum_override`` is set; returns notes otherwise."""
+        if self.carved_out_sum > self.total_target:
+            raise ValueError(
+                f"carved-out custom clusters ({self.carved_out_sum:,.2f}) exceed the total "
+                f"target ({self.total_target:,.2f})."
+            )
         status = self.consistency_status
         if status == "failed":
             raise ValueError(
@@ -125,10 +147,16 @@ class ProjectTargets:
                 f"cluster targets outside tolerance, accepted by tvd.target_sum_override "
                 f"('{self.target_sum_override}'): {self._gap_text()}."
             )
-        on_top = sorted(n for n, m in self.custom_modes.items() if m == "on_top")
-        for name in on_top:
+        on_top = self.custom_clusters("on_top")
+        for name in sorted(on_top):
             notes.append(
-                f"custom cluster '{name}' ({self.cluster_targets[name]:,.2f}) is on top of "
+                f"custom cluster '{name}' ({on_top[name]:,.2f}) is on top of "
                 "the total target (not course data)."
+            )
+        if on_top:
+            notes.append(
+                f"all cluster targets incl. on-top clusters sum to "
+                f"{self.total_target + self.gap_incl_on_top:,.2f}, "
+                f"{self.gap_incl_on_top:+,.2f} vs. the total target {self.total_target:,.2f}."
             )
         return notes
