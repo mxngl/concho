@@ -13,10 +13,14 @@ authors = [
     { name = "Ashmitha Jaysi Sivakumar" },
 ]
 # No license declared yet: decision D4 is pending (see docs/decisions.md).
-dependencies = []
+# P3.1: pydantic for the project_config schema (engines/common/config.py).
+dependencies = [
+    "pydantic==2.13.5",
+]
 
 [project.optional-dependencies]
 dev = [
+    "jsonschema==4.26.0",
     "pytest==9.1.1",
     "ruff==0.16.9",
 ]
@@ -33,6 +37,7 @@ schedule = [
 ]
 
 [project.scripts]
+concho = "engines.cli:main"
 concho-schedule = "engines.schedule.cli:main"
 concho-stv = "engines.stv.cli:main"
 concho-tvd = "engines.tvd.cli:main"
@@ -67,7 +72,7 @@ select = ["E", "F", "W", "I", "B", "UP"]
 "engines/schedule/core/takt_zones.py" = ["E501", "I001", "F821"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["engines", "dashboards", "check_forbidden"]
+known-first-party = ["engines", "dashboards", "check_forbidden", "export_config_schema"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

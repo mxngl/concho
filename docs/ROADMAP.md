@@ -9,14 +9,18 @@
 
 ## Progress log
 
-**Overall status:** Phase 0 almost done (P0.1–P0.3 ✅, P0.4 🟡 waiting for Ash's IPD tag, P0.5 🟡 decisions partly open) · Phase 1 in progress (P1.1–P1.5 ✅ once #6 is merged, P1.7 🟡 running; P1.6 after Phase 2) · Phase 2 started (P2.1–P2.5 in two sessions; P2.6 after P1.7).
+**Overall status:** Phase 0 almost done (P0.1–P0.3 ✅, P0.4 🟡 waiting for Ash's IPD tag, P0.5 🟡 decisions partly open) · Phase 1 done except P1.6 (archive old repos, after Phase 2) · Phase 2 almost done (P2.1–P2.5 ✅, P2.6 🟡 mostly covered) · Phase 3 next (P3.1).
 
 | Date | Update | Tasks |
 |---|---|---|
-| 2026-09-26 | **P1.7 PR opened:** [concho #9](https://github.com/mxngl/concho/pull/9). Schedule engines from IPD_Challenge `989a6b7` in `engines/schedule/{core,adapters,viewers}` (logic unchanged, paths → CLI args, `concho-schedule` with 14 steps, extra `schedule` with pandas 2.3.3 pinned). Pipeline diagram/table, findings and Island assumptions in `engines/schedule/README.md`. Equivalence vs. the original scripts on all outputs + AST diff (skip without `IPD_CHALLENGE_DIR`), CI smoke test on invented data. §1 checksums: Macro_Schedule, Takt_Schedule (`--rooms-per-zone 2`), central BIM model reproduced; committed Micro_Schedule.csv is stale (not reproducible by the original code either). Findings for 3B: takt-zone polygons drop their last corner (901 of 3,971 elements), delivery windows need Manufacton outputs, Manufacton orders fail on 989a6b7 data. | P1.7 ✅ |
 | 2026-09-26 | Roadmap created; this page shared with Ash | – |
 | 2026-09-26 | **Repo created: [`mxngl/concho`](https://github.com/mxngl/concho)** (public, empty, default branch `main`). Ash invited as collaborator. | D3 ✅, P1.1 🟡 |
 | 2026-09-26 | **Concho webhook secured:** header auth enabled on the n8n webhook (unauthenticated POST → 403, with token → 200); Discord bot on the VPS sends the token from its `.env`; end-to-end test in `#askbim` answered correctly ($16,065,644.29). Telegram nodes removed from the live workflow. Open: remove the old GitHub raw token from the `get_stv_dashboard` URL. | P0.2 🟡 |
+| 2026-09-26 | **P1.7 done** (concho #9 merged). **Migration complete:** TVD, STV and schedule engines, Revit add-in and legacy n8n workflow are in `mxngl/concho`, all reproducing the Island 2026 results. Next: P3.1 (`project_config`). | P1.7 ✅ |
+| 2026-09-26 | **P2.4/P2.5 done** (concho #8 merged). **P1.7 PR opened:** [concho #9](https://github.com/mxngl/concho/pull/9) (one PR, ~12.6k lines, ~95 % verbatim; commit `bbdd3b1` = byte-identical copy, `4b1c961` = all changes). 14 pipeline steps via `python -m engines.schedule <step>` / `concho-schedule`, pipeline diagram + reads/writes table in `engines/schedule/README.md`. Equivalence: all 14 steps reproduce the original outputs; migration-diff test 15/15; checksums match for `Macro_Schedule.csv`, `Takt_Schedule.csv` (with `--rooms-per-zone 2`) and `central_bim_model_with_takt.csv`; `Micro_Schedule.csv` is **stale** (built from an older BIM model, not reproducible even by the original code; pinned as expected failure). Schedule tests run in the CI `reference` job. Independently verified: no conflict with main, 185 passed / 1 xfailed in reference mode. Bugs found in the original (unchanged, listed for P3B): takt calibrator drops the last polygon corner (901 of 3,971 elements would change zone); no generator for `room_takt_zones.csv`; Manufacton orders step fails on the 989a6b7 data; delivery windows crash without Manufacton outputs; hardcoded Island assemblies in Manufacton code; pandas pinned to 2.3.3 (micro schedule breaks on pandas 3). | P2.4/P2.5 ✅, P1.7 🟡, P2.6 🟡 |
+| 2026-09-26 | **P2.4/P2.5 PR opened:** [concho #8](https://github.com/mxngl/concho/pull/8), CI green. Course-workbook equivalence via LibreOffice headless (needs **libreoffice-calc**). STV embodied/use phase/targets and TVD line/subcode/cluster/summary totals all match (max. rel. error 3e-10 STV, 9.6e-8 TVD from cent rounding). **Findings:** (1) **engine bug**: cogeneration water/ODP read one column off in `engines/stv/reference.py`; (2) rainwater credit cap differs from the course; (3) toilet 0.75 factor: course applies it when urinal cell is 0, engine only when > 0; (4) **bug in the course TVD workbook**: TVD Summary C25 "C3030 Ceiling Finishes" points to `'B Shell'!T30` (B3010) instead of C Interiors; (5) supplied STV workbook stores some small ODP values as 0. Independently verified: 19/19 course tests pass with both workbooks, cogen column offset and TVD C25 reference confirmed in the workbooks, no conflict with main. Follow-ups → P3.10. | P2.4/P2.5 🟡 |
+| 2026-09-26 | **P2.1, P2.2, P2.3 done:** concho #7 merged (P2.2 TVD part covered by the P1.3 equivalence test, STV part by the new golden test). **Live n8n change (approved by Max):** `get_stv_dashboard` now reads the current AutoSTV result (2,517,183.14 kgCO₂e) instead of the stale March snapshot; verified via n8n MCP. Remaining mismatch: the Carbon Agent prompt still calls energy "kWh" and water "L" (engine: MJ, kg). | P2.1–P2.3 ✅ |
+| 2026-09-26 | **P2.1/P2.3/P2.2-STV PR opened:** [concho #7](https://github.com/mxngl/concho/pull/7). `scripts/fetch_fixtures.py` (3 repos at pinned refs, 20 checksums), shared fixture helper, CI job `reference` (fails instead of skipping via `CONCHO_REQUIRE_FIXTURES=1`), `docs/engines/stv.md`, STV golden test pinned to 2,517,183.14. Independently verified: fixtures fetched, 100/100 tests pass incl. the course-workbook test. **Open decision:** point Concho's `get_stv_dashboard` at the current result (needs approval, live n8n change). | P2.1/P2.3 🟡 |
 | 2026-09-26 | **Phase 2 started in parallel to P1.7:** session C = P2.1 (fixture fetch script + CI reference job) + P2.3 (STV discrepancy) + STV part of P2.2; session D = P2.4 + P2.5 (course-workbook equivalence, workbooks attached to the session, never committed). TVD part of P2.2 is effectively covered by the P1.3 equivalence test. P2.6 waits for P1.7. | P2.1–P2.5 🟡 |
 | 2026-09-26 | **P1.5 done** (concho #5 merged). **P1.4 PR opened:** [concho #6](https://github.com/mxngl/concho/pull/6), CI green. Revit add-in source from IPD_Challenge `989a6b7` in `revit-addin/` (11 `.cs` + `.csproj` byte-identical; `.addin`: local-path comment removed, all 5 `<Assembly>` → `QTO.dll`; `Concho.QTO.sln`). Findings: MEP export has **no `Assembly Code` column**; Push Kit / Push Assembly exist in code but aren't registered in `.addin`; `.addin` descriptions still mention the old repo layout; IPD exports Revit parts and skips floors/ceilings that have parts (relevant for P3.9). Not compiled (no Revit/.NET here). Independently verified: sources identical, no personal paths left, no merge conflict with main. | P1.5 ✅, P1.4 🟡 |
 | 2026-09-26 | **P1.5 PR opened:** [concho #5](https://github.com/mxngl/concho/pull/5). Scrubbed "Island AI Agent" export committed unchanged as `agent/workflows/legacy/island-ai-agent.json` + README (architecture, tools, known issues, env vars); `check_forbidden.py` now fails on Discord snowflake IDs under `agent/` unless the line uses `$env` (nothing found in the repo). Independently verified: JSON byte-identical to the export, 93 tests pass, a raw Discord ID under `agent/` is caught. README note to verify in Phase 6: `$env` in nodes may need `N8N_BLOCK_ENV_ACCESS_IN_NODE=false` (untested). | P1.5 ✅ |
@@ -39,7 +43,7 @@
 | 2026-09-26 | **P0.2 done:** GitHub raw token removed from the `get_stv_dashboard` URL. Simple Memory re-pointed to `Webhook w/ Auth` and **enabled** (attached to the Router Agent only). | P0.2 ✅, P6.1 (6) ✅ |
 | 2026-09-26 | **Scope decided:** main scope = TVD + STV + takeoff Q&A + **schedule**. Meeting transcripts and ClashBot are extensions (Phase 10). Added Phase 3B (schedule generalization). | D1 ✅ |
 
-**Next up:** **P1.1 (repo skeleton in `mxngl/concho`) → P1.2–P1.7 → Phase 2.** Nothing in Phases 1–4 is blocked. In parallel: Ash tags IPD_Challenge (P0.4); short email to Renate on D4 (license), D5 (workbook redistribution) and D8 (confirm tool access). D2 (hosting) is only needed before Phase 5.
+**Next up:** **P3.1 (`project_config` schema) → P3.2 / P3.4 / P3.10 → P3B in parallel.** P2.6 leftovers and P4 (Revit add-in) can run alongside. Nothing in Phases 3–4 is blocked. In parallel: Ash tags IPD_Challenge (P0.4); short email to Renate on D4 (license), D5 (workbook redistribution) and D8 (confirm tool access). D2 (hosting) is only needed before Phase 5.
 
 ⚠️ **The repo is public.** Course workbooks, RSMeans-derived cost data (incl. the Island `cost_data.csv`), meeting transcripts and secrets must never be committed there. Island fixtures that contain such data go to a private location (see P2.1).
 
@@ -101,7 +105,7 @@ Legend: ✅ done · 🟡 in progress · ⏸ deferred · ⬜ open
 ### Engines, validated against the course workbooks
 - **STV engine** (`IPD_Challenge/src/STV_Engine`) is a faithful port of the course workbook `CEE_222_STV_V12.xlsx`. It reads `LCA Data` rows 8–107 (86 materials, SimaPro/ReCiPe), team rows 115–121 (Pacific, Atlantic, Ridge, **Island**, River, Central, Express) and `Cogen Data`, and it reproduces the target, embodied, use-phase and water formulas.
   - The constants `6.38e6` (carbon) and `1.51e8` (energy) **come from the course workbook**.
-  - LCA and cogen data in the team workbooks are identical to the course template.
+  - LCA and cogen data in the team workbooks are identical to the course template, except some tiny ODP (ozone) cached values that differ between the workbooks (found in P2.3; carbon, energy and water are unaffected). The engine reads cached values, so the app that last recalculated a workbook matters for ODP.
   - One small divergence: the course applies the 0.75 toilet factor whenever the urinal cell is non-blank (even at 0); the engine applies it only when `urinal_gpf > 0`.
 - **Island-specific parts of STV** are only the Revit → (assembly, material type) mapping in `revit_*.py`, plus unit conversions. Known issues:
   - Bamboo isn't in the course catalog; it is booked as **Glulam Column/Beam (kg)** as a proxy (undocumented).
@@ -152,10 +156,11 @@ Legend: ✅ done · 🟡 in progress · ⏸ deferred · ⬜ open
 | STV carbon target (Island) | **7,396,873.85 kgCO₂e** | course formula, team "Island" |
 | STV energy target | 155,969,076.59 MJ | course formula |
 | STV water target | 271,387,397.26 kg | course table |
-| STV project carbon (file Concho reads) | **1,960,143.66 kgCO₂e** | AutoSTV `outputs/stv_project/stv_results.json` |
-| STV project carbon (dashboard "Current") | **2,517,183.14 kgCO₂e** | AutoSTV `outputs/Current-.../project/stv_results.json` |
+| STV project carbon (file Concho reads) | 1,960,143.66 kgCO₂e: **stale** snapshot of 2026-03-30 (early exports, IPD `519a5c0`) | AutoSTV `outputs/stv_project/stv_results.json` |
+| STV project carbon (dashboard "Current") | **2,517,183.14 kgCO₂e: current reference** (2026-05-15, `revit_schedules/Current/*`, trades combined) | AutoSTV `outputs/Current-.../project/stv_results.json` |
+| STV project carbon (IPD `outputs/stv_project`) | 2,350,871.62 kgCO₂e: unused intermediate (2026-05-07, older arch export + LAMARCASINA use phase) | IPD_Challenge |
 
-The two STV values conflict. Resolving which one is correct is task P2.3.
+Resolved in P2.3 (see `docs/engines/stv.md`): the migrated engine reproduces all three files exactly, so the differences come from inputs, not code. The golden test is pinned to **2,517,183.14**. Note: the Island scorecard (−73.5 %) used the stale 1,960,144 value; with the current value, construction uses ~34 % of the life-cycle carbon target.
 
 ### Reference file checksums (sha256, recorded 2026-09-26, task P0.4)
 Taken from `main` at AutoTVD `41e9e8c` (after the P0.3 rewrite: **`4201147`**, same file contents), AutoSTV `dde2a01`, IPD_Challenge `989a6b7`.
@@ -244,7 +249,7 @@ Taken from `main` at AutoTVD `41e9e8c` (after the P0.3 rewrite: **`4201147`**, s
 - [x] ✅ **P1.5 [CC] Migrate the n8n workflow as a reference.** *(done 2026-09-26: concho #5; scrubbed export + README, Discord-ID check for `agent/` in `check_forbidden.py`)* Export "Island AI Agent" (read-only via n8n MCP `get_workflow_details`) to `agent/workflows/legacy/island-ai-agent.json`.
   - **Scrub first:** webhook path, the GHSAT token, and Discord guild and channel IDs → placeholders.
   - AC: the file contains no secrets or IDs (add a grep check to CI).
-- [x] ✅ **P1.7 [CC] Migrate the schedule engines** *(done 2026-09-26: [concho #9](https://github.com/mxngl/concho/pull/9); 14 steps via `concho-schedule`, equivalence vs. IPD `989a6b7` on all outputs)* from `IPD_Challenge/src/Planning_engine` (ALICE_BIM_mapper, Micro_Schedule_Generator, Prefab_BIM_Mapper, Fuzor_Mapper, Logistics_Analysis), `src/Takt_engine` and `src/takt_zone_calibrator.py` into `engines/schedule/`, **without** generated outputs (the 16 MB Fuzor XML, the 2.7 MB micro schedule, HTML viewers, FBX).
+- [x] ✅ **P1.7 [CC] Migrate the schedule engines** *(done 2026-09-26: concho #9)* from `IPD_Challenge/src/Planning_engine` (ALICE_BIM_mapper, Micro_Schedule_Generator, Prefab_BIM_Mapper, Fuzor_Mapper, Logistics_Analysis), `src/Takt_engine` and `src/takt_zone_calibrator.py` into `engines/schedule/`, **without** generated outputs (the 16 MB Fuzor XML, the 2.7 MB micro schedule, HTML viewers, FBX).
   - Replace path constants that walk up the repo (`PROJECT_DIR = ...parents[2]`) with explicit input/output arguments.
   - AC: each generator runs from the package via a CLI with explicit paths.
 - [ ] **P1.6 [HUMAN] Archive the old repos** after Phase 2 passes. Add a README banner pointing to the new repo.
@@ -254,28 +259,28 @@ Taken from `main` at AutoTVD `41e9e8c` (after the P0.3 rewrite: **`4201147`**, s
 
 ## Phase 2: Regression baseline (before any refactor)
 
-- [ ] **P2.1 [CC] Build a private fixture set.** *(Plan 2026-09-26: while AutoTVD/AutoSTV/IPD_Challenge are public, `scripts/fetch_fixtures.py` clones them at `island-2026-final` / `989a6b7` into a git-ignored `.fixtures/` and verifies the §1 checksums; a CI job runs the golden tests from there. Switch to a private fixture repo before AutoTVD goes private in P1.6.)* Because `mxngl/concho` is public, fixtures containing course or RSMeans-derived data go to a **private** location (e.g. a private `concho-fixtures` repo or a local path via env var `CONCHO_FIXTURES_DIR`; tests skip if unset). Only non-sensitive fixtures go under `tests/fixtures/`. Contents:
+- [x] ✅ **P2.1 [CC] Build a private fixture set.** *(done 2026-09-26: concho #7)* *(Plan 2026-09-26: while AutoTVD/AutoSTV/IPD_Challenge are public, `scripts/fetch_fixtures.py` clones them at `island-2026-final` / `989a6b7` into a git-ignored `.fixtures/` and verifies the §1 checksums; a CI job runs the golden tests from there. Switch to a private fixture repo before AutoTVD goes private in P1.6.)* Because `mxngl/concho` is public, fixtures containing course or RSMeans-derived data go to a **private** location (e.g. a private `concho-fixtures` repo or a local path via env var `CONCHO_FIXTURES_DIR`; tests skip if unset). Only non-sensitive fixtures go under `tests/fixtures/`. Contents:
   - the Island QTO CSVs used for the 2026-05-01 run;
   - `cost_data.csv` as-is (with its known errors, for reproducibility);
   - the STV structural, MEP and architecture schedules used for `stv_project`;
   - the expected output JSONs.
-- [ ] **P2.2 [CC] Golden tests.**
+- [x] ✅ **P2.2 [CC] Golden tests.** *(done 2026-09-26: TVD via the P1.3 equivalence test, STV via concho #7)*
   - TVD: grand total `16,065,644.29`, per-cluster estimates, and `unmapped_count = 1693`.
   - STV: targets (7,396,873.85 / 155,969,076.59 / 271,387,397.26) and the project breakdown.
   - AC: the tests pass against the migrated engines.
-- [ ] **P2.3 [CC] Resolve the STV discrepancy** (1,960,144 vs 2,517,183 kgCO₂e).
+- [x] ✅ **P2.3 [CC] Resolve the STV discrepancy** (1,960,144 vs 2,517,183 kgCO₂e). *(done 2026-09-26, concho #7: 2,517,183.14 is current, 1,960,144 is a stale March snapshot; Concho switched to the current value.)*
   - Identify the inputs and code version that produced each file and document which one is "current".
   - Pin the golden test to the correct one.
   - AC: a short written explanation in `docs/engines/stv.md`.
-- [ ] **P2.4 [CC] Course-equivalence test for STV.**
+- [x] ✅ **P2.4 [CC] Course-equivalence test for STV.** *(done 2026-09-26: concho #8; follow-ups in P3.10)*
   - Load the course workbook from `COURSE_STV_XLSX` (env var; skip if unset).
   - Write the fixture construction items and use-phase inputs into `Construction and Materials` and `Use Phase`.
   - Recalculate with LibreOffice headless (`soffice --headless --convert-to xlsx`) or the `formulas` library.
   - Compare against the engine within 1e-6 relative.
   - Also cover the toilet-factor edge case (see §1) and decide whether to match the course behavior.
   - AC: the test passes locally with the workbook present.
-- [ ] **P2.5 [CC] Course-equivalence test for TVD line items.** Given the same line items (unit cost × quantity per Uniformat subcode), the engine totals match the course cluster sheets.
-- [ ] **P2.6 [CC] Golden tests for schedule.** Pin the Island outputs of the migrated schedule engines:
+- [x] ✅ **P2.5 [CC] Course-equivalence test for TVD line items.** *(done 2026-09-26: concho #8)* Given the same line items (unit cost × quantity per Uniformat subcode), the engine totals match the course cluster sheets.
+- [ ] 🟡 **P2.6 [CC] Golden tests for schedule.** *(Largely covered by the P1.7 equivalence tests in concho #9: macro schedule and takt schedule checksums, all 14 steps reproduced. Still open: regenerate a current `Micro_Schedule.csv` as the new reference, and write down the deck-vs-file differences.)* Pin the Island outputs of the migrated schedule engines:
   - macro schedule (`Macro_Schedule.csv`: 37 tasks, first task starts 2029-10-01; the deck mentions 32 tasks → 48 parallelized tasks, so clarify which set is meant);
   - micro schedule row count and first/last dates (the deck states Oct 1, 2029 – Mar 22, 2030 and 246 → 177 days after parallelization; **verify against the files and document any mismatch**);
   - takt planner Level 1: 16 zones, 192.36 working hours, crew utilization per trade;
@@ -330,7 +335,16 @@ Taken from `main` at AutoTVD `41e9e8c` (after the P0.3 rewrite: **`4201147`**, s
   - Warn in CI and on the dashboard when all use-phase values are 0.
   - Allow PV as an `Energy` construction item (the course catalog has "Photovoltaics (sf)").
   - AC: the Island config either contains the slide values (162,000 kWh/yr use, 216,992 kWh/yr PV, 187,000 gal/yr water, 12,610 SF collection area) or an explicit "not modeled" flag.
-- [ ] **P3.9 [CC] Document the "Parts" decision** (note from P1.4: the add-in exports Revit parts and skips a floor/ceiling that has parts, so parts are the counted representation there) (166 unmapped structural `Parts`): excluded to avoid double counting, or mapped. Implement the decision as a mapping rule.
+- [ ] **P3.9 [CC] Document the "Parts" decision** (also from P2.3: three floor elements may be counted twice, in both the architecture and structural exports; deduplicate by ElementId across disciplines) (note from P1.4: the add-in exports Revit parts and skips a floor/ceiling that has parts, so parts are the counted representation there) (166 unmapped structural `Parts`): excluded to avoid double counting, or mapped. Implement the decision as a mapping rule.
+
+- [ ] **P3.10 [CC] Engine fixes and decisions from the course-equivalence tests (P2.4/P2.5).**
+  1. **Fix (bug):** `engines/stv/reference.py` reads cogeneration fuel water from `Cogen Data` column F (MJ) and ODP from G (H₂O); the course uses G (H₂O) and H (ODP). Fix, then extend the P2.4 cogeneration test to water and ODP. Island itself uses no cogeneration, so the Island golden values stay unchanged (verify).
+  2. **Decide:** rainwater credit cap. Course: min(collected, toilet + urinal + landscaping water); engine: min(collected, total water use). Proposal: follow the course (course-logic rule).
+  3. **Decide:** toilet 0.75 factor. Course applies it whenever the urinal cell is non-blank (even 0). Proposal (with P3.1): `urinal_gpf: null` = no urinals (factor 1.0), explicit `0` = course behavior (0.75).
+  4. Round TVD line totals only for display, not in stored results (source of the 9.6e-8 deviation), or document the cent rounding.
+  5. Docs: `libreoffice-calc` as a prerequisite for the course-equivalence tests; `tests/README.md` mentions `COURSE_TVD_XLSX`.
+  6. **Tell Renate/course:** TVD Summary C25 ("C3030 Ceiling Finishes") references `'B Shell'!T30` (B3010 Roof Coverings) instead of C Interiors, so B3010 is counted twice and C3030 is dropped in the summary.
+  - AC: after the fixes, P2.4/P2.5 tests compare water/ODP for cogeneration too and all pass; decisions 2 and 3 recorded in `docs/decisions.md`.
 
 ---
 
@@ -351,6 +365,7 @@ Today the schedule chain is ALICE macro (XLSX) → ALICE_BIM_Map → micro sched
 - [ ] **P3B.5 [CC] Deliveries and logistics.** Delivery-window analysis (daily vs. 3-day vs. weekly) driven by config; outputs per-day deliveries and on-site inventory as JSON.
 - [ ] **P3B.6 [CC] Optional tool adapters (depend on D8).** Fuzor 4D build-code export/push, Manufacton parts/assembly/order imports, the Revit "push 4D build code / kit / assembly" commands. Keep them as separate modules behind flags so the core runs without them.
   - AC: the core pipeline passes with all adapters disabled.
+- [ ] **P3B.8 [CC] Fix the bugs found in P1.7** (each with a test and a before/after note on Island numbers): takt calibrator drops the last polygon corner; add a generator for `room_takt_zones.csv`; Manufacton orders step fails on the reference data; delivery windows must run without Manufacton outputs; remove hardcoded Island assemblies from the Manufacton code; make the micro schedule work on pandas 3 (then lift the 2.3.3 pin). Make `--rooms-per-zone` a config value (Island used 2, default is 1).
 - [ ] **P3B.7 [CC] Schedule configuration in `project_config`:** start date, work calendar (hours/day, workdays, holidays), hurricane or weather windows as blocked periods (Island example: Jun–Oct, peak Aug–Oct), and the target completion date.
 
 ---
@@ -447,6 +462,7 @@ Measured on the Island central model: raw 3.4 MB (~860k tokens) → aggregate by
   3. case-insensitive "contains" switch + a fallback output;
   4. debug nodes → `send` + error outputs on all agents;
   5. `get_alice_macro` → `Macro_Schedule.csv`;
+  8. ✅ *(done 2026-09-26)* Carbon Agent prompt units corrected to MJ and kg (TOOLS and RULES lines).
   6. ✅ *(done 2026-09-26)* "Simple Memory" session key re-pointed to `Webhook w/ Auth` and memory enabled;
   7. memory is attached only to the Router Agent (which just classifies), so subagents still don't see earlier messages: attach memory to the subagents or pass the history into their prompts. Note that Simple Memory is in-process and is lost when n8n restarts (persistent memory is P6.4).
 - [ ] **P6.2 [CC] New workflow design** (`agent/workflows/concho.json`):
@@ -480,7 +496,7 @@ Measured on the Island central model: raw 3.4 MB (~860k tokens) → aggregate by
 ## Phase 7: Dashboards
 
 - [ ] **P7.1 [CC] TVD dashboard as a static page** reading `results/*.json` (no HTML in Python f-strings). Keep the existing features (clusters, line items, history, compare, PDF/JPG export, dark mode), and add the reliability summary and the target-sum warning.
-- [ ] **P7.2 [CC] STV dashboard** on the same data contract.
+- [ ] **P7.2 [CC] STV dashboard** on the same data contract. Fix the units found in P2.3: the old dashboard labels energy as kWh and water as L, but the engine reports **MJ** and **kg**; the old PDF export falls back to the February run.
   - Show a "construction vs use phase" split, a use-phase-missing warning, a custom/proxy-material flag and mapping coverage.
 - [ ] **P7.3 [CC] Schedule dashboard:** macro Gantt, milestones, blocked weather windows, takt planner for all levels (zone map + utilization), and deliveries per day. It replaces the current Takt Planner page. The 3D viewer is optional; its FBX goes to release assets, not git.
 - [ ] **P7.4 [CC] One design system and project name from config** for all dashboards and the PDF export.
