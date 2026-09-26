@@ -9,14 +9,17 @@
 
 ## Progress log
 
-**Overall status:** Phase 0 almost done (P0.1–P0.3 ✅, P0.4 🟡 waiting for Ash's IPD tag, P0.5 🟡 decisions partly open) · Phase 1 in progress (P1.1–P1.3 ✅, P1.5 🟡; open: P1.4 Revit add-in, P1.6 archive, P1.7 schedule engines).
+**Overall status:** Phase 0 almost done (P0.1–P0.3 ✅, P0.4 🟡 waiting for Ash's IPD tag, P0.5 🟡 decisions partly open) · Phase 1 in progress (P1.1–P1.5 ✅ once #6 is merged, P1.7 🟡 running; P1.6 after Phase 2) · Phase 2 started (P2.1–P2.5 in two sessions; P2.6 after P1.7).
 
 | Date | Update | Tasks |
 |---|---|---|
+| 2026-09-26 | **P1.7 PR opened:** [concho #9](https://github.com/mxngl/concho/pull/9). Schedule engines from IPD_Challenge `989a6b7` in `engines/schedule/{core,adapters,viewers}` (logic unchanged, paths → CLI args, `concho-schedule` with 14 steps, extra `schedule` with pandas 2.3.3 pinned). Pipeline diagram/table, findings and Island assumptions in `engines/schedule/README.md`. Equivalence vs. the original scripts on all outputs + AST diff (skip without `IPD_CHALLENGE_DIR`), CI smoke test on invented data. §1 checksums: Macro_Schedule, Takt_Schedule (`--rooms-per-zone 2`), central BIM model reproduced; committed Micro_Schedule.csv is stale (not reproducible by the original code either). Findings for 3B: takt-zone polygons drop their last corner (901 of 3,971 elements), delivery windows need Manufacton outputs, Manufacton orders fail on 989a6b7 data. | P1.7 ✅ |
 | 2026-09-26 | Roadmap created; this page shared with Ash | – |
 | 2026-09-26 | **Repo created: [`mxngl/concho`](https://github.com/mxngl/concho)** (public, empty, default branch `main`). Ash invited as collaborator. | D3 ✅, P1.1 🟡 |
 | 2026-09-26 | **Concho webhook secured:** header auth enabled on the n8n webhook (unauthenticated POST → 403, with token → 200); Discord bot on the VPS sends the token from its `.env`; end-to-end test in `#askbim` answered correctly ($16,065,644.29). Telegram nodes removed from the live workflow. Open: remove the old GitHub raw token from the `get_stv_dashboard` URL. | P0.2 🟡 |
-| 2026-09-26 | **P1.5 PR opened:** [concho #5](https://github.com/mxngl/concho/pull/5). Scrubbed "Island AI Agent" export committed unchanged as `agent/workflows/legacy/island-ai-agent.json` + README (architecture, tools, known issues, env vars); `check_forbidden.py` now fails on Discord snowflake IDs under `agent/` unless the line uses `$env` (nothing found in the repo). | P1.5 ✅ |
+| 2026-09-26 | **Phase 2 started in parallel to P1.7:** session C = P2.1 (fixture fetch script + CI reference job) + P2.3 (STV discrepancy) + STV part of P2.2; session D = P2.4 + P2.5 (course-workbook equivalence, workbooks attached to the session, never committed). TVD part of P2.2 is effectively covered by the P1.3 equivalence test. P2.6 waits for P1.7. | P2.1–P2.5 🟡 |
+| 2026-09-26 | **P1.5 done** (concho #5 merged). **P1.4 PR opened:** [concho #6](https://github.com/mxngl/concho/pull/6), CI green. Revit add-in source from IPD_Challenge `989a6b7` in `revit-addin/` (11 `.cs` + `.csproj` byte-identical; `.addin`: local-path comment removed, all 5 `<Assembly>` → `QTO.dll`; `Concho.QTO.sln`). Findings: MEP export has **no `Assembly Code` column**; Push Kit / Push Assembly exist in code but aren't registered in `.addin`; `.addin` descriptions still mention the old repo layout; IPD exports Revit parts and skips floors/ceilings that have parts (relevant for P3.9). Not compiled (no Revit/.NET here). Independently verified: sources identical, no personal paths left, no merge conflict with main. | P1.5 ✅, P1.4 🟡 |
+| 2026-09-26 | **P1.5 PR opened:** [concho #5](https://github.com/mxngl/concho/pull/5). Scrubbed "Island AI Agent" export committed unchanged as `agent/workflows/legacy/island-ai-agent.json` + README (architecture, tools, known issues, env vars); `check_forbidden.py` now fails on Discord snowflake IDs under `agent/` unless the line uses `$env` (nothing found in the repo). Independently verified: JSON byte-identical to the export, 93 tests pass, a raw Discord ID under `agent/` is caught. README note to verify in Phase 6: `$env` in nodes may need `N8N_BLOCK_ENV_ACCESS_IN_NODE=false` (untested). | P1.5 ✅ |
 | 2026-09-26 | **P1.3 done** (concho #4 merged). P1.5 prepared: scrubbed export of the live workflow created via n8n MCP (Discord IDs → `$env` placeholders, webhook path replaced, webhookIds removed; passes `check_forbidden.py`), handed to a Claude Code session for committing. | P1.3 ✅, P1.5 🟡 |
 | 2026-09-26 | **P1.2 done** (concho #3 merged). **P1.3 ready to merge:** main merged into the #4 branch (merge commit, no force-push), `pyproject.toml` conflict resolved (both CLIs `concho-stv`/`concho-tvd`), `AUTOTVD_DIR` now resolved to an absolute path. Independently verified: **78/78 tests pass with nothing skipped** (TVD equivalence vs. `island-2026-final` with a relative path + STV course-workbook test). | P1.2 ✅, P1.3 🟡 |
 | 2026-09-26 | **P1.3 PR opened:** [concho #4](https://github.com/mxngl/concho/pull/4), CI green. TVD engine split into `engines/tvd/` + `dashboards/tvd/legacy_render.py` (byte-identical renderer); CLI `concho-tvd` with `--out DIR`; broken remote fetch removed; synthetic fixture only. Equivalence test 4/4 against `island-2026-final` (results JSON, history snapshot, dashboard HTML; grand total 16,065,644.29, unmapped 1693, DNC 75). Independently verified: 62 tests pass with an absolute `AUTOTVD_DIR`; with a **relative** path the equivalence fixtures error (small fix requested). **#3 and #4 conflict in `pyproject.toml`**: merge #3 first, then rebase #4. | P1.3 🟡 |
@@ -237,21 +240,21 @@ Taken from `main` at AutoTVD `41e9e8c` (after the P0.3 rewrite: **`4201147`**, s
   - AC: the engine runs from the new package with identical output on the fixture (after P2.2).
 - [x] ✅ **P1.3 [CC] Migrate the TVD engine** *(done 2026-09-26: concho #4 merged; equivalence 4/4 vs. `island-2026-final`, 78/78 tests verified)* from AutoTVD. Split out the computation (reading QTO + cost DB → results dict) from the HTML rendering; keep the rendering temporarily as `dashboards/tvd/legacy_render.py`.
   - AC: identical `results/latest.json` on the fixture (after P2.2).
-- [ ] **P1.4 [CC] Migrate the Revit add-in source** (`QTO/*.cs`, `.csproj`, `.addin`) without build artifacts.
+- [ ] 🟡 **P1.4 [CC] Migrate the Revit add-in source** *(PR concho #6 open, CI green, verified; tick after merge)* (`QTO/*.cs`, `.csproj`, `.addin`) without build artifacts.
 - [x] ✅ **P1.5 [CC] Migrate the n8n workflow as a reference.** *(done 2026-09-26: concho #5; scrubbed export + README, Discord-ID check for `agent/` in `check_forbidden.py`)* Export "Island AI Agent" (read-only via n8n MCP `get_workflow_details`) to `agent/workflows/legacy/island-ai-agent.json`.
   - **Scrub first:** webhook path, the GHSAT token, and Discord guild and channel IDs → placeholders.
   - AC: the file contains no secrets or IDs (add a grep check to CI).
-- [ ] **P1.7 [CC] Migrate the schedule engines** from `IPD_Challenge/src/Planning_engine` (ALICE_BIM_mapper, Micro_Schedule_Generator, Prefab_BIM_Mapper, Fuzor_Mapper, Logistics_Analysis), `src/Takt_engine` and `src/takt_zone_calibrator.py` into `engines/schedule/`, **without** generated outputs (the 16 MB Fuzor XML, the 2.7 MB micro schedule, HTML viewers, FBX).
+- [x] ✅ **P1.7 [CC] Migrate the schedule engines** *(done 2026-09-26: [concho #9](https://github.com/mxngl/concho/pull/9); 14 steps via `concho-schedule`, equivalence vs. IPD `989a6b7` on all outputs)* from `IPD_Challenge/src/Planning_engine` (ALICE_BIM_mapper, Micro_Schedule_Generator, Prefab_BIM_Mapper, Fuzor_Mapper, Logistics_Analysis), `src/Takt_engine` and `src/takt_zone_calibrator.py` into `engines/schedule/`, **without** generated outputs (the 16 MB Fuzor XML, the 2.7 MB micro schedule, HTML viewers, FBX).
   - Replace path constants that walk up the repo (`PROJECT_DIR = ...parents[2]`) with explicit input/output arguments.
   - AC: each generator runs from the package via a CLI with explicit paths.
 - [ ] **P1.6 [HUMAN] Archive the old repos** after Phase 2 passes. Add a README banner pointing to the new repo.
-  - **AutoTVD: set to private** (replaces the GitHub Support request from P0.3; old commits stay reachable via PR refs until then). Preconditions: (1) the fork count is 0, since forks of a public repo stay public; (2) Concho and the dashboards no longer read from AutoTVD (GitHub Pages and `raw.githubusercontent.com` URLs stop working for private repos).
+  - **AutoTVD: set to private** (replaces the GitHub Support request from P0.3; old commits stay reachable via PR refs until then). Preconditions (0): the golden-test fixtures (P2.1) no longer clone AutoTVD publicly, i.e. they moved to a private fixture repo; (1) the fork count is 0, since forks of a public repo stay public; (2) Concho and the dashboards no longer read from AutoTVD (GitHub Pages and `raw.githubusercontent.com` URLs stop working for private repos).
 
 ---
 
 ## Phase 2: Regression baseline (before any refactor)
 
-- [ ] **P2.1 [CC] Build a private fixture set.** Because `mxngl/concho` is public, fixtures containing course or RSMeans-derived data go to a **private** location (e.g. a private `concho-fixtures` repo or a local path via env var `CONCHO_FIXTURES_DIR`; tests skip if unset). Only non-sensitive fixtures go under `tests/fixtures/`. Contents:
+- [ ] **P2.1 [CC] Build a private fixture set.** *(Plan 2026-09-26: while AutoTVD/AutoSTV/IPD_Challenge are public, `scripts/fetch_fixtures.py` clones them at `island-2026-final` / `989a6b7` into a git-ignored `.fixtures/` and verifies the §1 checksums; a CI job runs the golden tests from there. Switch to a private fixture repo before AutoTVD goes private in P1.6.)* Because `mxngl/concho` is public, fixtures containing course or RSMeans-derived data go to a **private** location (e.g. a private `concho-fixtures` repo or a local path via env var `CONCHO_FIXTURES_DIR`; tests skip if unset). Only non-sensitive fixtures go under `tests/fixtures/`. Contents:
   - the Island QTO CSVs used for the 2026-05-01 run;
   - `cost_data.csv` as-is (with its known errors, for reproducibility);
   - the STV structural, MEP and architecture schedules used for `stv_project`;
@@ -327,7 +330,7 @@ Taken from `main` at AutoTVD `41e9e8c` (after the P0.3 rewrite: **`4201147`**, s
   - Warn in CI and on the dashboard when all use-phase values are 0.
   - Allow PV as an `Energy` construction item (the course catalog has "Photovoltaics (sf)").
   - AC: the Island config either contains the slide values (162,000 kWh/yr use, 216,992 kWh/yr PV, 187,000 gal/yr water, 12,610 SF collection area) or an explicit "not modeled" flag.
-- [ ] **P3.9 [CC] Document the "Parts" decision** (166 unmapped structural `Parts`): excluded to avoid double counting, or mapped. Implement the decision as a mapping rule.
+- [ ] **P3.9 [CC] Document the "Parts" decision** (note from P1.4: the add-in exports Revit parts and skips a floor/ceiling that has parts, so parts are the counted representation there) (166 unmapped structural `Parts`): excluded to avoid double counting, or mapped. Implement the decision as a mapping rule.
 
 ---
 
@@ -368,6 +371,8 @@ Today the schedule chain is ALICE macro (XLSX) → ALICE_BIM_Map → micro sched
 - [ ] **P4.3 [CC] Export contract.**
   - Document the CSV columns (`docs/model-requirements.md`), including the required `Assembly Code`.
   - The add-in shows a summary dialog after export: element count, % with Assembly Code, and a list of missing codes by category.
+  - Add the missing `Assembly Code` column to the **MEP** export (found in P1.4); Structural and Architecture already have it.
+  - Decide whether Push Kit / Push Assembly get registered in the `.addin` or are removed (they're a subset of Push Manufacton Parameters), and update the `.addin` descriptions that still refer to `src\Planning_engine\...`.
   - AC: the dialog text is implemented; the doc lists every column.
 - [ ] **P4.4 [CC, optional, time-boxed 2 days] Spike: cloud extraction via the APS Model Derivative API** (properties incl. Assembly Code and quantities from ACC). Deliver a written go/no-go only.
 

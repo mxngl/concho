@@ -24,8 +24,16 @@ stv = [
     "openpyxl==3.1.5",
     "matplotlib==3.11.2",
 ]
+# P1.7: pandas 2.x on purpose; the micro schedule fails under pandas 3 (see engines/schedule/README.md).
+schedule = [
+    "pandas==2.3.3",
+    "numpy==2.3.5",
+    "openpyxl==3.1.5",
+    "matplotlib==3.11.2",
+]
 
 [project.scripts]
+concho-schedule = "engines.schedule.cli:main"
 concho-stv = "engines.stv.cli:main"
 concho-tvd = "engines.tvd.cli:main"
 
@@ -49,6 +57,14 @@ select = ["E", "F", "W", "I", "B", "UP"]
 "engines/stv/*.py" = ["E501", "I001", "UP017", "UP035", "UP037", "B905", "F841", "W293"]
 # Verbatim copy of the AutoTVD HTML f-string (P1.3); replaced by a static page in P7.1.
 "dashboards/tvd/legacy_render.py" = ["E501", "W605"]
+# P1.7: the schedule engines are kept verbatim from IPD_Challenge@989a6b7 (only paths/CLI
+# changed) so the diff against the source stays reviewable; lint cleanup is left for Phase 3B.
+"engines/schedule/core/*.py" = ["E501", "I001", "B007", "B023", "B905", "F841"]
+"engines/schedule/adapters/**/*.py" = ["E501", "I001", "B007"]
+"engines/schedule/viewers/*.py" = ["E501", "I001"]
+# Dead code in the original calibrator: save_prefab_mapping() uses an undefined constant and
+# is never called (see engines/schedule/README.md, "Findings").
+"engines/schedule/core/takt_zones.py" = ["E501", "I001", "F821"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["engines", "dashboards", "check_forbidden"]
