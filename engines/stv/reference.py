@@ -8,7 +8,6 @@ from openpyxl import load_workbook
 
 from .models import ImpactVector
 
-
 # The course workbook (CEE_222_STV_V12.xlsx or a team copy of it) is course data and is
 # never shipped with this package. It is supplied locally, via --template or this env var.
 TEMPLATE_ENV_VAR = "COURSE_STV_XLSX"
@@ -94,7 +93,7 @@ class STVReferenceData:
         self.fuels = fuels
 
     @classmethod
-    def from_workbook(cls, workbook_path: Path | str | None = None) -> "STVReferenceData":
+    def from_workbook(cls, workbook_path: Path | str | None = None) -> STVReferenceData:
         path = resolve_template_path(workbook_path)
         wb = load_workbook(path, data_only=True)
 

@@ -3,7 +3,6 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
-
 IMPACT_KEYS = ("carbon", "energy", "water", "ozone")
 
 
@@ -14,7 +13,7 @@ class ImpactVector:
     water: float = 0.0
     ozone: float = 0.0
 
-    def __add__(self, other: "ImpactVector") -> "ImpactVector":
+    def __add__(self, other: ImpactVector) -> ImpactVector:
         return ImpactVector(
             carbon=self.carbon + other.carbon,
             energy=self.energy + other.energy,
@@ -22,7 +21,7 @@ class ImpactVector:
             ozone=self.ozone + other.ozone,
         )
 
-    def scale(self, factor: float) -> "ImpactVector":
+    def scale(self, factor: float) -> ImpactVector:
         return ImpactVector(
             carbon=self.carbon * factor,
             energy=self.energy * factor,
@@ -37,7 +36,7 @@ class ImpactVector:
         return {key: self.get(key) for key in IMPACT_KEYS}
 
     @classmethod
-    def from_dict(cls, payload: dict[str, Any]) -> "ImpactVector":
+    def from_dict(cls, payload: dict[str, Any]) -> ImpactVector:
         return cls(
             carbon=float(payload.get("carbon", 0.0)),
             energy=float(payload.get("energy", 0.0)),
@@ -71,7 +70,7 @@ class ImpactBreakdown:
     def life_cycle(self) -> ImpactVector:
         return self.embodied + self.use_phase
 
-    def __add__(self, other: "ImpactBreakdown") -> "ImpactBreakdown":
+    def __add__(self, other: ImpactBreakdown) -> ImpactBreakdown:
         return ImpactBreakdown(
             embodied_materials=self.embodied_materials + other.embodied_materials,
             embodied_transport=self.embodied_transport + other.embodied_transport,
@@ -95,7 +94,7 @@ class ImpactBreakdown:
         }
 
     @classmethod
-    def from_dict(cls, payload: dict[str, Any]) -> "ImpactBreakdown":
+    def from_dict(cls, payload: dict[str, Any]) -> ImpactBreakdown:
         return cls(
             embodied_materials=ImpactVector.from_dict(payload.get("embodied_materials", {})),
             embodied_transport=ImpactVector.from_dict(payload.get("embodied_transport", {})),
@@ -152,7 +151,7 @@ class STVInputs:
     use_phase: UsePhaseInputs = field(default_factory=UsePhaseInputs)
 
     @classmethod
-    def from_dict(cls, payload: dict[str, Any]) -> "STVInputs":
+    def from_dict(cls, payload: dict[str, Any]) -> STVInputs:
         construction_items = [
             ConstructionItem(
                 assembly=item["assembly"],
@@ -226,7 +225,7 @@ class ConstructionImpactResult:
         }
 
     @classmethod
-    def from_dict(cls, payload: dict[str, Any]) -> "ConstructionImpactResult":
+    def from_dict(cls, payload: dict[str, Any]) -> ConstructionImpactResult:
         return cls(
             assembly=payload["assembly"],
             material_type=payload["material_type"],
@@ -271,7 +270,7 @@ class STVResults:
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, payload: dict[str, Any]) -> "STVResults":
+    def from_dict(cls, payload: dict[str, Any]) -> STVResults:
         return cls(
             team=payload["team"],
             targets=ImpactVector.from_dict(payload.get("targets", {})),
@@ -284,7 +283,7 @@ class STVResults:
         )
 
     @classmethod
-    def combine(cls, results: list["STVResults"], *, team: str | None = None) -> "STVResults":
+    def combine(cls, results: list[STVResults], *, team: str | None = None) -> STVResults:
         if not results:
             raise ValueError("At least one STV result is required to create a project STV.")
 
@@ -298,7 +297,8 @@ class STVResults:
         for result in results:
             if result.team != first.team:
                 raise ValueError(
-                    f"Cannot combine STV results from different teams: '{first.team}' and '{result.team}'."
+                    "Cannot combine STV results from different teams: "
+                    f"'{first.team}' and '{result.team}'."
                 )
             if result.lifetime_years != combined_lifetime:
                 raise ValueError(

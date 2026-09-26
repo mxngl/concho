@@ -11,7 +11,8 @@ It is a port of the course workbook `CEE_222_STV_V12.xlsx`:
   water = team water value (the constants come from the course workbook);
 - **embodied:** amount × LCA factor × unit multiplier, per construction item;
 - **use phase:** annual grid electricity, cogeneration, natural gas and water
-  (900 occupants, 250 days; rainwater offset capped at total water use), × 50 years.
+  (900 occupants, 250 days; rainwater offset capped at total water use), × 50 years
+  (`stv.lifetime_years` of the config; another value is used but reported as a warning).
 
 Known divergence from the workbook: the course applies the 0.75 toilet factor whenever the
 urinal cell is non-blank (even at 0); the engine applies it only when `urinal_gpf > 0`.
@@ -19,7 +20,13 @@ urinal cell is non-blank (even at 0); the engine applies it only when `urinal_gp
 Course logic lives in `engine.py`, `reference.py` and `models.py`. The Revit importers
 (`revit_architecture.py`, `revit_structural.py`, `revit_mep.py`, `central_bim.py`) contain the
 **Island-specific** Revit → (assembly, material type) mapping (not course data; to be replaced
-by a mapping table in P3.6). The Island example input is `examples/concept_a_bambo.json`.
+by a mapping table in P3.6). The Island example input is `examples/concept_a_bambo.json`
+(construction items only; team and use phase come from the config).
+
+Project values come from `project_config` (`--config`, P3.2, see `project.py`): course team
+(`stv.course_team`, `--team` overrides it), lifetime and use phase (`not_modeled` → 0, with a
+warning). `custom_materials.py` loads and validates `stv.custom_materials_file`; the materials
+are not used in the calculation before P3.7.
 
 ## Course workbook (required, local only)
 
@@ -38,12 +45,16 @@ Without either, the CLI stops with an error explaining this.
 ```bash
 pip install -e ".[stv]"
 
-concho-stv --input engines/stv/examples/concept_a_bambo.json --team Island \
-    --output-dir out/stv_example
+concho-stv --config engines/common/examples/island_2026.project_config.json \
+    --input engines/stv/examples/concept_a_bambo.json --output-dir out/stv_example
 # same as: python -m engines.stv.cli ...
 ```
 
-`--output-dir` is required; nothing is written inside the package. Other inputs:
+`--output-dir` is required; nothing is written inside the package. `--config` sets the team,
+lifetime and use phase; without it, give `--team` (or `team` in the input JSON). With
+`--config`, the use phase is added to the run; for per-trade runs that are combined later,
+pass `--no-use-phase` to all but one (`--combine-results` sums the use phase and warns when
+more than one input has one). Other inputs:
 `--structural-schedule`, `--mep-schedule`, `--architecture-schedule`,
 `--architecture-history-dir`, `--central-bim-model`, `--stv-workbook-input`, and
 `--combine-results a/stv_results.json b/stv_results.json` (no workbook needed).
@@ -51,7 +62,8 @@ Outputs: `stv_results.json`, `history.json`, PNG charts and per-importer item re
 
 ## Tests
 
-`pytest tests/stv` runs unit tests on invented reference data. The Island target test
+`pytest tests/stv` runs unit tests on invented reference data (incl. `test_stv_project_config.py`:
+config → team/lifetime/use phase, custom materials validation, CLI). The Island target test
 (`tests/stv/test_stv_course_workbook.py`) runs only when `COURSE_STV_XLSX` is set.
 
 ## Credit

@@ -7,7 +7,6 @@ from pathlib import Path
 
 from .models import ConstructionItem
 
-
 CF_TO_CY = 1.0 / 27.0
 SOFTWOOD_LUMBER_KG_PER_CF = 12.72
 GLULAM_KG_PER_CF = 19.43
@@ -177,7 +176,8 @@ def _parse_measurement(raw_value: str) -> float:
 
 def _is_wood_floor(family: str, type_name: str, material: str) -> bool:
     search_text = " ".join((family, type_name, material))
-    return any(keyword in search_text for keyword in ("wood", "timber", "glulam", "lumber", "clt", "plywood"))
+    keywords = ("wood", "timber", "glulam", "lumber", "clt", "plywood")
+    return any(keyword in search_text for keyword in keywords)
 
 
 def _is_concrete_floor(family: str, type_name: str, material: str) -> bool:

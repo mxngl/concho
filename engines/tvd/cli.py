@@ -1,5 +1,9 @@
 """Command line interface: ``python -m engines.tvd`` / ``concho-tvd``.
 
+Project values (targets, GSF, project/team name) come from ``--config``
+(``project_config`` JSON, see ``docs/config.md``). ``--cost`` defaults to ``files.cost_db``
+of the config.
+
 Output layout under ``--out DIR`` (mirrors the AutoTVD repo layout):
 
 - ``DIR/results/<YYYYMMDD_HHMMSS>.json`` and ``DIR/results/latest.json``
@@ -11,12 +15,15 @@ import argparse
 import os
 import sys
 import webbrowser
+from pathlib import Path
 
+from engines.common.config import validate_config_file
 from engines.tvd.alert import fire_budget_webhook
 from engines.tvd.engine import run_files
 from engines.tvd.history import load_history, make_demo_snapshot, save_snapshot
 from engines.tvd.results_writer import save_results_json
 from engines.tvd.summary import fmt_usd, grand_total_of
+from engines.tvd.targets import ProjectTargets
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -36,12 +43,16 @@ def build_parser() -> argparse.ArgumentParser:
         help='Save a named snapshot of this run to the history folder before generating '
              'the dashboard. Example: --snapshot "Scheme A – Week 12"',
     )
+    parser.add_argument("--config", metavar="FILE", required=True,
+                        help="project_config JSON with the project values (targets, GSF, "
+                             "names); see docs/config.md")
     parser.add_argument("--arch", metavar="FILE", required=True,
                         help="Architecture take-off CSV (e.g. Architecture_TakeOff.csv)")
     parser.add_argument("--struct", metavar="FILE", required=True,
                         help="Structural take-off CSV (e.g. Structural_Schedule.csv)")
-    parser.add_argument("--cost", metavar="FILE", required=True,
-                        help="Cost database CSV (AutoTVD cost_data.csv format)")
+    parser.add_argument("--cost", metavar="FILE",
+                        help="Cost database CSV (AutoTVD cost_data.csv format); "
+                             "default: files.cost_db of the config")
     parser.add_argument("--out", metavar="DIR", required=True,
                         help="Output folder for results/ and the dashboard")
     parser.add_argument("--history", metavar="DIR",
@@ -52,15 +63,37 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
-    args = build_parser().parse_args(argv)
+    parser = build_parser()
+    args = parser.parse_args(argv)
     ci_mode = args.ci
     out_dir = args.out
     history_dir = args.history or os.path.join(out_dir, "history")
 
+    report = validate_config_file(args.config)
+    if not report.ok:
+        parser.error(f"invalid project_config {args.config}:\n"
+                     + "\n".join(f"  - {e}" for e in report.errors))
+    config = report.config
+    cost_path = args.cost
+    if cost_path is None:
+        if config.files.cost_db is None:
+            parser.error("no cost DB: pass --cost or set files.cost_db in the config")
+        cost_path = str(Path(args.config).resolve().parent / config.files.cost_db)
+
     print("AutoTVD Cost Analysis" + (" [CI mode]" if ci_mode else ""))
+    print(f"   Project: {config.project.name} ({config.project.team_name})")
+    for warning in report.warnings:
+        print(f"   Config warning: {warning}")
+
+    try:
+        project = ProjectTargets.from_config(config)
+        project.check()
+    except (NotImplementedError, ValueError) as exc:
+        parser.error(str(exc))
 
     # 1–6. Load data, compute line items and cluster summary
-    run = run_files(args.arch, args.struct, args.cost)
+    # (run.notes repeat the target warnings of the config validation printed above.)
+    run = run_files(args.arch, args.struct, cost_path, project)
     results, summary, unmapped_count = run.results, run.summary, run.unmapped_count
 
     # 6b. Save structured results JSON (timestamped + latest.json)
@@ -105,7 +138,7 @@ def main(argv: list[str] | None = None) -> int:
 
     html = generate_html(results, summary, unmapped_count, run.source,
                          run.targets, run.total_target, run.gross_sf, run.unmapped_rows,
-                         history)
+                         history, team_name=run.project.team_name)
     with open(out_path, "w", encoding="utf-8") as f:
         f.write(html)
     print(f"\nDashboard saved: {out_path}")

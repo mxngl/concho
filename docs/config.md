@@ -5,8 +5,9 @@ settings and input files. Defined in `engines/common/config.py` (pydantic v2), e
 JSON Schema to [`schema/project_config.schema.json`](schema/project_config.schema.json)
 (task P3.1).
 
-> **Status:** schema, loader and validation only. The engines do not read the config yet;
-> they keep their Island defaults until P3.2 (TVD/STV) and P3B.2 (schedule).
+> **Status:** read by the TVD engine and dashboard (`concho-tvd --config`) and the STV engine
+> (`concho-stv --config`) since P3.2; the schedule engines follow in P3B.2. See "Used by the
+> engines" below.
 
 Examples:
 - [`template/project_config.example.json`](../template/project_config.example.json): neutral
@@ -46,6 +47,18 @@ or `validate_config_file(path)` (returns errors and warnings).
 | Env var names (`agent.discord.*`, `stv.course_workbook_env`) must be `UPPER_SNAKE_CASE` | error |
 
 All paths in the file are relative to the config file.
+
+## Used by the engines (P3.2)
+
+| Engine | Fields read | Notes |
+|---|---|---|
+| TVD (`concho-tvd --config`) | `project.name`, `project.team_name`, `project.gross_sf`, `tvd.total_target` / `tvd.target`, `tvd.cluster_split` (`explicit`), `tvd.custom_clusters`, `tvd.target_sum_tolerance`, `files.cost_db` (default for `--cost`) | Cluster targets: course clusters A–H under their canonical names (`Special Construction`), then the custom clusters. `derive_from_references` is not implemented yet (P3.5). The total target excludes `on_top` custom clusters. Results JSON: `meta.project_name`, `meta.team_name`. |
+| TVD dashboard | team name, GSF, targets (from the run) | No project strings in the renderer. |
+| STV (`concho-stv --config`) | `stv.course_team` (`--team` overrides), `stv.lifetime_years`, `stv.use_phase`, `stv.custom_materials_file` / `files.custom_materials` | `lifetime_years` ≠ 50 is used but reported as a warning (the course formula uses 50). `not_modeled: true` → use phase 0 (warning). `cogeneration: null` and `urinal_gpf: null` → 0 (the explicit-0 urinal case is P3.10). Custom materials are loaded and validated only; the calculation uses them from P3.7. `--no-use-phase` skips the use phase (for per-trade runs combined later). |
+
+The TVD quantity rule tables (takeoff clusters A–C, quantity mirrors, keyword split, toilet
+codes, excluded categories) are engine defaults in `engines/tvd/rules.py` until they move to
+the cost DB (P3.4).
 
 ## How to fill it in (new team)
 

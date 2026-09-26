@@ -9,15 +9,21 @@ from .models import (
 )
 from .reference import STVReferenceData
 
-
 TARGET_BUILDING_AREA_SF = 6.38 * 10**6
 TARGET_BUILDING_ENERGY_BASE = 1.51 * 10**8
+# Building lifetime of the course formula. project_config may set another value
+# (stv.lifetime_years); the use phase is then scaled by it and a warning is reported.
 LIFETIME_YEARS = 50
 
 
 class STVEngine:
-    def __init__(self, reference_data: STVReferenceData | None = None) -> None:
+    def __init__(
+        self,
+        reference_data: STVReferenceData | None = None,
+        lifetime_years: int = LIFETIME_YEARS,
+    ) -> None:
         self.reference_data = reference_data or STVReferenceData.from_workbook()
+        self.lifetime_years = lifetime_years
 
     def calculate(self, inputs: STVInputs) -> STVResults:
         team = self.reference_data.get_team(inputs.team)
@@ -49,9 +55,9 @@ class STVEngine:
         annual_electricity = self._calculate_annual_electricity(inputs)
         annual_heating = self._calculate_annual_heating(inputs)
         annual_water = self._calculate_annual_water(inputs)
-        breakdown.use_electricity = annual_electricity.scale(LIFETIME_YEARS)
-        breakdown.use_heating = annual_heating.scale(LIFETIME_YEARS)
-        breakdown.use_water = annual_water.scale(LIFETIME_YEARS)
+        breakdown.use_electricity = annual_electricity.scale(self.lifetime_years)
+        breakdown.use_heating = annual_heating.scale(self.lifetime_years)
+        breakdown.use_water = annual_water.scale(self.lifetime_years)
 
         targets = ImpactVector(
             carbon=TARGET_BUILDING_AREA_SF * team.target_carbon_factor,
@@ -64,7 +70,7 @@ class STVEngine:
             targets=targets,
             breakdown=breakdown,
             construction_items=construction_results,
-            lifetime_years=LIFETIME_YEARS,
+            lifetime_years=self.lifetime_years,
         )
 
     def _calculate_annual_electricity(self, inputs: STVInputs) -> ImpactVector:

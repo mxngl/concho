@@ -3,12 +3,12 @@ from __future__ import annotations
 from pathlib import Path
 
 import matplotlib
+
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
 from .models import IMPACT_KEYS, STVResults
-
 
 METRIC_LABELS = {
     "carbon": "Carbon (kgCO2e)",
@@ -47,8 +47,14 @@ def _plot_target_vs_project(results: STVResults, output_path: Path) -> None:
     fig, ax = plt.subplots(figsize=(10, 5.5))
     x_positions = range(len(metrics))
     width = 0.36
-    ax.bar([x - width / 2 for x in x_positions], targets, width=width, label="Target", color="#7a8fa6")
-    ax.bar([x + width / 2 for x in x_positions], projects, width=width, label="Project", color="#d99058")
+    ax.bar(
+        [x - width / 2 for x in x_positions], targets, width=width, label="Target",
+        color="#7a8fa6",
+    )
+    ax.bar(
+        [x + width / 2 for x in x_positions], projects, width=width, label="Project",
+        color="#d99058",
+    )
     ax.set_xticks(list(x_positions))
     ax.set_xticklabels(labels, rotation=10, ha="right")
     ax.set_title(f"STV Performance vs Target: {results.team}")
@@ -78,7 +84,7 @@ def _plot_breakdown(results: STVResults, output_path: Path) -> None:
     for label, vector, color in segments:
         values = [vector.get(metric) for metric in metrics]
         ax.bar(x_positions, values, bottom=bottoms, label=label, color=color)
-        bottoms = [bottom + value for bottom, value in zip(bottoms, values)]
+        bottoms = [bottom + value for bottom, value in zip(bottoms, values, strict=True)]
 
     ax.set_xticks(list(x_positions))
     ax.set_xticklabels([METRIC_LABELS[key] for key in metrics], rotation=10, ha="right")
@@ -123,7 +129,7 @@ def _plot_radial_target_vs_project(results: STVResults, output_path: Path) -> No
     ax.plot(angles, project_values, color="#d99058", linewidth=2, label="Project")
     ax.fill(angles, project_values, color="#d99058", alpha=0.25)
 
-    for angle, value in zip(angles[:-1], project_percentages):
+    for angle, value in zip(angles[:-1], project_percentages, strict=True):
         ax.text(
             angle,
             min(value + 12, 200),

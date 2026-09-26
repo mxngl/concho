@@ -4,9 +4,9 @@ import csv
 import math
 import re
 from collections import defaultdict
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable
 
 from .models import ConstructionItem
 
@@ -131,7 +131,9 @@ def _map_steel_duct_from_geometry(row: dict[str, str]) -> ConstructionItem | Non
         return None
 
     nominal_diameter_in = _resolve_nominal_diameter_inches(row)
-    material_type = "Steel Duct 12\"D (ft)" if nominal_diameter_in <= 15 else "Steel Duct 18\"D (ft)"
+    material_type = (
+        "Steel Duct 12\"D (ft)" if nominal_diameter_in <= 15 else "Steel Duct 18\"D (ft)"
+    )
     return ConstructionItem(
         assembly="MEP",
         material_type=material_type,
@@ -207,7 +209,9 @@ def _map_stainless_duct_from_weight_with_multiplier(
 MEP_FAMILY_CATEGORY_MAPPINGS: dict[str, Callable[[dict[str, str]], ConstructionItem | None]] = {
     "Supply Diffuser : Air Terminals": _map_ahu_from_flow,
     "Exhaust Grill : Air Terminals": _map_ahu_from_flow,
-    "PRICE-40FF- Filter Frame Stamped Residential Grille-RETURN Hosted : Air Terminals": _map_air_filter_from_flow,
+    "PRICE-40FF- Filter Frame Stamped Residential Grille-RETURN Hosted : Air Terminals": (
+        _map_air_filter_from_flow
+    ),
     "34274 : Electrical Fixtures": lambda row: None,
     "Return Diffuser : Air Terminals": _map_ahu_from_flow,
     "Utility Switchboard : Electrical Equipment": lambda row: None,
@@ -216,7 +220,9 @@ MEP_FAMILY_CATEGORY_MAPPINGS: dict[str, Callable[[dict[str, str]], ConstructionI
     "Rectangular Tee : Duct Fittings": _map_stainless_duct_tee_from_weight,
     "Rectangular Cross : Duct Fittings": _map_stainless_duct_cross_from_weight,
     "Rectangular Transition - Angle : Duct Fittings": _map_stainless_duct_transition_from_weight,
-    "Rectangular to Round Transition - Angle : Duct Fittings": _map_stainless_duct_rect_to_round_transition_from_weight,
+    "Rectangular to Round Transition - Angle : Duct Fittings": (
+        _map_stainless_duct_rect_to_round_transition_from_weight
+    ),
 }
 
 

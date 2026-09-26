@@ -1,0 +1,62 @@
+{
+  "$schema": "../../../docs/schema/project_config.schema.json",
+  "project": {
+    "name": "River test pavilion",
+    "team_name": "River Test Team",
+    "location": "Invented Town, Nowhere",
+    "currency": "USD",
+    "units": "imperial",
+    "gross_sf": 12500,
+    "completion_date": "2031-06-30"
+  },
+  "tvd": {
+    "total_target": 5000000,
+    "cluster_split": {
+      "method": "explicit",
+      "basis": "pct",
+      "values": {"A": 0.10, "B": 0.25, "C": 0.15, "D": 0.20, "E": 0.05, "F": 0.05, "G": 0.10, "H": 0.10}
+    },
+    "custom_clusters": [
+      {"name": "Crane Rental", "target": 200000, "mode": "carved_out", "is_course_data": false}
+    ],
+    "target_sum_tolerance": 0.001
+  },
+  "stv": {
+    "course_team": "River",
+    "lifetime_years": 50,
+    "course_workbook_env": "COURSE_STV_XLSX",
+    "use_phase": {
+      "not_modeled": false,
+      "grid_kwh": 100000,
+      "onsite_renewable_kwh": 20000,
+      "natural_gas_m3": 500,
+      "cogeneration": null,
+      "water": {
+        "toilet_gpf": 1.28,
+        "urinal_gpf": null,
+        "wc_sink_gpm": 0.5,
+        "lab_sink_gpm": 0,
+        "kitchen_sink_gpm": 1.5,
+        "shower_gpm": 1.8,
+        "landscaping_gal": 10000,
+        "rainwater_gal": 5000
+      }
+    },
+    "custom_materials_file": null
+  },
+  "schedule": {
+    "start_date": "2030-03-01",
+    "calendar": {"hours_per_day": 8, "workdays": ["Mon", "Tue", "Wed", "Thu", "Fri"], "holidays": []},
+    "blocked_windows": [],
+    "target_completion": "2031-03-31",
+    "rooms_per_zone": 1,
+    "adapters": {"alice": false, "fuzor": false, "manufacton": false}
+  },
+  "agent": {
+    "default_language": "en",
+    "models": {"router": "router-model", "subagent": "subagent-model", "tts": null}
+  },
+  "files": {
+    "cost_db": "../tvd_synthetic/cost_db.csv"
+  }
+}
