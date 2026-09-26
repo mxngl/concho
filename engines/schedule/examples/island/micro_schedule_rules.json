@@ -1,0 +1,165 @@
+{
+  "split_rules": [
+    {
+      "tasks": [
+        "Frame: Columns",
+        "Frame: Beams",
+        "Floor",
+        "Roof",
+        "Exterior Wall Install",
+        "Glass Install + Glazing",
+        "Facade Install + Glazing",
+        "Mesh Install"
+      ],
+      "by": ["level"]
+    },
+    {
+      "tasks": [
+        "Interior Walls",
+        "Ceiling Installation",
+        "MEP Rough-In"
+      ],
+      "by": ["room"]
+    }
+  ],
+  "constraints": [
+    {
+      "type": "same_start_after",
+      "after": {"task": "Install Construction Fencing"},
+      "tasks": [
+        "Install Site Office & Welfare Units",
+        "Temporary Water Installation",
+        "Temporary Power Installation",
+        "Tree Removal & Clearing",
+        "Bleacher Demolition",
+        "Crane Pad Construction"
+      ]
+    },
+    {
+      "type": "serial",
+      "before": {
+        "tasks": [
+          "Install Site Office & Welfare Units",
+          "Temporary Water Installation",
+          "Temporary Power Installation",
+          "Tree Removal & Clearing",
+          "Bleacher Demolition",
+          "Crane Pad Construction"
+        ]
+      },
+      "after": {"task": "Laydown Area Preparation"}
+    },
+    {
+      "type": "chain",
+      "tasks": [
+        "Laydown Area Preparation",
+        "Full Basement Excavation",
+        "Shoring / Stabilization",
+        "Subgrade Preparation"
+      ]
+    },
+    {
+      "type": "same_start_after",
+      "after": {"task": "Subgrade Preparation"},
+      "tasks": ["Footings - Form/Rebar/Pour", "Basement Retaining Walls"]
+    },
+    {
+      "type": "serial",
+      "before": {"task": "Basement Retaining Walls"},
+      "after": {"task": "Foundational Columns"},
+      "lag_days": 7
+    },
+    {
+      "type": "serial",
+      "before": {"task": "Footings - Form/Rebar/Pour"},
+      "after": {"task": "Foundational Columns"}
+    },
+    {
+      "type": "chain",
+      "tasks": [
+        "Foundational Columns",
+        "Grade Beams",
+        "Basement Slab on Grade",
+        "Rocking Walls"
+      ]
+    },
+    {
+      "type": "chain",
+      "tasks": [
+        "Basement Retaining Walls",
+        "Waterproofing & Drainage",
+        "Underground Utilities",
+        "Backfill & Compaction"
+      ],
+      "lag_days": 7
+    },
+    {
+      "type": "serial",
+      "before": {"tasks": ["Rocking Walls", "Backfill & Compaction"]},
+      "after": {"task": "Frame: Columns"}
+    },
+    {
+      "type": "serial",
+      "before": {"tasks": ["Rocking Walls", "Backfill & Compaction"]},
+      "after": {"tasks": ["Mechanical Room Buildout", "Main Electrical & Riser Install"]}
+    },
+    {
+      "type": "chain",
+      "tasks": ["Frame: Columns", "Frame: Beams", "Floor"],
+      "match_by": ["level"]
+    },
+    {
+      "type": "serial",
+      "before": {"task": "Frame: Beams"},
+      "after": {"task": "Roof"},
+      "match_by": ["level"]
+    },
+    {
+      "type": "serial",
+      "before": {"phase": "superstructure"},
+      "after": {"task": "Exterior Wall Install"},
+      "match_by": ["level"]
+    },
+    {
+      "type": "serial",
+      "before": {"task": "Exterior Wall Install"},
+      "after": {"tasks": ["Glass Install + Glazing", "Mesh Install"]},
+      "match_by": ["level"]
+    },
+    {
+      "type": "same_start_after",
+      "after": {"task": "Exterior Wall Install"},
+      "tasks": ["Interior Walls", "MEP Rough-In"],
+      "match_by": ["level"]
+    },
+    {
+      "type": "serial",
+      "before": {"tasks": ["Interior Walls", "MEP Rough-In"]},
+      "after": {"task": "Ceiling Installation"},
+      "match_by": ["room"]
+    },
+    {
+      "type": "serial",
+      "before": {
+        "tasks": [
+          "Ceiling Installation",
+          "Glass Install + Glazing",
+          "Mesh Install",
+          "Mechanical Room Buildout",
+          "Main Electrical & Riser Install"
+        ]
+      },
+      "after": {"task": "MEP Start-Up"}
+    },
+    {
+      "type": "chain",
+      "tasks": [
+        "MEP Start-Up",
+        "TAB",
+        "Integrated Systems Testing",
+        "Final Inspections",
+        "Hurricane Contingency Buffer"
+      ]
+    }
+  ]
+}
