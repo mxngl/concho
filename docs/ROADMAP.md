@@ -13,6 +13,7 @@
 
 | Date | Update | Tasks |
 |---|---|---|
+| 2026-09-26 | **P1.7 PR opened:** [concho #9](https://github.com/mxngl/concho/pull/9). Schedule engines from IPD_Challenge `989a6b7` in `engines/schedule/{core,adapters,viewers}` (logic unchanged, paths → CLI args, `concho-schedule` with 14 steps, extra `schedule` with pandas 2.3.3 pinned). Pipeline diagram/table, findings and Island assumptions in `engines/schedule/README.md`. Equivalence vs. the original scripts on all outputs + AST diff (skip without `IPD_CHALLENGE_DIR`), CI smoke test on invented data. §1 checksums: Macro_Schedule, Takt_Schedule (`--rooms-per-zone 2`), central BIM model reproduced; committed Micro_Schedule.csv is stale (not reproducible by the original code either). Findings for 3B: takt-zone polygons drop their last corner (901 of 3,971 elements), delivery windows need Manufacton outputs, Manufacton orders fail on 989a6b7 data. | P1.7 ✅ |
 | 2026-09-26 | Roadmap created; this page shared with Ash | – |
 | 2026-09-26 | **Repo created: [`mxngl/concho`](https://github.com/mxngl/concho)** (public, empty, default branch `main`). Ash invited as collaborator. | D3 ✅, P1.1 🟡 |
 | 2026-09-26 | **Concho webhook secured:** header auth enabled on the n8n webhook (unauthenticated POST → 403, with token → 200); Discord bot on the VPS sends the token from its `.env`; end-to-end test in `#askbim` answered correctly ($16,065,644.29). Telegram nodes removed from the live workflow. Open: remove the old GitHub raw token from the `get_stv_dashboard` URL. | P0.2 🟡 |
@@ -243,7 +244,7 @@ Taken from `main` at AutoTVD `41e9e8c` (after the P0.3 rewrite: **`4201147`**, s
 - [x] ✅ **P1.5 [CC] Migrate the n8n workflow as a reference.** *(done 2026-09-26: concho #5; scrubbed export + README, Discord-ID check for `agent/` in `check_forbidden.py`)* Export "Island AI Agent" (read-only via n8n MCP `get_workflow_details`) to `agent/workflows/legacy/island-ai-agent.json`.
   - **Scrub first:** webhook path, the GHSAT token, and Discord guild and channel IDs → placeholders.
   - AC: the file contains no secrets or IDs (add a grep check to CI).
-- [ ] **P1.7 [CC] Migrate the schedule engines** from `IPD_Challenge/src/Planning_engine` (ALICE_BIM_mapper, Micro_Schedule_Generator, Prefab_BIM_Mapper, Fuzor_Mapper, Logistics_Analysis), `src/Takt_engine` and `src/takt_zone_calibrator.py` into `engines/schedule/`, **without** generated outputs (the 16 MB Fuzor XML, the 2.7 MB micro schedule, HTML viewers, FBX).
+- [x] ✅ **P1.7 [CC] Migrate the schedule engines** *(done 2026-09-26: [concho #9](https://github.com/mxngl/concho/pull/9); 14 steps via `concho-schedule`, equivalence vs. IPD `989a6b7` on all outputs)* from `IPD_Challenge/src/Planning_engine` (ALICE_BIM_mapper, Micro_Schedule_Generator, Prefab_BIM_Mapper, Fuzor_Mapper, Logistics_Analysis), `src/Takt_engine` and `src/takt_zone_calibrator.py` into `engines/schedule/`, **without** generated outputs (the 16 MB Fuzor XML, the 2.7 MB micro schedule, HTML viewers, FBX).
   - Replace path constants that walk up the repo (`PROJECT_DIR = ...parents[2]`) with explicit input/output arguments.
   - AC: each generator runs from the package via a CLI with explicit paths.
 - [ ] **P1.6 [HUMAN] Archive the old repos** after Phase 2 passes. Add a README banner pointing to the new repo.
