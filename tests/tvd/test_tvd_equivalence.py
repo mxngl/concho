@@ -8,9 +8,10 @@ copied into this repo: ``cost_data.csv`` is RSMeans-derived.
 Both implementations run in CI mode on ``AUTOTVD_DIR/qto/*.csv`` +
 ``AUTOTVD_DIR/cost_data.csv`` inside ``tmp_path``; the new engine reads the project values
 from the Island example config (``engines/common/examples/island_2026.project_config.json``).
-Compared: the results JSON (all fields except run timestamps, run label, input paths and
-the project/team names added in P3.2), the history snapshot (except its date) and the
-dashboard HTML (with timestamps and data source masked).
+Compared: the results JSON (all fields except run timestamps, run label, input paths, the
+project/team names added in P3.2 and the ``target_consistency`` block added in P3.3), the
+history snapshot (except its date) and the dashboard HTML (with timestamps and data source
+masked).
 
 Intended differences since P3.2, normalised/masked here:
 
@@ -90,6 +91,8 @@ def _canonical(obj):
 
 def _strip_meta(payload: dict) -> dict:
     payload = json.loads(json.dumps(payload))
+    # P3.3: new block, not in the original; tested in test_island_target_consistency.
+    payload.pop("target_consistency", None)
     for key in ("generated_at", "date", "label", "data_source", "project_name", "team_name"):
         payload["meta"].pop(key, None)
     return payload
@@ -168,3 +171,28 @@ def test_island_golden_numbers(outputs, autotvd_dir):
     assert new["financials"]["grand_total"] == 16_065_644.29
     assert new["meta"]["unmapped_count"] == 1693
     assert new["meta"]["dnc_count"] == 75
+
+
+# P3.3: A-H 16,705,852 vs. 16,700,000 (+5,852, within 0.1 %); Equipment Rental on top.
+ISLAND_TARGET_CONSISTENCY = {
+    "total_target": 16_700_000,
+    "sum_a_to_h": 16_705_852,
+    "sum_carved_out": 0,
+    "sum_on_top": 400_000,
+    "gap": 5_852,
+    "gap_pct": 0.035,
+    "gap_incl_on_top": 405_852,
+    "tolerance": 0.001,
+    "tolerance_amount": 16_700,
+    "status": "within_tolerance",
+    "override_reason": None,
+    "carved_out_clusters": {},
+    "on_top_clusters": {"Equipment Rental": 400_000},
+}
+
+
+def test_island_target_consistency(outputs):
+    new = _load(outputs["new"] / "results" / "latest.json")
+    assert new["target_consistency"] == ISLAND_TARGET_CONSISTENCY
+    orig = _load(outputs["orig"] / "results" / "latest.json")
+    assert "target_consistency" not in orig

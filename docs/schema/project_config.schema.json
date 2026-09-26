@@ -856,6 +856,20 @@
           "minimum": 0,
           "title": "Target Sum Tolerance",
           "type": "number"
+        },
+        "target_sum_override": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Accept cluster targets outside `target_sum_tolerance`: the reason why the mismatch is intended (e.g. 'targets from an older worksheet, reconciled in week 6'). null (default) = a mismatch outside the tolerance is an error. The TVD engine reports the gap with status `override`.",
+          "title": "Target Sum Override"
         }
       },
       "required": [

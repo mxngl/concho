@@ -186,8 +186,10 @@ class STVReferenceData:
                 continue
             fuels[str(fuel_type)] = FuelRecord(
                 fuel_type=str(fuel_type),
-                water=float(ws_fuels[f"F{row}"].value or 0.0),
-                ozone=float(ws_fuels[f"G{row}"].value or 0.0),
+                # Course columns: F = MJ, G = H2O, H = ODP (P3.10: water/ODP were read
+                # one column off, from F and G).
+                water=float(ws_fuels[f"G{row}"].value or 0.0),
+                ozone=float(ws_fuels[f"H{row}"].value or 0.0),
                 mj_per_fu=float(ws_fuels[f"I{row}"].value or 0.0),
                 carbon_per_mj=float(ws_fuels[f"J{row}"].value or 0.0),
             )

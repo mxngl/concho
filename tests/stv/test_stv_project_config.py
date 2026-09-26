@@ -72,11 +72,19 @@ def test_river_settings():
         "onsite_renewable_kwh": 20000,
         "natural_gas_m3": 500,
         "water_use": {
-            "toilet_gpf": 1.28, "urinal_gpf": 0.0, "wc_sink_gpm": 0.5, "lab_sink_gpm": 0,
+            "toilet_gpf": 1.28, "urinal_gpf": None, "wc_sink_gpm": 0.5, "lab_sink_gpm": 0,
             "kitchen_sink_gpm": 1.5, "shower_gpm": 1.8, "landscaping_gal": 10000,
             "rainwater_collection_gal": 5000,
         },
     }
+
+
+@pytest.mark.parametrize("urinal", [None, 0.0, 0.125])
+def test_urinal_passed_as_is(urinal):
+    """Decision D11: null stays None (toilet factor 1.0), 0 stays 0 (factor 0.75)."""
+    data = json.loads(RIVER_CONFIG.read_text(encoding="utf-8"))["stv"]["use_phase"]
+    data["water"]["urinal_gpf"] = urinal
+    assert use_phase_payload(UsePhase.model_validate(data))["water_use"]["urinal_gpf"] == urinal
 
 
 def test_cogeneration_is_mapped():

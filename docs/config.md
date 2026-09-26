@@ -32,7 +32,7 @@ or `validate_config_file(path)` (returns errors and warnings).
 |---|---|
 | Unknown or missing required field | error |
 | `tvd`: exactly one of `total_target` or `budget` + `target` | error |
-| `tvd.cluster_split` (`basis: amount`): course clusters A–H + `carved_out` custom clusters sum to the total target within `target_sum_tolerance` (fraction of the total) | error outside, warning inside the tolerance if not exact |
+| `tvd.cluster_split` (`basis: amount`): course clusters A–H + `carved_out` custom clusters sum to the total target within `target_sum_tolerance` (fraction of the total) | error outside (warning if `target_sum_override` is set), warning inside the tolerance if not exact |
 | `tvd.custom_clusters` with `mode: on_top`: listed with the gap above the total | warning |
 | `tvd.target` above the course budget formula result | warning |
 | Shares sum to 1.0: `cluster_split` with `basis: pct`, every `reference_columns[].shares`, `cogeneration.splits` | error |
@@ -52,9 +52,42 @@ All paths in the file are relative to the config file.
 
 | Engine | Fields read | Notes |
 |---|---|---|
-| TVD (`concho-tvd --config`) | `project.name`, `project.team_name`, `project.gross_sf`, `tvd.total_target` / `tvd.target`, `tvd.cluster_split` (`explicit`), `tvd.custom_clusters`, `tvd.target_sum_tolerance`, `files.cost_db` (default for `--cost`) | Cluster targets: course clusters A–H under their canonical names (`Special Construction`), then the custom clusters. `derive_from_references` is not implemented yet (P3.5). The total target excludes `on_top` custom clusters. Results JSON: `meta.project_name`, `meta.team_name`. |
+| TVD (`concho-tvd --config`) | `project.name`, `project.team_name`, `project.gross_sf`, `tvd.total_target` / `tvd.target`, `tvd.cluster_split` (`explicit`), `tvd.custom_clusters`, `tvd.target_sum_tolerance`, `tvd.target_sum_override`, `files.cost_db` (default for `--cost`) | Cluster targets: course clusters A–H under their canonical names (`Special Construction`), then the custom clusters. `derive_from_references` is not implemented yet (P3.5). The total target excludes `on_top` custom clusters. Target check and `target_consistency` block: see below. Results JSON: `meta.project_name`, `meta.team_name`. |
 | TVD dashboard | team name, GSF, targets (from the run) | No project strings in the renderer. |
-| STV (`concho-stv --config`) | `stv.course_team` (`--team` overrides), `stv.lifetime_years`, `stv.use_phase`, `stv.custom_materials_file` / `files.custom_materials` | `lifetime_years` ≠ 50 is used but reported as a warning (the course formula uses 50). `not_modeled: true` → use phase 0 (warning). `cogeneration: null` and `urinal_gpf: null` → 0 (the explicit-0 urinal case is P3.10). Custom materials are loaded and validated only; the calculation uses them from P3.7. `--no-use-phase` skips the use phase (for per-trade runs combined later). |
+| STV (`concho-stv --config`) | `stv.course_team` (`--team` overrides), `stv.lifetime_years`, `stv.use_phase`, `stv.custom_materials_file` / `files.custom_materials` | `lifetime_years` ≠ 50 is used but reported as a warning (the course formula uses 50). `not_modeled: true` → use phase 0 (warning). `cogeneration: null` = no cogeneration. `urinal_gpf: null` = no urinals (toilet factor 1.0), an explicit `0` = course behaviour (factor 0.75), decision D11 (engine since P3.10). Custom materials are loaded and validated only; the calculation uses them from P3.7. `--no-use-phase` skips the use phase (for per-trade runs combined later). |
+
+### Cluster target consistency (P3.3)
+
+The TVD engine (not only `concho config validate`) checks the targets before it computes
+anything:
+
+- **gap** = (course clusters A–H + `carved_out` custom clusters) − total target.
+  `on_top` custom clusters are outside the total target: they are not in the gap and are
+  reported separately (`sum_on_top`, `gap_incl_on_top`).
+- `|gap| ≤ target_sum_tolerance × total target` → the run continues.
+- Outside the tolerance the run **fails** with the gap in currency and % of the total,
+  unless `tvd.target_sum_override` is set. The override is a **reason string** (why the
+  mismatch is accepted, e.g. `"targets from the week-4 worksheet, reconciled later"`); the
+  run then continues with status `override`, and `concho config validate` reports a warning
+  instead of an error. Leave it unset (`null`) otherwise.
+
+The results JSON gets a `target_consistency` block (amounts in project currency):
+
+| Key | Meaning |
+|---|---|
+| `total_target` | `tvd.total_target` or `tvd.target` |
+| `sum_a_to_h` | course clusters A–H |
+| `sum_carved_out`, `carved_out_clusters` | custom clusters inside the total |
+| `sum_on_top`, `on_top_clusters` | custom clusters on top of the total |
+| `gap`, `gap_pct` | A–H + carved_out − total (currency, % of the total) |
+| `gap_incl_on_top` | all cluster targets − total |
+| `tolerance`, `tolerance_amount` | `target_sum_tolerance` as fraction and amount |
+| `status` | `ok` (gap < 0.005), `within_tolerance`, `override` (outside, override set), `failed` (outside, no override; the engine stops, so only `ProjectTargets.target_consistency()` returns it) |
+| `override_reason` | `tvd.target_sum_override` or `null` |
+
+Island 2026 example: A–H 16,705,852 vs. total 16,700,000 → gap +5,852 (+0.035 %, within the
+0.1 % tolerance of 16,700), Equipment Rental 400,000 on top → `gap_incl_on_top` 405,852,
+status `within_tolerance`; no override needed.
 
 The TVD quantity rule tables (takeoff clusters A–C, quantity mirrors, keyword split, toilet
 codes, excluded categories) are engine defaults in `engines/tvd/rules.py` until they move to
@@ -142,6 +175,7 @@ Generated from `docs/schema/project_config.schema.json`; do not edit by hand.
 | `tvd.custom_clusters[].mode` | `"carved_out"` \| `"on_top"` | yes |  | `carved_out`: part of the total target (course clusters get the rest). `on_top`: added on top of the total target (reported as a warning). |
 | `tvd.custom_clusters[].is_course_data` | `false` |  | `false` | Always false: custom clusters are team data. |
 | `tvd.target_sum_tolerance` | number |  | `0.001` | Allowed difference between the sum of the cluster targets and the total target, as a fraction of the total target (0.001 = 0.1 %). (≥ 0, < 1) |
+| `tvd.target_sum_override` | string \| null |  | `null` | Accept cluster targets outside `target_sum_tolerance`: the reason why the mismatch is intended (e.g. 'targets from an older worksheet, reconciled in week 6'). null (default) = a mismatch outside the tolerance is an error. The TVD engine reports the gap with status `override`. |
 | `stv` | object | yes |  | Sustainable Target Value (life-cycle carbon, energy, water). |
 | `stv.course_team` | `"Pacific"` \| `"Atlantic"` \| `"Ridge"` \| `"Island"` \| `"River"` \| `"Central"` \| `"Express"` | yes |  | Team row of the course STV workbook used for the targets. |
 | `stv.lifetime_years` | integer |  | `50` | Building lifetime. (> 0, ≤ 200) |

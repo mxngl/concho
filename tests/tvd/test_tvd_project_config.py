@@ -86,7 +86,7 @@ def test_river_targets_pct_split_with_carved_out(river_config):
 def test_targets_outside_tolerance_fail(island_config):
     bad = island_config.model_copy(deep=True)
     bad.tvd.target_sum_tolerance = 0.0001  # 5,852 > 1,670
-    with pytest.raises(ValueError, match="above the total target"):
+    with pytest.raises(ValueError, match=r"gap \+5,852.00 \(\+0.0350 %\)"):
         ProjectTargets.from_config(bad).check()
 
 

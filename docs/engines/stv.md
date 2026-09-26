@@ -23,9 +23,15 @@ Formulas (`engine.py`):
 - **Embodied:** per construction item, amount × LCA factor × unit multiplier, split into
   materials, transport and construction.
 - **Use phase:** annual grid electricity, on-site renewables, cogeneration, natural gas and
-  water (900 occupants, 250 days/year; rainwater offset capped at total water use), × 50 years.
-- Known divergence from the workbook: the course applies the 0.75 toilet factor whenever the
-  urinal cell is non-blank (even at 0); the engine only when `urinal_gpf > 0` (P2.4).
+  water (900 occupants, 250 days/year), × 50 years. The rainwater credit is capped at toilet
+  + urinal + landscaping water, as in the course (`Use Phase` H40; since P3.10, decision
+  D12; before it was capped at the total water use).
+- Toilet factor (decision D11, since P3.10): 0.75 whenever a urinal flow rate is given,
+  including an explicit `0` (course: non-blank urinal cell); 1.0 when `urinal_gpf` is
+  `null`/missing (course: blank cell). Before P3.10 the engine applied 0.75 only when
+  `urinal_gpf > 0`. `--stv-workbook-input` reads a blank urinal cell as `null`.
+- Cogeneration water and ODP come from `Cogen Data` columns G (H₂O) and H (ODP), divided by
+  I (MJ/kg), as in the course (P3.10; before: F and G, one column off).
 
 Course logic lives in `engine.py`, `reference.py` and `models.py`. The Revit importers
 (`revit_architecture.py`, `revit_structural.py`, `revit_mep.py`, `central_bim.py`) hold the

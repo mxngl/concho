@@ -89,7 +89,7 @@ def _load_use_phase(ws) -> dict[str, Any]:
         },
         "water_use": {
             "toilet_gpf": 0.0,
-            "urinal_gpf": 0.0,
+            "urinal_gpf": None,  # blank cell = no urinals (decision D11)
             "wc_sink_gpm": 0.0,
             "lab_sink_gpm": 0.0,
             "kitchen_sink_gpm": 0.0,
@@ -117,6 +117,10 @@ def _load_use_phase(ws) -> dict[str, Any]:
         target = use_phase
         for key in path[:-1]:
             target = target[key]
+        if path[-1] == "urinal_gpf":
+            # Blank stays None (no urinals); any value, incl. 0, is a urinal (course).
+            target[path[-1]] = None if _clean_text(value) == "" else _to_float(value)
+            continue
         target[path[-1]] = _to_float(value)
 
     return use_phase

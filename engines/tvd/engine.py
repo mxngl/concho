@@ -53,6 +53,7 @@ class TvdRun:
             ts=ts,
             project_name=self.project.project_name,
             team_name=self.project.team_name,
+            target_consistency=self.project.target_consistency(),
         )
 
 
