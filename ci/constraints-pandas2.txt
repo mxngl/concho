@@ -1,0 +1,4 @@
+# P3B.8: the CI job `reference` runs the original IPD_Challenge@989a6b7 scripts next to the
+# migrated ones (tests/schedule/test_schedule_equivalence.py). The original micro schedule
+# fails on pandas 3, so that job installs with `pip install -c ci/constraints-pandas2.txt`.
+pandas==2.3.3

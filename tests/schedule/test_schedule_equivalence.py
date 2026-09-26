@@ -33,6 +33,7 @@ import re
 import shutil
 import subprocess
 import sys
+from importlib.metadata import version
 from pathlib import Path
 
 import pytest
@@ -346,6 +347,25 @@ MIGRATED_DIRS = {
     "room-takt-zones": "rooms", "takt-plan": "takt",
     "takt-viewer": "micro", "spatial-viewer": "viewers",
 }
+
+
+PANDAS2_REASON = (
+    "original IPD scripts need pandas 2; run with pandas 2.3.3 or rely on the CI reference job"
+)
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _original_scripts_need_pandas2() -> None:
+    """P3B.8: the original micro schedule fails on pandas 3 (the migrated one is fixed).
+
+    Skipped locally on pandas 3; with ``CONCHO_REQUIRE_FIXTURES=1`` (CI job ``reference``)
+    it fails instead, so the equivalence is never skipped silently in CI.
+    """
+    if int(version("pandas").split(".")[0]) < 3:
+        return
+    if os.environ.get("CONCHO_REQUIRE_FIXTURES"):
+        pytest.fail(PANDAS2_REASON)
+    pytest.skip(PANDAS2_REASON)
 
 
 @pytest.fixture(scope="module")
