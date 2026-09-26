@@ -90,6 +90,9 @@ def main(argv: list[str] | None = None) -> int:
         project.check()
     except (NotImplementedError, ValueError) as exc:
         parser.error(str(exc))
+    tc = project.target_consistency()
+    print(f"   Target consistency: {tc['status']} (A-H + carved-out vs. total "
+          f"{tc['gap']:+,.2f}, {tc['gap_pct']:+.4f} %; incl. on-top {tc['gap_incl_on_top']:+,.2f})")
 
     # 1–6. Load data, compute line items and cluster summary
     # (run.notes repeat the target warnings of the config validation printed above.)

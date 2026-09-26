@@ -110,6 +110,31 @@ class ProjectTargets:
             return "within_tolerance"
         return "override" if self.target_sum_override else "failed"
 
+    def target_consistency(self) -> dict:
+        """The ``target_consistency`` block of the results JSON (P3.3). Amounts in project
+        currency, rounded to cents; ``gap`` = A-H + carved_out − total target (on-top
+        clusters excluded), ``gap_incl_on_top`` = all cluster targets − total target."""
+        total = self.total_target
+        return {
+            "total_target": round(total, 2),
+            "sum_a_to_h": round(self.course_sum, 2),
+            "sum_carved_out": round(self.carved_out_sum, 2),
+            "sum_on_top": round(self.on_top_sum, 2),
+            "gap": round(self.gap, 2),
+            "gap_pct": round(self.gap / total * 100, 4) if total else 0.0,
+            "gap_incl_on_top": round(self.gap_incl_on_top, 2),
+            "tolerance": self.target_sum_tolerance,
+            "tolerance_amount": round(self.tolerance_amount, 2),
+            "status": self.consistency_status,
+            "override_reason": self.target_sum_override,
+            "carved_out_clusters": {
+                n: round(v, 2) for n, v in self.custom_clusters("carved_out").items()
+            },
+            "on_top_clusters": {
+                n: round(v, 2) for n, v in self.custom_clusters("on_top").items()
+            },
+        }
+
     def _gap_text(self) -> str:
         gap, total = self.gap, self.total_target
         pct = gap / total * 100 if total else 0.0

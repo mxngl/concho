@@ -8,9 +8,10 @@ copied into this repo: ``cost_data.csv`` is RSMeans-derived.
 Both implementations run in CI mode on ``AUTOTVD_DIR/qto/*.csv`` +
 ``AUTOTVD_DIR/cost_data.csv`` inside ``tmp_path``; the new engine reads the project values
 from the Island example config (``engines/common/examples/island_2026.project_config.json``).
-Compared: the results JSON (all fields except run timestamps, run label, input paths and
-the project/team names added in P3.2), the history snapshot (except its date) and the
-dashboard HTML (with timestamps and data source masked).
+Compared: the results JSON (all fields except run timestamps, run label, input paths, the
+project/team names added in P3.2 and the ``target_consistency`` block added in P3.3), the
+history snapshot (except its date) and the dashboard HTML (with timestamps and data source
+masked).
 
 Intended differences since P3.2, normalised/masked here:
 
@@ -90,6 +91,8 @@ def _canonical(obj):
 
 def _strip_meta(payload: dict) -> dict:
     payload = json.loads(json.dumps(payload))
+    # P3.3: new block, not in the original; tested in test_island_target_consistency.
+    payload.pop("target_consistency", None)
     for key in ("generated_at", "date", "label", "data_source", "project_name", "team_name"):
         payload["meta"].pop(key, None)
     return payload

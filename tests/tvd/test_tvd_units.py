@@ -178,7 +178,8 @@ def test_cluster_summary_and_payload(run):
 
     payload = run.results_payload()
     assert set(payload) == {
-        "meta", "financials", "cluster_targets", "cluster_summary", "line_items",
+        "meta", "financials", "cluster_targets", "cluster_summary", "target_consistency",
+        "line_items",
     }
     fin = payload["financials"]
     assert fin["grand_total"] == 307080.67
