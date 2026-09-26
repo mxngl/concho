@@ -370,6 +370,16 @@ is unchanged, and the equivalence test still gets byte-identical `Parts_Import.*
 assemblies), `test_kit_mapping_assemblies_must_be_defined`,
 `test_prefab_assemblies_file_is_validated`.
 
+**Fix 6: the micro schedule works with pandas 3** (`core/micro_schedule.py`,
+`assign_room_takt_ids`). The function writes room ids and numbers (strings such as
+`'1440372'`) row by row into `room_id`, `room_number`, … columns that `read_csv` may have
+parsed as `float64`. pandas 2 silently upcast such a column to `object` on the first write
+(with a FutureWarning); pandas 3 raises `TypeError: Invalid value '1440372' for dtype
+'float64'`. The fix upcasts the five room columns to `object` before the loop, which is what
+pandas 2 did implicitly, so values and output stay the same. Checked on the Island data: all
+15 steps give the golden file unchanged on pandas 2.3.3 and on pandas 3.0.6 (the pandas 2
+FutureWarning is gone).
+
 ## Findings (kept as-is, for Phase 3B)
 
 1. ~~**Takt-zone polygons lose their last corner**~~ — fixed in P3B.8 (fix 1, see
@@ -380,9 +390,7 @@ assemblies), `test_kit_mapping_assemblies_must_be_defined`,
    `manufacton-assemblies` still fails with `Missing part catalog id for
    MEP_ELECTRICAL_FIXTURES_…`, because those committed files come from an older model; in
    the pipeline it runs on the regenerated files and succeeds.)
-4. **pandas 3 breaks the micro schedule** (`TypeError: Invalid value '1440372' for dtype
-   'float64'` in `assign_room_takt_ids`); pandas 2.3.3 emits a FutureWarning there. The
-   `schedule` extra therefore pins pandas 2.3.3.
+4. ~~**pandas 3 breaks the micro schedule**~~ — fixed in P3B.8 (fix 6).
 5. **Dead code**: `takt_zones.save_prefab_mapping()` uses an undefined
    `PREFAB_MAPPING_OUTPUT_PATH` and is never called. `build_prefab_wall_mapping()` in the
    calibrator duplicates `adapters/manufacton/prefab_wall_mapping.py`. In the micro schedule,

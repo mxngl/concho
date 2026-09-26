@@ -80,6 +80,8 @@ P3B8_CHANGED_FUNCTIONS = {
     "adapters/manufacton/kit_import.py": {"load_mapping", "load_dynamic_mapping"},
     # fix 4: run without the Manufacton outputs
     "core/delivery_windows.py": {"load_production_delivery_units"},
+    # fix 6: pandas 3 (upcast the room columns before writing strings into them)
+    "core/micro_schedule.py": {"assign_room_takt_ids"},
     # fix 5: named prefab assemblies from --prefab-assemblies instead of ASSEMBLIES
     "adapters/manufacton/parts_import.py": {"build_parts_import"},
     "adapters/manufacton/assembly_import.py": {"build_assembly_import"},
