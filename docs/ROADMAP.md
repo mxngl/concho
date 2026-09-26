@@ -9,13 +9,19 @@
 
 ## Progress log
 
-**Overall status:** Phase 0 almost done (P0.1 ✅, P0.2 ✅, P0.3 ✅, P0.4 🟡 waiting for Ash's IPD tag; P0.5 decisions open) · Phase 1 started (repo created, still empty).
+**Overall status:** Phase 0 almost done (P0.1–P0.3 ✅, P0.4 🟡 waiting for Ash's IPD tag, P0.5 🟡 decisions partly open) · Phase 1 in progress (P1.1–P1.3 ✅, P1.5 🟡; open: P1.4 Revit add-in, P1.6 archive, P1.7 schedule engines).
 
 | Date | Update | Tasks |
 |---|---|---|
 | 2026-09-26 | Roadmap created; this page shared with Ash | – |
 | 2026-09-26 | **Repo created: [`mxngl/concho`](https://github.com/mxngl/concho)** (public, empty, default branch `main`). Ash invited as collaborator. | D3 ✅, P1.1 🟡 |
 | 2026-09-26 | **Concho webhook secured:** header auth enabled on the n8n webhook (unauthenticated POST → 403, with token → 200); Discord bot on the VPS sends the token from its `.env`; end-to-end test in `#askbim` answered correctly ($16,065,644.29). Telegram nodes removed from the live workflow. Open: remove the old GitHub raw token from the `get_stv_dashboard` URL. | P0.2 🟡 |
+| 2026-09-26 | **P1.3 done** (concho #4 merged). P1.5 prepared: scrubbed export of the live workflow created via n8n MCP (Discord IDs → `$env` placeholders, webhook path replaced, webhookIds removed; passes `check_forbidden.py`), handed to a Claude Code session for committing. | P1.3 ✅, P1.5 🟡 |
+| 2026-09-26 | **P1.2 done** (concho #3 merged). **P1.3 ready to merge:** main merged into the #4 branch (merge commit, no force-push), `pyproject.toml` conflict resolved (both CLIs `concho-stv`/`concho-tvd`), `AUTOTVD_DIR` now resolved to an absolute path. Independently verified: **78/78 tests pass with nothing skipped** (TVD equivalence vs. `island-2026-final` with a relative path + STV course-workbook test). | P1.2 ✅, P1.3 🟡 |
+| 2026-09-26 | **P1.3 PR opened:** [concho #4](https://github.com/mxngl/concho/pull/4), CI green. TVD engine split into `engines/tvd/` + `dashboards/tvd/legacy_render.py` (byte-identical renderer); CLI `concho-tvd` with `--out DIR`; broken remote fetch removed; synthetic fixture only. Equivalence test 4/4 against `island-2026-final` (results JSON, history snapshot, dashboard HTML; grand total 16,065,644.29, unmapped 1693, DNC 75). Independently verified: 62 tests pass with an absolute `AUTOTVD_DIR`; with a **relative** path the equivalence fixtures error (small fix requested). **#3 and #4 conflict in `pyproject.toml`**: merge #3 first, then rebase #4. | P1.3 🟡 |
+| 2026-09-26 | **P1.2 PR opened:** [concho #3](https://github.com/mxngl/concho/pull/3), CI green on 3.11/3.12. STV engine migrated from IPD_Challenge `989a6b7`; calculation modules byte-identical. Workbook path via `--template` / `COURSE_STV_XLSX`; `--output-dir` now required; CLI `concho-stv`. Independently verified: 37 tests pass **incl. the Island target test run against the course workbook** (7,396,873.85 / 155,969,076.59 / 271,387,397.26). Deviations accepted: per-file ruff ignores for the verbatim STV code (41 lint findings, cleanup in Phase 3); CI installs `.[dev,stv]`. The canonical CLI adds `--central-bim-model`, `--stv-workbook-input`, `--architecture-history-dir` over the AutoSTV copy. | P1.2 🟡 |
+| 2026-09-26 | **P1.1 done:** concho #1 merged; session rules added as `CLAUDE.md` (concho #2, merged). `docs/decisions.md` in place (records current status of D1–D10). | P1.1 ✅, P0.5 🟡 |
+| 2026-09-26 | **P1.1 PR opened:** [concho #1](https://github.com/mxngl/concho/pull/1). Skeleton (engines/{common,tvd,stv,schedule}, revit-addin, data-api, agent, dashboards, template, docs, tests), `pyproject.toml`, CI (ruff + pytest on 3.11/3.12 + forbidden-content check), `docs/ROADMAP.md`, `docs/decisions.md` (covers P0.5). Independently verified: ruff clean, 21 tests pass, the check catches a real GHSAT token. Deviations (all accepted): token/path patterns match real values only so the roadmap text passes; case-insensitive file checks incl. `*.vtt.*`; extra ignore entries for build/test caches. | P1.1 🟡, P0.5 🟡 |
 | 2026-09-26 | **Decisions updated:** D8 working assumption = ALICE/Fuzor/Manufacton available in 2027; D2 deferred to Phase 5; D4 = own code only, LICENSE added once Renate confirms; D5 handled by runtime loading of course workbooks. **Phases 1–4 unblocked.** | D2 ⏸, D4/D5/D8 🟡 |
 | 2026-09-26 | **P0.3 done:** AutoTVD #6 and AutoSTV #1 merged, Actions green. Ash has no local AutoTVD clone, so nothing to re-clone there. | P0.3 ✅ |
 | 2026-09-26 | **P0.3 cleanup PRs opened:** [AutoTVD #6](https://github.com/mxngl/AutoTVD/pull/6) (only relative paths in `data_source`; 9 result JSONs + dashboard footer cleaned) and [AutoSTV #1](https://github.com/mxngl/AutoSTV/pull/1) (removes `.claude/settings.local.json`, adds `.gitignore`). The AutoSTV settings file stays in history (local paths only, not rewritten; AutoSTV gets archived in P1.6). Waiting for merge + green Actions run. | P0.3 🟡 |
@@ -200,13 +206,13 @@ Taken from `main` at AutoTVD `41e9e8c` (after the P0.3 rewrite: **`4201147`**, s
   - AC: `git log --all -- '*Transcript*'` is empty, and there are no `C:\Users` paths in tracked files.
 - [ ] 🟡 **P0.4 [CC → HUMAN pushes] Tag a reference state.** *(2026-09-26: checksums recorded in §1; tags pushed for AutoTVD and AutoSTV; **waiting for Ash to tag IPD_Challenge** at `989a6b7`)* Tag all three repos `island-2026-final` before any change. Copy the reference inputs and outputs listed in §1 into a private fixture location (see P2.1).
   - AC: the tags exist, and the fixture files are checksummed.
-- [ ] **P0.5 [HUMAN] Settle the decisions D1–D10** in §2 and record the answers in `docs/decisions.md` (ADR style).
+- [ ] 🟡 **P0.5 [HUMAN] Settle the decisions D1–D10** in §2 and record the answers in `docs/decisions.md` (ADR style). *(file exists since concho #1; D1/D3 decided, D2 deferred, D4/D5/D8 working assumptions, D6/D7/D9/D10 open)*
 
 ---
 
 ## Phase 1: Consolidate into one repository
 
-- [ ] 🟡 **P1.1 [CC] Create the monorepo skeleton** in `mxngl/concho` (repo exists, empty as of 2026-09-26):
+- [x] ✅ **P1.1 [CC] Create the monorepo skeleton** in `mxngl/concho` *(done 2026-09-26: concho #1 + CLAUDE.md in #2)*:
   ```
   concho/
     engines/
@@ -225,13 +231,13 @@ Taken from `main` at AutoTVD `41e9e8c` (after the P0.3 rewrite: **`4201147`**, s
   - `pyproject.toml` (Python 3.11+), pinned dependencies, `ruff`, `pytest`, and a CI workflow running lint + tests.
   - `.gitignore` covering `bin/`, `obj/`, `__pycache__/`, `.claude/`, `.env`, `*.fbx`, `exports/**/raw/`.
   - AC: `pip install -e .` works and CI is green on an empty test.
-- [ ] **P1.2 [CC] Migrate the STV engine** from `IPD_Challenge/src/STV_Engine`. It is more complete than the AutoSTV copy, which is missing `central_bim.py` and `workbook_inputs.py` and has a different `cli.py`.
+- [x] ✅ **P1.2 [CC] Migrate the STV engine** *(done 2026-09-26: concho #3 merged; course-workbook target test passes; the "identical output on the fixture" check follows in P2.2)* from `IPD_Challenge/src/STV_Engine`. It is more complete than the AutoSTV copy, which is missing `central_bim.py` and `workbook_inputs.py` and has a different `cli.py`.
   - Diff both `cli.py` files and document the differences in the PR.
   - AC: the engine runs from the new package with identical output on the fixture (after P2.2).
-- [ ] **P1.3 [CC] Migrate the TVD engine** from AutoTVD. Split out the computation (reading QTO + cost DB → results dict) from the HTML rendering; keep the rendering temporarily as `dashboards/tvd/legacy_render.py`.
+- [x] ✅ **P1.3 [CC] Migrate the TVD engine** *(done 2026-09-26: concho #4 merged; equivalence 4/4 vs. `island-2026-final`, 78/78 tests verified)* from AutoTVD. Split out the computation (reading QTO + cost DB → results dict) from the HTML rendering; keep the rendering temporarily as `dashboards/tvd/legacy_render.py`.
   - AC: identical `results/latest.json` on the fixture (after P2.2).
 - [ ] **P1.4 [CC] Migrate the Revit add-in source** (`QTO/*.cs`, `.csproj`, `.addin`) without build artifacts.
-- [ ] **P1.5 [CC] Migrate the n8n workflow as a reference.** Export "Island AI Agent" (read-only via n8n MCP `get_workflow_details`) to `agent/workflows/legacy/island-ai-agent.json`.
+- [ ] 🟡 **P1.5 [CC] Migrate the n8n workflow as a reference.** *(scrubbed export ready, commit via Claude Code session pending)* Export "Island AI Agent" (read-only via n8n MCP `get_workflow_details`) to `agent/workflows/legacy/island-ai-agent.json`.
   - **Scrub first:** webhook path, the GHSAT token, and Discord guild and channel IDs → placeholders.
   - AC: the file contains no secrets or IDs (add a grep check to CI).
 - [ ] **P1.7 [CC] Migrate the schedule engines** from `IPD_Challenge/src/Planning_engine` (ALICE_BIM_mapper, Micro_Schedule_Generator, Prefab_BIM_Mapper, Fuzor_Mapper, Logistics_Analysis), `src/Takt_engine` and `src/takt_zone_calibrator.py` into `engines/schedule/`, **without** generated outputs (the 16 MB Fuzor XML, the 2.7 MB micro schedule, HTML viewers, FBX).
@@ -282,7 +288,7 @@ Taken from `main` at AutoTVD `41e9e8c` (after the P0.3 rewrite: **`4201147`**, s
   - `tvd`: `budget` (grant, grant_year, construction_year, inflation, roi) **or** an explicit `total_target`; `cluster_split` (explicit % or `derive_from_references` with the reference columns and `owner_ratings` + `reallocation_pct`, mirroring the course sheets); optional `custom_clusters` (flagged non-course)
   - `agent`: language defaults, model names, discord channel mapping (by env var name, not value)
   - AC: the schema validates the Island example; a clear error on any missing required field.
-- [ ] **P3.2 [CC] Remove every hardcoded project value.**
+- [ ] **P3.2 [CC] Remove every hardcoded project value.** Also remove the temporary per-file ruff ignores for `engines/stv/*.py` (added in P1.2 to keep the migrated code verbatim) and fix the lint findings.
   - `TOTAL_TARGET`, `CLUSTER_TARGETS`, `GROSS_SF`, `grandTotal / 30000` in JS, all "Island Team 2026" strings (HTML, PDF, image export).
   - Fix `GITHUB_REPO_RAW` or remove it.
   - Handle "Special Contruction" via a canonical cluster enum (A–H per the course) + display names.
