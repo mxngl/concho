@@ -8,7 +8,9 @@ that checkout is copied into this repo.
 The original scripts run, in pipeline order, inside a temporary copy of the checkout (they
 write next to themselves). The migrated steps run via ``python -m engines.schedule <step>``
 on the same inputs: raw inputs are read from ``IPD_CHALLENGE_DIR``, intermediate files from
-the previous migrated step. Where the original read a file that is committed in the checkout
+the *original* run (P3B.8: each step is compared in isolation, so an intended fix only
+changes the outputs of the step it fixes; the chained migrated run is covered by
+``test_schedule_golden.py``). Where the original read a file that is committed in the checkout
 but not produced earlier in the chain (``takt_zones.json``, ``room_takt_zones.csv``, the
 takt productivity rates, the previous ``Revit_Assembly_Id_Map.csv``, the Manufacton order
 workbooks), the migrated step gets the committed file too.
@@ -141,28 +143,45 @@ def _run(args: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
     )
 
 
-def _migrated_args(ipd: Path, new: Path) -> dict[str, list[str]]:
-    """CLI arguments of every migrated step, fed like the original run in the checkout."""
+def _migrated_args(ipd: Path, new: Path, inputs_from: Path | None = None) -> dict[str, list[str]]:
+    """CLI arguments of every migrated step, fed like the original run in the checkout.
+
+    By default each step reads the outputs of the previous *migrated* step (a chained run,
+    used by the golden test). With ``inputs_from`` (the original run's checkout copy), every
+    step reads the intermediate files of the *original* run instead, so each step is
+    compared in isolation and an intended change (P3B.8) only shows in its own outputs.
+    Outputs always go to ``new``.
+    """
     alice, micro, prefab, fuzor = new / "alice", new / "micro", new / "prefab", new / "fuzor"
     zones = new / "takt_zones"
+    if inputs_from is not None:
+        alice, micro, prefab, fuzor = (
+            inputs_from / ALICE_OUT, inputs_from / MICRO_OUT, inputs_from / PREFAB_OUT,
+            inputs_from / FUZOR_OUT,
+        )
+        zones = inputs_from / ZONES_OUT
+    out = {
+        "zones": new / "takt_zones", "alice": new / "alice", "prefab": new / "prefab",
+        "micro": new / "micro", "fuzor": new / "fuzor",
+    }
     committed_prefab = ipd / PREFAB_OUT
     return {
         "takt-zones": [
             "--schedules-dir", str(ipd / "revit_schedules" / "Current"),
             "--takt-zones", str(ipd / ZONES_OUT / "takt_zones.json"),
-            "--out-dir", str(zones),
+            "--out-dir", str(out["zones"]),
         ],
         "llm-context": [
             "--central-bim-with-takt", str(zones / "central_bim_model_with_takt.csv"),
-            "--out-dir", str(zones),
+            "--out-dir", str(out["zones"]),
         ],
         "alice-inputs": [
             "--workbook", str(ipd / PE / "ALICE_BIM_mapper" / "inputs" / "ALICE_macro.xlsx"),
-            "--out-dir", str(alice),
+            "--out-dir", str(out["alice"]),
         ],
         "prefab-walls": [
             "--central-bim-with-takt", str(zones / "central_bim_model_with_takt.csv"),
-            "--out-dir", str(prefab),
+            "--out-dir", str(out["prefab"]),
         ],
         "micro-schedule": [
             "--macro-schedule", str(alice / "Macro_Schedule.csv"),
@@ -178,26 +197,26 @@ def _migrated_args(ipd: Path, new: Path) -> dict[str, list[str]]:
                 ipd / PE / "Micro_Schedule_Generator" / "inputs" / "micro_schedule_rules.json"
             ),
             "--room-boundaries", str(_room_boundaries(ipd)),
-            "--out-dir", str(micro),
+            "--out-dir", str(out["micro"]),
         ],
         "alice-p6-xml": [
             "--micro-schedule", str(micro / "Micro_Schedule.csv"),
             "--workbook", str(ipd / PE / "ALICE_BIM_mapper" / "inputs" / "ALICE_macro.xlsx"),
-            "--out-dir", str(alice),
+            "--out-dir", str(out["alice"]),
         ],
         "fuzor-xml": [
             "--micro-schedule", str(micro / "Micro_Schedule.csv"),
             "--tasks", str(alice / "Tasks.csv"),
             "--crew", str(alice / "Crew.csv"),
             "--equipment", str(alice / "Equipment.csv"),
-            "--out-dir", str(fuzor),
+            "--out-dir", str(out["fuzor"]),
         ],
         "manufacton-parts": [
             "--template", str(ipd / PE / "Prefab_BIM_Mapper" / "inputs" / "Parts Import.xlsx"),
             "--central-bim-with-takt", str(zones / "central_bim_model_with_takt.csv"),
             "--micro-schedule", str(micro / "Micro_Schedule.csv"),
             "--assembly-id-map", str(committed_prefab / "Revit_Assembly_Id_Map.csv"),
-            "--out-dir", str(prefab),
+            "--out-dir", str(out["prefab"]),
         ],
         "manufacton-assemblies": [
             "--template",
@@ -207,7 +226,7 @@ def _migrated_args(ipd: Path, new: Path) -> dict[str, list[str]]:
             "--micro-schedule", str(micro / "Micro_Schedule.csv"),
             "--central-bim-with-takt", str(zones / "central_bim_model_with_takt.csv"),
             "--build-code-map", str(fuzor / "Revit_4D_Build_Code_Map.csv"),
-            "--out-dir", str(prefab),
+            "--out-dir", str(out["prefab"]),
         ],
         "manufacton-orders": [
             "--order-template",
@@ -224,7 +243,7 @@ def _migrated_args(ipd: Path, new: Path) -> dict[str, list[str]]:
             "--build-code-map", str(fuzor / "Revit_4D_Build_Code_Map.csv"),
             "--micro-schedule", str(micro / "Micro_Schedule.csv"),
             "--llm-context", str(zones / "central_bim_model_llm_context.csv"),
-            "--out-dir", str(prefab),
+            "--out-dir", str(out["prefab"]),
         ],
         # manufacton-orders fails on this data (see module docstring), so the original
         # delivery analysis read the committed Manufacton workbooks and maps.
@@ -252,7 +271,7 @@ def _migrated_args(ipd: Path, new: Path) -> dict[str, list[str]]:
             "--micro-schedule", str(micro / "Micro_Schedule.csv"),
             "--alice-workbook",
             str(ipd / PE / "ALICE_BIM_mapper" / "inputs" / "ALICE_macro.xlsx"),
-            "--out-dir", str(micro),
+            "--out-dir", str(out["micro"]),
         ],
         "spatial-viewer": [
             "--micro-schedule", str(micro / "Micro_Schedule.csv"),
@@ -305,7 +324,7 @@ def runs(
     results: dict[str, dict[str, subprocess.CompletedProcess[str]]] = {"orig": {}, "new": {}}
     for step, script in ORIGINAL_SCRIPTS.items():
         results["orig"][step] = _run(script, cwd=orig)
-    for step, args in _migrated_args(ipd_challenge_dir, new).items():
+    for step, args in _migrated_args(ipd_challenge_dir, new, inputs_from=orig).items():
         results["new"][step] = _run(["-m", "engines.schedule", step, *args], cwd=base)
     return {"orig": orig, "new": new, "ipd": ipd_challenge_dir, "results": results}
 
