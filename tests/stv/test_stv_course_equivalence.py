@@ -20,7 +20,8 @@ cells (see ``test_embodied_odp_from_supplied_workbook_differs``).
 
 Known differences between the engine and the course (engine left unchanged, see the
 ``test_*_differs`` tests): the toilet factor with a urinal cell of 0, the rainwater cap,
-the cogeneration water/ODP columns, and the stale cached LCA component values.
+and the stale cached LCA component values. The cogeneration water/ODP columns are fixed
+since P3.10 (``test_cogen_matches_course``).
 """
 
 from __future__ import annotations
@@ -385,22 +386,31 @@ def test_targets_match_course(case, engine, course):
     assert _vector(got.targets)[:3] == pytest.approx(course[case.id]["targets"], rel=REL)
 
 
-def _use_phase_metrics(case: Case) -> tuple[str, ...]:
-    # The cogeneration water/ODP columns differ (test_cogen_water_odp_differs).
-    if case.use_phase.get("cogeneration", {}).get("fuel_type"):
-        return ("carbon", "energy")
-    return METRICS
-
-
 @pytest.mark.parametrize("case", CASES, ids=lambda c: c.id)
 def test_use_phase_matches_course(case, engine, course):
+    # All four metrics, incl. cogeneration water/ODP (fixed in P3.10).
     got = engine.calculate(case.engine_inputs())
-    expected = dict(zip(METRICS, course[case.id]["use_phase"], strict=True))
-    actual = dict(zip(METRICS, _vector(got.breakdown.use_phase), strict=True))
-    keys = _use_phase_metrics(case)
-    exp, act = tuple(expected[k] for k in keys), tuple(actual[k] for k in keys)
-    print(f"{case.id} use phase {keys} max rel err {_max_rel_err(exp, act):.3e}")
-    assert act == pytest.approx(exp, rel=REL)
+    expected = course[case.id]["use_phase"]
+    actual = _vector(got.breakdown.use_phase)
+    print(f"{case.id} use phase max rel err {_max_rel_err(expected, actual):.3e}")
+    assert actual == pytest.approx(expected, rel=REL)
+
+
+def test_cogen_matches_course(engine, course):
+    """P3.10 item 1: course cogeneration water/ODP use 'Cogen Data' columns G (H2O) and H
+    (ODP) divided by I (MJ/kg); the engine read F and G before. Cogeneration only, so the
+    comparison isolates it; all four metrics match now.
+    """
+    got = engine.calculate(COGEN_ONLY.engine_inputs())
+    course_use = course[COGEN_ONLY.id]["use_phase"]
+    engine_use = _vector(got.breakdown.use_phase)
+
+    print(
+        f"cogen only: use-phase water course {course_use[2]:.6g} vs engine {engine_use[2]:.6g}, "
+        f"ODP course {course_use[3]:.6g} vs engine {engine_use[3]:.6g}"
+    )
+    assert engine_use[2] > 0 and engine_use[3] > 0
+    assert engine_use == pytest.approx(course_use, rel=REL)
 
 
 # --- documented differences (engine unchanged) -----------------------------------------
@@ -471,21 +481,3 @@ def test_embodied_odp_from_supplied_workbook_differs(engine, engine_recalculated
         assert supplied[:3] == pytest.approx(expected[:3], rel=REL)
         assert fresh[3] == pytest.approx(expected[3], rel=REL)
         assert supplied[3] < expected[3]
-
-
-def test_cogen_water_odp_differs(engine, course):
-    """Course cogeneration water/ODP use 'Cogen Data' columns G (H2O) and H (ODP) divided
-    by I (MJ/kg). ``engines/stv/reference.py`` reads water from column F (MJ) and ozone
-    from G (H2O), so the engine's cogeneration water and ODP differ; GWP and energy match.
-    """
-    got = engine.calculate(COGEN_ONLY.engine_inputs())
-    course_use = course[COGEN_ONLY.id]["use_phase"]
-    engine_use = _vector(got.breakdown.use_phase)
-
-    print(
-        f"cogen only: use-phase water course {course_use[2]:.6g} vs engine {engine_use[2]:.6g}, "
-        f"ODP course {course_use[3]:.6g} vs engine {engine_use[3]:.6g}"
-    )
-    assert engine_use[:2] == pytest.approx(course_use[:2], rel=REL)
-    assert engine_use[2] != pytest.approx(course_use[2], rel=REL)
-    assert engine_use[3] != pytest.approx(course_use[3], rel=REL)
