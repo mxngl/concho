@@ -16,6 +16,8 @@ dist/
 .env
 
 # Large or licensed data (never commit course workbooks or raw exports)
+# Reference fixtures fetched by scripts/fetch_fixtures.py (course + RSMeans-derived data)
+.fixtures/
 *.fbx
 *.xlsx
 exports/**/raw/

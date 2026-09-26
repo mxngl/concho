@@ -1,0 +1,54 @@
+{
+  "_comment": [
+    "Island 2026 reference fixtures, fetched by scripts/fetch_fixtures.py into .fixtures/ (git-ignored).",
+    "'commit' is the commit the ref must resolve to. 'files' are the sha256 checksums from docs/ROADMAP.md §1",
+    "(recorded in P0.4). 'golden_inputs' are the inputs of the STV golden test (P2.3), added so the inputs stay",
+    "pinned if the fixtures later move to a private repo without git history.",
+    "The files themselves are never committed here (course workbooks, RSMeans-derived cost data)."
+  ],
+  "repos": {
+    "AutoTVD": {
+      "url": "https://github.com/mxngl/AutoTVD.git",
+      "ref": "island-2026-final",
+      "commit": "4201147a99910158c18a07c0906bcb16a1d9348c",
+      "files": {
+        "results/latest.json": "bcdc917a38bc96ad2a7a497d3e44220c2323cfa7f789ccd27ff2f068670014f1",
+        "cost_data.csv": "65538af77d051625c493995246e69f51a3203b0278940491bdef57eda92d6358",
+        "qto/Architecture_TakeOff.csv": "67ea680db1f30cfde05b677658b471ca6e06fe2370e117e027789bb43f35a9d6",
+        "qto/Structural_Schedule.csv": "1583cfe473d9142cbec67e7e78639874181ac2e26ae1349aabadfb3dc55fa641"
+      }
+    },
+    "AutoSTV": {
+      "url": "https://github.com/mxngl/AutoSTV.git",
+      "ref": "island-2026-final",
+      "commit": "dde2a014aa1cfc6c9f7deb6d1f19fb67663d006a",
+      "files": {
+        "outputs/stv_project/stv_results.json": "d9dbb2082b8119906113ceebfe6a9072ba680e9f8e5ffec02761d05367990caf",
+        "outputs/Current-20260515T191939Z-3-001/Current/project/stv_results.json": "ed8d496273261830aeffc16ea643c28832cd0bacf8c2ae9597a0ab7eca396584"
+      }
+    },
+    "IPD_Challenge": {
+      "url": "https://github.com/ashjs2003/IPD_Challenge.git",
+      "ref": "989a6b72fce6a3b3adaae231aafa1f5c2e3b489b",
+      "commit": "989a6b72fce6a3b3adaae231aafa1f5c2e3b489b",
+      "files": {
+        "src/Planning_engine/ALICE_BIM_mapper/outputs/Macro_Schedule.csv": "d267a913b33513586eba4a8a8b7128fce9122b816f51a6435399631ffad529b2",
+        "src/Planning_engine/Micro_Schedule_Generator/outputs/Micro_Schedule.csv": "7841a4b740587d41149227e92b3f6f76f276c2556350e102735ad0135511b7f4",
+        "src/Takt_engine/outputs/Takt_Schedule.csv": "17fa8009033019405aff0fda921f011bb0f821426a2c4d5eb9042e0a60b8379b",
+        "outputs/takt_zones/central_bim_model_with_takt.csv": "ff008794690305678f0eaf09b9dc79e053fe40751713f2f90abacc8118d7b09b"
+      },
+      "golden_inputs": {
+        "STV_Template/STV_ConceptA_Bambo.xlsx": "7296927a62f65f0500a634d3d5ff3afa7134974115003b4a4807646aac850404",
+        "revit_schedules/Current/04_Island_ARCH_Concept2_Architecture_TakeOff.csv": "406bf4bc25995ff89179c00c167458b4c3a569bb76c2f7d541b2af52e73ebd17",
+        "revit_schedules/Current/STR_Wall_Bamboo_Concept2_amd03_Architecture_TakeOff.csv": "cd092d75ac6b451d0a035dd28f785b31877e558e2993078215ffbb713eea5874",
+        "revit_schedules/Current/01_Island_MEP_Concept2_MEP_TakeOff.csv": "48a9646cf9c43ba8dc88d0f35ccb705f6bb62aa6c8a7c15040dd5e2792ad95e3",
+        "revit_schedules/Current/04_Island_ARCH_Concept2_MEP_TakeOff.csv": "bc93eb3fdb72477dbd7bd69f071056d6e75dfef847bf8a87dc7a66677b0483f1",
+        "revit_schedules/Current/04_Island_ARCH_Concept2_Structural_Schedule.csv": "bcaee6a24d6736b4a620b0eef3cf8c527bba5e058849e54c5b843c8a77216f0b",
+        "revit_schedules/Current/STR_Wall_Bamboo_Concept2_amd03_Structural_Schedule.csv": "af205319be2eee8526933b48012a11d0af73cc6719b5738981bc7a23b612fde2",
+        "outputs/stv_versions/Current/architecture/stv_results.json": "99d1d5094964806c285cd8c465bb0211345f6c4f641831f1c17d09e2b0ec3735",
+        "outputs/stv_versions/Current/mep/stv_results.json": "88ddc877e1e570b600a15bb734b87d229139618aa194f43d7c1c596fd7e48257",
+        "outputs/stv_versions/Current/structural/stv_results.json": "8b52b906d3bcf13392fbd9941afe9d3c1efb61020888a23da66dc5e4c4294a06"
+      }
+    }
+  }
+}

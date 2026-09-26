@@ -1,8 +1,9 @@
 """Equivalence test: new engine vs. the original AutoTVD ``tvd_analysis.py``.
 
-Skipped unless ``AUTOTVD_DIR`` points to a local AutoTVD checkout (ideally tag
-``island-2026-final``). Nothing from that checkout is copied into this repo:
-``cost_data.csv`` is RSMeans-derived.
+Uses the AutoTVD checkout from ``AUTOTVD_DIR`` if set, else ``AutoTVD`` in the shared
+fixture root (``CONCHO_FIXTURES_DIR`` or ``.fixtures/``, see ``tests/conftest.py`` and
+``scripts/fetch_fixtures.py``); skipped if neither exists. Nothing from that checkout is
+copied into this repo: ``cost_data.csv`` is RSMeans-derived.
 
 Both implementations run in CI mode on ``AUTOTVD_DIR/qto/*.csv`` +
 ``AUTOTVD_DIR/cost_data.csv`` inside ``tmp_path``. Compared: the results JSON (all
@@ -20,14 +21,6 @@ import sys
 from pathlib import Path
 
 import pytest
-
-# Resolved to an absolute path: both implementations run as subprocesses in tmp folders,
-# so a path relative to the pytest working directory would not be found there.
-AUTOTVD_DIR = (
-    Path(os.environ["AUTOTVD_DIR"]).resolve() if os.environ.get("AUTOTVD_DIR") else None
-)
-
-pytestmark = pytest.mark.skipif(AUTOTVD_DIR is None, reason="AUTOTVD_DIR not set")
 
 SNAPSHOT_LABEL = "Equivalence check"
 
@@ -77,8 +70,9 @@ def _single(folder: Path, pattern: str) -> Path:
 
 
 @pytest.fixture(scope="module")
-def outputs(tmp_path_factory) -> dict[str, Path]:
-    base = AUTOTVD_DIR
+def outputs(tmp_path_factory, autotvd_dir) -> dict[str, Path]:
+    # autotvd_dir is absolute: both implementations run as subprocesses in tmp folders.
+    base = autotvd_dir
     inputs = _inputs(base)
     flags = ["--arch", str(inputs["arch"]), "--struct", str(inputs["struct"]),
              "--cost", str(inputs["cost"])]
@@ -124,8 +118,8 @@ def test_dashboard_html_identical(outputs):
     assert normalise(outputs["new"]) == normalise(outputs["orig"])
 
 
-def test_island_golden_numbers(outputs):
-    base = AUTOTVD_DIR
+def test_island_golden_numbers(outputs, autotvd_dir):
+    base = autotvd_dir
     for rel, digest in REFERENCE_SHA256.items():
         if hashlib.sha256((base / rel).read_bytes()).hexdigest() != digest:
             pytest.skip(f"{rel} differs from the island-2026-final reference input")
