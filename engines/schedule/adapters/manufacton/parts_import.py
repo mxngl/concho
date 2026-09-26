@@ -9,6 +9,8 @@ column layout is checked against the Manufacton template (``--template``, e.g.
 Migrated from IPD_Challenge@989a6b7
 ``src/Planning_engine/Prefab_BIM_Mapper/generate_parts_import.py`` (P1.7): logic unchanged,
 the repo-relative paths became CLI arguments.
+
+P3B.8 fix 5: the named prefab assemblies come from ``--prefab-assemblies``.
 """
 
 from __future__ import annotations
@@ -18,6 +20,8 @@ import hashlib
 from pathlib import Path
 
 import pandas as pd
+
+from engines.schedule.adapters.manufacton.prefab_assemblies import load_prefab_assemblies
 
 
 # P1.7: set by configure() (was derived from the IPD_Challenge repo layout).
@@ -31,6 +35,9 @@ OUTPUT_SUMMARY_CSV_PATH: Path
 CENTRAL_BIM_PATH: Path
 MICRO_SCHEDULE_PATH: Path
 ASSEMBLY_PUSH_MAP_PATH: Path | None
+# P3B.8 fix 5: named prefab assemblies (--prefab-assemblies; None = none). The original
+# hardcoded the three Island assemblies here (ASSEMBLIES).
+PREFAB_ASSEMBLIES_PATH: Path | None
 
 OUTPUT_COLUMNS = [
     "ID",
@@ -47,21 +54,6 @@ OUTPUT_COLUMNS = [
     "Vendor Description",
     "Vendor Item Cost",
     "Vendor Lead Time",
-]
-
-ASSEMBLIES = [
-    {
-        "assembly_code": "SL1-3R",
-        "assembly_name": "South-L1-3 rooms part",
-    },
-    {
-        "assembly_code": "SL1-2R",
-        "assembly_name": "South-L1-2 rooms part",
-    },
-    {
-        "assembly_code": "SL0W-LNEG1C",
-        "assembly_name": "South-L0-Workshop part & South-L-1-Classrooms part",
-    },
 ]
 
 PART_DEFINITIONS = [
@@ -790,15 +782,15 @@ def build_part_element_summary(parts_import: pd.DataFrame) -> pd.DataFrame:
 def build_parts_import() -> pd.DataFrame:
     rows: list[dict[str, object]] = []
 
-    for assembly in ASSEMBLIES:
+    for assembly in load_prefab_assemblies(PREFAB_ASSEMBLIES_PATH):
         for part in PART_DEFINITIONS:
-            item_id = f"{assembly['assembly_code']}-{part['part_code']}"
+            item_id = f"{assembly['part_prefix']}-{part['part_code']}"
             rows.append(
                 {
                     "ID": item_id,
-                    "NAME": f"{assembly['assembly_name']} - {part['name_suffix']}",
+                    "NAME": f"{assembly['part_name']} - {part['name_suffix']}",
                     "CATALOG ID": catalog_id("PART", item_id),
-                    "DESCRIPTION": f"{assembly['assembly_name']} | {part['description']}",
+                    "DESCRIPTION": f"{assembly['part_name']} | {part['description']}",
                     "CATEGORY": part["category"],
                     "SUB CATEGORY": part["sub_category"],
                     "MEASURE UNIT": part["measure_unit"],
@@ -934,10 +926,12 @@ def configure(
     micro_schedule: Path,
     out_dir: Path,
     assembly_id_map: Path | None = None,
+    prefab_assemblies: Path | None = None,
 ) -> None:
     """Set the input/output paths used by the functions of this module."""
     global INPUT_TEMPLATE_PATH, OUTPUTS_DIR, OUTPUT_XLSX_PATH, OUTPUT_CSV_PATH
     global OUTPUT_SUMMARY_CSV_PATH, CENTRAL_BIM_PATH, MICRO_SCHEDULE_PATH, ASSEMBLY_PUSH_MAP_PATH
+    global PREFAB_ASSEMBLIES_PATH
     INPUT_TEMPLATE_PATH = Path(template)
     OUTPUTS_DIR = Path(out_dir)
     OUTPUT_XLSX_PATH = OUTPUTS_DIR / "Parts_Import.xlsx"
@@ -946,6 +940,7 @@ def configure(
     CENTRAL_BIM_PATH = Path(central_bim_with_takt)
     MICRO_SCHEDULE_PATH = Path(micro_schedule)
     ASSEMBLY_PUSH_MAP_PATH = Path(assembly_id_map) if assembly_id_map else None
+    PREFAB_ASSEMBLIES_PATH = Path(prefab_assemblies) if prefab_assemblies else None
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -962,6 +957,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--assembly-id-map", type=Path, metavar="CSV",
                         help="optional: Revit_Assembly_Id_Map.csv from an earlier "
                              "manufacton-orders run (adds envelope parts)")
+    parser.add_argument("--prefab-assemblies", type=Path, metavar="CSV",
+                        help="optional: named prefab envelope assemblies (assembly_id, "
+                             "assembly_name, assembly_description, part_name); adds their "
+                             "4 parts each")
     parser.add_argument("--out-dir", type=Path, required=True, metavar="DIR",
                         help="output folder")
     return parser
@@ -975,6 +974,7 @@ def main(argv: list[str] | None = None) -> None:
         micro_schedule=args.micro_schedule,
         out_dir=args.out_dir,
         assembly_id_map=args.assembly_id_map,
+        prefab_assemblies=args.prefab_assemblies,
     )
     xlsx_path, csv_path, summary_path = write_parts_import()
     print(f"Wrote {xlsx_path.name}")

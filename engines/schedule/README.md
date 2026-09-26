@@ -83,9 +83,9 @@ P3B.8) only reads the Revit room boundary export and feeds step 13 (`takt-plan`)
 | 5 | `micro-schedule` | `core/micro_schedule.py` | `Micro_Schedule_Generator/generate_micro_schedule.py` | macro schedule, `Tasks.csv`, `Crew.csv`, `Equipment.csv`, `ALICE_BIM_Map.csv`, `central_bim_model_with_takt.csv`; optional: LLM context (discipline lookup), `Prefab_Wall_Mapping.csv`, rules JSON (else built-in rules), `*_Room_Boundaries.csv` | `Micro_Schedule.csv`, `Micro_Schedule_Log.md` |
 | 6 | `alice-p6-xml` | `adapters/alice/p6_xml.py` | `ALICE_BIM_mapper/generate_p6_task_schedule_xml.py` | `Micro_Schedule.csv`; optional ALICE workbook (WBS names) | `ALICE_Task_Schedule.xml`, `ALICE_Task_Schedule_Macro_View.csv` |
 | 7 | `fuzor-xml` | `adapters/fuzor/p6_xml.py` | `Fuzor_Mapper/generate_fuzor_p6_xml.py` | `Micro_Schedule.csv`, `Tasks.csv`, `Crew.csv`, `Equipment.csv` | `Fuzor_Micro_Schedule.xml` (~16 MB for Island), `Revit_4D_Build_Code_Map.csv` |
-| 8 | `manufacton-parts` | `adapters/manufacton/parts_import.py` | `Prefab_BIM_Mapper/generate_parts_import.py` | Manufacton parts template, `central_bim_model_with_takt.csv`, `Micro_Schedule.csv`; optional `Revit_Assembly_Id_Map.csv` of an earlier step-10 run | `Parts_Import.xlsx`, `Parts_Import.csv`, `Parts_Summary.csv` |
-| 9 | `manufacton-assemblies` | `adapters/manufacton/assembly_import.py` | `Prefab_BIM_Mapper/generate_assembly_import.py` | Manufacton assembly template, `Parts_Import.xlsx`, `Parts_Summary.csv`, `Micro_Schedule.csv`, `central_bim_model_with_takt.csv`, `Revit_4D_Build_Code_Map.csv` | `Assembly_Import.xlsx` |
-| 10 | `manufacton-orders` | `adapters/manufacton/kit_import.py` | `Prefab_BIM_Mapper/generate_kit_import.py` | Manufacton order + item templates, `vendors.csv`, `4d_build_code_to_assembly_id_mapping.csv`, `Assembly_Import.xlsx`, `Parts_Summary.csv`, `Revit_4D_Build_Code_Map.csv`, `Micro_Schedule.csv`, LLM context | `Production_Order.xlsx`, `Production_Order_Items.xlsx`, `Revit_Assembly_Id_Map.csv`, `Revit_Kit_Parameter_Map.csv` |
+| 8 | `manufacton-parts` | `adapters/manufacton/parts_import.py` | `Prefab_BIM_Mapper/generate_parts_import.py` | Manufacton parts template, `central_bim_model_with_takt.csv`, `Micro_Schedule.csv`; optional `Revit_Assembly_Id_Map.csv` of an earlier step-10 run, `prefab_assemblies.csv` (P3B.8) | `Parts_Import.xlsx`, `Parts_Import.csv`, `Parts_Summary.csv` |
+| 9 | `manufacton-assemblies` | `adapters/manufacton/assembly_import.py` | `Prefab_BIM_Mapper/generate_assembly_import.py` | Manufacton assembly template, `Parts_Import.xlsx`, `Parts_Summary.csv`, `Micro_Schedule.csv`, `central_bim_model_with_takt.csv`, `Revit_4D_Build_Code_Map.csv`; optional `prefab_assemblies.csv` (P3B.8) | `Assembly_Import.xlsx` |
+| 10 | `manufacton-orders` | `adapters/manufacton/kit_import.py` | `Prefab_BIM_Mapper/generate_kit_import.py` | Manufacton order + item templates, `vendors.csv`, `4d_build_code_to_assembly_id_mapping.csv`, `Assembly_Import.xlsx`, `Parts_Summary.csv`, `Revit_4D_Build_Code_Map.csv`, `Micro_Schedule.csv`, LLM context, `prefab_assemblies.csv` (needed when the mapping assigns assemblies, P3B.8) | `Production_Order.xlsx`, `Production_Order_Items.xlsx`, `Revit_Assembly_Id_Map.csv`, `Revit_Kit_Parameter_Map.csv` |
 | 11 | `delivery-windows` | `core/delivery_windows.py` | `Logistics_Analysis/compare_delivery_windows.py` | `Micro_Schedule.csv`, LLM context; optional: the four step-10 outputs (since P3B.8) | `delivery_units_by_micro_schedule.csv`, `delivery_window_daily_timeseries.csv`, `delivery_window_summary_metrics.csv`, `production_order_count_by_delivery_window.csv` (only with the step-10 outputs), 7 PNG charts (6 without them) |
 | 12 | `room-takt-zones` | `core/room_takt_zones.py` | none (new in P3B.8; IPD_Challenge only has the committed output `outputs/room_boundaries/room_takt_zones.csv`) | `*_Room_Boundaries.csv` | `room_takt_zones.csv` (one row per room: `room_takt_id, room_id, room_number, room_name, level, area_sf, volume_cf, location_x/y/z_ft, boundary_segments`) |
 | 13 | `takt-plan` | `core/takt_planner.py` | `src/Takt_engine/takt_planner.py` | `central_bim_model.csv`, `room_takt_zones.csv`, `Crew.csv`; optional `Equipment.csv`, productivity rates CSV (else built-in), `*_Room_Boundaries.csv`, FBX | `Takt_Zones.csv`, `Takt_Schedule.csv`, `Takt_Crew_Idle_Report.csv`, `Takt_Element_Allocations.csv`, `Takt_Element_Splits.csv`, `Takt_Equipment_Inputs.csv`, `Takt_Productivity_Rates.csv`, `Takt_Report.md`, `Takt_Zone_Map_<level>.png`, `Takt_Planner.html` (+ `Takt_Model_Viewer.html` with `--fbx`) |
@@ -155,6 +155,7 @@ the bamboo design:
 | `micro_schedule_rules.json` | `micro-schedule --rules` | split rules (by level / room) and dependency constraints (chains, serial, same-start, 7-day curing lags) |
 | `ALICE_BIM_Map.csv` | `micro-schedule --bim-map` | ALICE task → BIM selectors (`Category:…, Family:…, Type:…, Level:…, discipline:…`), productivity, unit, crew/equipment dependency |
 | `vendors.csv` | `manufacton-orders --vendors` | Manufacton template id per building system |
+| `prefab_assemblies.csv` (P3B.8) | `manufacton-parts`, `manufacton-assemblies`, `manufacton-orders` `--prefab-assemblies` | the three named Island prefab wall assemblies (`SL1-3R-WALL`, `SL1-2R-WALL`, `SL0W-LNEG1C-WALL`): id, name, description, part name; format in `docs/engines/schedule.md` |
 | `4d_build_code_to_assembly_id_mapping.csv` | `manufacton-orders --mapping` | Island prefab walls → Manufacton assembly id. Columns `build_code, assembly_id, host_wall_element_id` (the last one added in P3B.8, see below) |
 | `Fuzor_Schedule_Template.csv` | not read by any script | ALICE schedule export (CSV, 33 tasks) that was used as the Fuzor import template; accepted by `--macro-schedule` (ALICE column format, WBS filter applies) |
 
@@ -352,6 +353,23 @@ its PNG). With all four present nothing changes (golden file unchanged). Island 
 Manufacton: 1,589 delivery units, 2,117 elements, 53,647.84 CF. Test:
 `test_delivery_windows_without_manufacton`.
 
+**Fix 5: named prefab assemblies come from an input file** (new
+`adapters/manufacton/prefab_assemblies.py`; `parts_import.build_parts_import`,
+`assembly_import.build_assembly_import`, `kit_import`). The original hardcoded the three
+Island assemblies (`SL1-3R`, `SL1-2R`, `SL0W-LNEG1C` with their "South-…" names) as
+`ASSEMBLIES` in `parts_import` and `assembly_import`, and emitted their 4 parts and 3
+assemblies for every project. They are now rows of `prefab_assemblies.csv`, which all three
+Manufacton steps read with `--prefab-assemblies` (one definition; the Island copy is
+`examples/island/prefab_assemblies.csv`, format in `docs/engines/schedule.md`). Without the
+option, no named assemblies are emitted. `manufacton-orders` checks both directions: an
+assembly id in the 4D mapping CSV that is not in the file is an error; an assembly in the
+file that no scheduled wall is mapped to gets a warning. Island effect: none; the golden file
+is unchanged, and the equivalence test still gets byte-identical `Parts_Import.*` and
+`Assembly_Import.xlsx` compared with the original's hardcoded version. Tests:
+`test_manufacton_named_prefab_assembly` (invented mini assembly end to end, no Island
+assemblies), `test_kit_mapping_assemblies_must_be_defined`,
+`test_prefab_assemblies_file_is_validated`.
+
 ## Findings (kept as-is, for Phase 3B)
 
 1. ~~**Takt-zone polygons lose their last corner**~~ — fixed in P3B.8 (fix 1, see
@@ -425,10 +443,10 @@ walls are recognized by `EXTERIOR` in the type name; curtain panels/mullions wit
 of a wall's bounding box join its prefab group.
 
 **Adapters:**
-- Manufacton `parts_import` / `assembly_import`: hardcoded Island prefab wall assemblies
-  (`SL1-3R`, `SL1-2R`, `SL0W-LNEG1C`, "South-L1-3 rooms", "South-L0-Workshop … South-L-1-Classrooms").
-  They are emitted even for other projects, as the mini-project test shows. Also
-  `Structural Bamboo` material matching and a 400 CF concrete truck assembly.
+- Manufacton `parts_import` / `assembly_import`: the Island prefab wall assemblies
+  (`SL1-3R`, `SL1-2R`, `SL0W-LNEG1C`) moved to `examples/island/prefab_assemblies.csv` in
+  P3B.8 (fix 5). Still in code: `Structural Bamboo` material matching and a 400 CF concrete
+  truck assembly.
 - `vendors.csv`: "Bambu Pueblo" as the superstructure vendor.
 - Fuzor: `EQUIPMENT_COST_FALLBACK` (crane 350/h, …) and `TASK_RESOURCE_DEFAULTS` for
   "Frame: Beams" / "Exterior Wall Install".

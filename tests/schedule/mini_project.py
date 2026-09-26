@@ -114,6 +114,13 @@ BIM_MAP = [
     ["MEP Rough-In", "discipline:MEP", "3", "count", "crew"],
     ["Ceiling Installation", "Category:Ceilings", "2", "count", "crew"],
 ]
+BUILD_CODE_MAPPING = [["build_code", "assembly_id", "host_wall_element_id"],
+                      ["", "MINI-SOUTH-WALL", "1001"]]
+PREFAB_ASSEMBLIES = [
+    ["assembly_id", "assembly_name", "assembly_description", "part_name"],
+    ["MINI-SOUTH-WALL", "Mini south wall", "Mini south wall prefab assembly", "Mini south part"],
+]
+
 # Revit room boundary export (one row per boundary segment): two 20 x 20 ft rooms.
 ROOM_BOUNDARY_COLUMNS = [
     "RoomId", "RoomNumber", "RoomName", "Level", "Area (SF)", "Volume (CF)",
@@ -161,7 +168,9 @@ def write_mini_project(root: Path) -> dict[str, Path]:
         "bim_map": _write_csv(inputs / "ALICE_BIM_Map.csv", BIM_MAP),
         "room_boundaries": _write_csv(inputs / "Mini_Room_Boundaries.csv",
                                       [ROOM_BOUNDARY_COLUMNS, *ROOM_BOUNDARIES]),
-        # Header only: the kit import then derives the prefab-wall mapping itself.
+        # One named prefab assembly (P3B.8 fix 5), mapped by its host wall 1001 (fix 3); the
+        # kit import derives the other assemblies itself.
         "build_code_mapping": _write_csv(inputs / "build_code_mapping.csv",
-                                         [["build_code", "assembly_id"]]),
+                                         BUILD_CODE_MAPPING),
+        "prefab_assemblies": _write_csv(inputs / "prefab_assemblies.csv", PREFAB_ASSEMBLIES),
     }

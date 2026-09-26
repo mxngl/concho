@@ -63,6 +63,40 @@ The project start, the end date and the row counts did not change: this lag is n
 critical path. The framing waits for the backfill chain. Without the per-task windows, only
 the hashes would have caught the change.
 
+## Manufacton mapping files (P3B.8)
+
+Two plain-text team files drive the named prefab wall assemblies. The Island copies are in
+`engines/schedule/examples/island/` (team configuration, **not course data**). Both are
+candidates for the project template files of P3B.2.
+
+**`4d_build_code_to_assembly_id_mapping.csv`** (`manufacton-orders --mapping`): which prefab
+walls belong to which named assembly.
+
+| Column | Required | Meaning |
+|---|---|---|
+| `build_code` | one of the two | Fuzor build code, e.g. `Exterior Wall Install \| L 1 \| PREFAB_WALL_L1_081`. Its task name (first part) narrows the host-wall lookup. The group number is sequential and shifts when the model changes, so without `host_wall_element_id` the row cannot be checked |
+| `assembly_id` | yes | named prefab assembly; must be a row of `prefab_assemblies.csv` (error otherwise). Rows without it are ignored |
+| `host_wall_element_id` | one of the two (new in P3B.8) | Revit ElementId of the prefab group's host wall (`host_wall_element_id` in `Prefab_Wall_Mapping.csv`). The stable key: the step uses the build code the wall has in the current `Revit_4D_Build_Code_Map.csv` and warns if the written `build_code` differs. ElementId, because the Revit exports have no UniqueId |
+
+Rows whose wall (or, without a host id, whose build code) is not in the micro schedule are
+skipped with a warning. One wall mapped to two assemblies is an error. The Island file maps 17
+host walls (6 on L -1, currently not scheduled) to `SL0W-LNEG1C-WALL`, `SL1-3R-WALL` and
+`SL1-2R-WALL`.
+
+**`prefab_assemblies.csv`** (`--prefab-assemblies` of `manufacton-parts`,
+`manufacton-assemblies` and `manufacton-orders`): one row per named assembly.
+
+| Column | Meaning |
+|---|---|
+| `assembly_id` | Manufacton assembly id (`ID` in `Assembly_Import.xlsx`), e.g. `SL1-3R-WALL` |
+| `assembly_name` | assembly `Name` |
+| `assembly_description` | assembly `Description` |
+| `part_name` | name stem of its 4 parts in `Parts_Import.xlsx` (`<part_name> - Generic 8 Exterior`, …) |
+
+Part ids are `<assembly_id without a trailing -WALL>-<part code>` with part codes `WALL`,
+`MULLION-L`, `MULLION-B`, `GLAZED-PANEL`. Every assembly without mapped elements in the
+current schedule gets a warning in `manufacton-orders`.
+
 ## Island 2026 reference facts (regenerated run)
 
 | Output | Value |

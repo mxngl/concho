@@ -8,6 +8,9 @@ Manufacton order/item templates; never committed), ``Revit_Assembly_Id_Map.csv``
 Migrated from IPD_Challenge@989a6b7
 ``src/Planning_engine/Prefab_BIM_Mapper/generate_kit_import.py`` (P1.7): logic unchanged,
 the repo-relative paths became CLI arguments.
+
+P3B.8 fixes 3 and 5: the 4D mapping CSV is resolved by host wall against the current model
+(``resolve_static_mapping``) and checked against ``--prefab-assemblies``.
 """
 
 from __future__ import annotations
@@ -21,6 +24,8 @@ from shutil import copyfile
 
 import pandas as pd
 from openpyxl import load_workbook
+
+from engines.schedule.adapters.manufacton.prefab_assemblies import load_prefab_assemblies
 
 
 # P1.7: set by configure() (was derived from the IPD_Challenge repo layout).
@@ -38,6 +43,9 @@ ITEM_OUTPUT_XLSX_PATH: Path
 ASSEMBLY_PUSH_MAP_PATH: Path
 KIT_PUSH_MAP_PATH: Path
 CENTRAL_BIM_CONTEXT_PATH: Path
+# P3B.8 fix 5: named prefab assemblies (--prefab-assemblies; None = none), the same file as
+# manufacton-parts / manufacton-assemblies read; used to validate the mapping CSV.
+PREFAB_ASSEMBLIES_PATH: Path | None
 
 CONCRETE_TRUCK_VOLUME_CF = 400
 CONCRETE_TRUCK_ASSEMBLY_ID = "CONC_400CF_TRUCK_ASSEMBLY"
@@ -128,7 +136,9 @@ def load_mapping() -> pd.DataFrame:
         raise ValueError(
             f"Mapping CSV must contain columns {sorted(expected)}; found {list(mapping.columns)}"
         )
+    validate_mapped_assemblies(mapping)
     mapping = resolve_static_mapping(mapping, pd.read_csv(BUILD_CODE_MAP_PATH, dtype=str).fillna(""))
+    warn_unmapped_prefab_assemblies(mapping)
     mapping["element_id"] = ""
     structural_mapping = load_structural_mapping()
     dynamic_mapping = load_dynamic_mapping(set(mapping["build_code"]))
@@ -136,6 +146,25 @@ def load_mapping() -> pd.DataFrame:
         [mapping.loc[:, ["build_code", "assembly_id", "element_id"]], structural_mapping, dynamic_mapping],
         ignore_index=True,
     )
+
+
+def validate_mapped_assemblies(mapping: pd.DataFrame) -> None:
+    """P3B.8 fix 5: every assembly id of the mapping CSV must be a named prefab assembly."""
+    mapped = list(dict.fromkeys(value for value in mapping["assembly_id"].map(clean_text) if value))
+    known = {assembly["assembly_id"] for assembly in load_prefab_assemblies(PREFAB_ASSEMBLIES_PATH)}
+    unknown = [assembly_id for assembly_id in mapped if assembly_id not in known]
+    if unknown:
+        source = PREFAB_ASSEMBLIES_PATH or "--prefab-assemblies (not given)"
+        raise ValueError(f"Mapping CSV assigns assemblies that are not defined in {source}: {unknown}")
+
+
+def warn_unmapped_prefab_assemblies(resolved: pd.DataFrame) -> None:
+    """P3B.8 fix 5: report named prefab assemblies that no scheduled wall is mapped to."""
+    used = set(resolved["assembly_id"])
+    for assembly in load_prefab_assemblies(PREFAB_ASSEMBLIES_PATH):
+        if assembly["assembly_id"] not in used:
+            warn(f"prefab assembly {assembly['assembly_id']} has no mapped elements in the "
+                 "current schedule; no production orders for it")
 
 
 def warn(message: str) -> None:
@@ -796,12 +825,13 @@ def configure(
     micro_schedule: Path,
     llm_context: Path,
     out_dir: Path,
+    prefab_assemblies: Path | None = None,
 ) -> None:
     """Set the input/output paths used by the functions of this module."""
     global ORDER_TEMPLATE_PATH, ITEM_TEMPLATE_PATH, VENDORS_PATH, MAPPING_PATH
     global ASSEMBLY_IMPORT_PATH, PARTS_SUMMARY_PATH, BUILD_CODE_MAP_PATH, MICRO_SCHEDULE_PATH
     global OUTPUTS_DIR, OUTPUT_XLSX_PATH, ITEM_OUTPUT_XLSX_PATH, ASSEMBLY_PUSH_MAP_PATH
-    global KIT_PUSH_MAP_PATH, CENTRAL_BIM_CONTEXT_PATH
+    global KIT_PUSH_MAP_PATH, CENTRAL_BIM_CONTEXT_PATH, PREFAB_ASSEMBLIES_PATH
     ORDER_TEMPLATE_PATH = Path(order_template)
     ITEM_TEMPLATE_PATH = Path(item_template)
     VENDORS_PATH = Path(vendors)
@@ -816,6 +846,7 @@ def configure(
     ASSEMBLY_PUSH_MAP_PATH = OUTPUTS_DIR / "Revit_Assembly_Id_Map.csv"
     KIT_PUSH_MAP_PATH = OUTPUTS_DIR / "Revit_Kit_Parameter_Map.csv"
     CENTRAL_BIM_CONTEXT_PATH = Path(llm_context)
+    PREFAB_ASSEMBLIES_PATH = Path(prefab_assemblies) if prefab_assemblies else None
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -842,6 +873,9 @@ def build_parser() -> argparse.ArgumentParser:
                         help="Micro_Schedule.csv (step micro-schedule)")
     parser.add_argument("--llm-context", type=Path, required=True, metavar="CSV",
                         help="central_bim_model_llm_context.csv (step llm-context)")
+    parser.add_argument("--prefab-assemblies", type=Path, metavar="CSV",
+                        help="named prefab envelope assemblies (same file as manufacton-parts); "
+                             "required when the mapping CSV assigns assemblies")
     parser.add_argument("--out-dir", type=Path, required=True, metavar="DIR",
                         help="output folder")
     return parser
@@ -860,6 +894,7 @@ def main(argv: list[str] | None = None) -> None:
         micro_schedule=args.micro_schedule,
         llm_context=args.llm_context,
         out_dir=args.out_dir,
+        prefab_assemblies=args.prefab_assemblies,
     )
     OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
 

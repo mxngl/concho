@@ -7,6 +7,8 @@ Writes the delivery CSVs and PNG charts to ``OUT_DIR``.
 Migrated from IPD_Challenge@989a6b7
 ``src/Planning_engine/Logistics_Analysis/compare_delivery_windows.py`` (P1.7): logic
 unchanged, the repo-relative paths became CLI arguments.
+
+P3B.8 fix 4: the four Manufacton outputs are optional.
 """
 
 from __future__ import annotations

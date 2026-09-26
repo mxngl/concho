@@ -11,6 +11,8 @@ result is written to ``OUT_DIR/takt_zones.json``. Needs a GUI matplotlib backend
 
 Migrated from IPD_Challenge@989a6b7 ``src/takt_zone_calibrator.py`` (P1.7): logic unchanged,
 the repo-relative paths became CLI arguments.
+
+P3B.8 fix 1: takt-zone polygons keep their last corner (``assign_takt_ids``).
 """
 
 from __future__ import annotations

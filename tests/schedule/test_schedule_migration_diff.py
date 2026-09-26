@@ -11,7 +11,8 @@ comments and formatting are ignored) with the migrated module. Allowed differenc
 - the functions listed in ``CHANGED_FUNCTIONS`` (path lookups, ``None`` guards for optional
   inputs, ``main``);
 - new CLI helpers (``configure``, ``build_parser``, ``main``, ``parse_floor_plan``);
-- the P3B.8 bug fixes listed in ``P3B8_CHANGED_FUNCTIONS`` / ``P3B8_NEW_FUNCTIONS``.
+- the P3B.8 bug fixes listed in ``P3B8_CHANGED_FUNCTIONS``, ``P3B8_NEW_FUNCTIONS`` and
+  ``P3B8_REMOVED_CONSTANTS``.
 
 Everything else (rules, constants, task logic) must be identical.
 """
@@ -79,10 +80,21 @@ P3B8_CHANGED_FUNCTIONS = {
     "adapters/manufacton/kit_import.py": {"load_mapping", "load_dynamic_mapping"},
     # fix 4: run without the Manufacton outputs
     "core/delivery_windows.py": {"load_production_delivery_units"},
+    # fix 5: named prefab assemblies from --prefab-assemblies instead of ASSEMBLIES
+    "adapters/manufacton/parts_import.py": {"build_parts_import"},
+    "adapters/manufacton/assembly_import.py": {"build_assembly_import"},
 }
 P3B8_NEW_FUNCTIONS: dict[str, set[str]] = {
-    "adapters/manufacton/kit_import.py": {"resolve_static_mapping", "warn"},
+    "adapters/manufacton/kit_import.py": {
+        "resolve_static_mapping", "warn", "validate_mapped_assemblies",
+        "warn_unmapped_prefab_assemblies",
+    },
     "core/delivery_windows.py": {"missing_production_order_inputs"},
+}
+# fix 5: the hardcoded Island assemblies, now examples/island/prefab_assemblies.csv
+P3B8_REMOVED_CONSTANTS = {
+    "adapters/manufacton/parts_import.py": {"ASSEMBLIES"},
+    "adapters/manufacton/assembly_import.py": {"ASSEMBLIES"},
 }
 
 NEW_FUNCTIONS = {"configure", "build_parser", "main", "parse_floor_plan"}
@@ -115,6 +127,8 @@ def test_only_paths_and_cli_changed(ipd_challenge_dir: Path, original: str) -> N
     added = set(new) - set(old)
 
     constants = {name[1:] for name in changed | removed | added if name.startswith("=")}
+    constants -= {name for name in P3B8_REMOVED_CONSTANTS.get(migrated, set())
+                  if f"={name}" in removed}
     assert all(PATH_CONSTANT.search(name) for name in constants), sorted(
         name for name in constants if not PATH_CONSTANT.search(name)
     )
@@ -128,8 +142,8 @@ def test_only_paths_and_cli_changed(ipd_challenge_dir: Path, original: str) -> N
 
 
 # Modules without an original script (P3B.8 fix 2: IPD_Challenge has no generator for
-# room_takt_zones.csv).
-NEW_MODULES = {"core/room_takt_zones.py"}
+# room_takt_zones.csv; fix 5: shared loader of the prefab assembly CSV).
+NEW_MODULES = {"core/room_takt_zones.py", "adapters/manufacton/prefab_assemblies.py"}
 
 
 def test_every_migrated_module_is_covered() -> None:

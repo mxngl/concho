@@ -47,6 +47,12 @@ ZONES_OUT = "outputs/takt_zones"
 DELIVERY_OUT = "outputs/delivery_window_analysis"
 ROOMS_OUT = "outputs/room_boundaries"
 
+# P3B.8 fix 5: the Island prefab assemblies the original hardcoded in the Manufacton steps.
+PREFAB_ASSEMBLIES = (
+    Path(__file__).resolve().parents[2]
+    / "engines" / "schedule" / "examples" / "island" / "prefab_assemblies.csv"
+)
+
 # sha256 of the committed Island reference outputs (docs/ROADMAP.md §1, P0.4).
 REFERENCE_SHA256 = {
     f"{ALICE_OUT}/Macro_Schedule.csv":
@@ -235,6 +241,7 @@ def _migrated_args(ipd: Path, new: Path, inputs_from: Path | None = None) -> dic
             "--central-bim-with-takt", str(zones / "central_bim_model_with_takt.csv"),
             "--micro-schedule", str(micro / "Micro_Schedule.csv"),
             "--assembly-id-map", str(committed_prefab / "Revit_Assembly_Id_Map.csv"),
+            "--prefab-assemblies", str(PREFAB_ASSEMBLIES),
             "--out-dir", str(out["prefab"]),
         ],
         "manufacton-assemblies": [
@@ -245,6 +252,7 @@ def _migrated_args(ipd: Path, new: Path, inputs_from: Path | None = None) -> dic
             "--micro-schedule", str(micro / "Micro_Schedule.csv"),
             "--central-bim-with-takt", str(zones / "central_bim_model_with_takt.csv"),
             "--build-code-map", str(fuzor / "Revit_4D_Build_Code_Map.csv"),
+            "--prefab-assemblies", str(PREFAB_ASSEMBLIES),
             "--out-dir", str(out["prefab"]),
         ],
         "manufacton-orders": [
@@ -262,6 +270,7 @@ def _migrated_args(ipd: Path, new: Path, inputs_from: Path | None = None) -> dic
             "--build-code-map", str(fuzor / "Revit_4D_Build_Code_Map.csv"),
             "--micro-schedule", str(micro / "Micro_Schedule.csv"),
             "--llm-context", str(zones / "central_bim_model_llm_context.csv"),
+            "--prefab-assemblies", str(PREFAB_ASSEMBLIES),
             "--out-dir", str(out["prefab"]),
         ],
         # The original manufacton-orders fails on this data (see module docstring), so the

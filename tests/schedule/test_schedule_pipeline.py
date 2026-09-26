@@ -70,12 +70,14 @@ def pipeline(tmp_path_factory: pytest.TempPathFactory) -> dict[str, Path]:
          "--crew", inp["crew"], "--equipment", inp["equipment"], "--out-dir", out["fuzor"])
     _run("manufacton-parts",
          "--template", _template(tpl / "parts.xlsx", parts_import.OUTPUT_COLUMNS),
-         "--central-bim-with-takt", bim, "--micro-schedule", micro_csv, "--out-dir", mf)
+         "--central-bim-with-takt", bim, "--micro-schedule", micro_csv,
+         "--prefab-assemblies", inp["prefab_assemblies"], "--out-dir", mf)
     _run("manufacton-assemblies",
          "--template", _template(tpl / "assembly.xlsx", assembly_import.OUTPUT_COLUMNS),
          "--parts-import", mf / "Parts_Import.xlsx", "--parts-summary", mf / "Parts_Summary.csv",
          "--micro-schedule", micro_csv, "--central-bim-with-takt", bim,
-         "--build-code-map", build_codes, "--out-dir", mf)
+         "--build-code-map", build_codes, "--prefab-assemblies", inp["prefab_assemblies"],
+         "--out-dir", mf)
     _run("manufacton-orders",
          "--order-template", _template(tpl / "order.xlsx", kit_import.OUTPUT_COLUMNS, "ORDERS"),
          "--item-template",
@@ -83,7 +85,8 @@ def pipeline(tmp_path_factory: pytest.TempPathFactory) -> dict[str, Path]:
          "--vendors", EXAMPLES / "vendors.csv", "--mapping", inp["build_code_mapping"],
          "--assembly-import", mf / "Assembly_Import.xlsx",
          "--parts-summary", mf / "Parts_Summary.csv", "--build-code-map", build_codes,
-         "--micro-schedule", micro_csv, "--llm-context", context, "--out-dir", mf)
+         "--micro-schedule", micro_csv, "--llm-context", context,
+         "--prefab-assemblies", inp["prefab_assemblies"], "--out-dir", mf)
     _run("delivery-windows", "--micro-schedule", micro_csv, "--llm-context", context,
          "--production-order", mf / "Production_Order.xlsx",
          "--production-order-items", mf / "Production_Order_Items.xlsx",
@@ -195,6 +198,76 @@ def test_manufacton_outputs(pipeline: dict[str, Path]) -> None:
     kits = {row["element_id"]: row["kit_id"] for row in
             _rows(mf / "Revit_Kit_Parameter_Map.csv")}
     assert kits["1001"] == kits["1003"]
+
+
+def test_manufacton_named_prefab_assembly(pipeline: dict[str, Path]) -> None:
+    """P3B.8 fix 5: named prefab assemblies come from --prefab-assemblies, not from code.
+
+    The mini project defines one (MINI-SOUTH-WALL, mapped by host wall 1001); the Island
+    assemblies the original hardcoded (SL1-3R, SL1-2R, SL0W-LNEG1C) must not appear.
+    """
+    mf = pipeline["manufacton"]
+    parts = {row["ID"]: row["NAME"] for row in _rows(mf / "Parts_Import.csv")}
+    assert parts["MINI-SOUTH-GLAZED-PANEL"] == "Mini south part - Curtain Panel Glazed"
+    assert {part_id for part_id in parts if part_id.startswith("MINI-SOUTH-")} == {
+        "MINI-SOUTH-WALL", "MINI-SOUTH-MULLION-L", "MINI-SOUTH-MULLION-B",
+        "MINI-SOUTH-GLAZED-PANEL"}
+    assert not [part_id for part_id in parts if part_id.startswith(("SL1-", "SL0W-"))]
+    assemblies = pd.read_excel(mf / "Assembly_Import.xlsx", dtype=str).fillna("")
+    named = assemblies[assemblies["ID"] == "MINI-SOUTH-WALL"].iloc[0]
+    assert (named["Name"], named["Description"]) == (
+        "Mini south wall", "Mini south wall prefab assembly")
+    assert not assemblies["ID"].str.startswith(("SL1-", "SL0W-")).any()
+    mapped = {row["element_id"]: row["assembly_id"] for row in
+              _rows(mf / "Revit_Assembly_Id_Map.csv")}
+    assert mapped["1001"] == mapped["1003"] == "MINI-SOUTH-WALL"
+
+
+def _prefab_assemblies(tmp_path: Path, *assembly_ids: str) -> Path:
+    path = tmp_path / "prefab_assemblies.csv"
+    rows = [["assembly_id", "assembly_name", "assembly_description", "part_name"]]
+    rows += [[assembly_id, f"{assembly_id} name", f"{assembly_id} desc", f"{assembly_id} part"]
+             for assembly_id in assembly_ids]
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        csv.writer(handle).writerows(rows)
+    return path
+
+
+def test_kit_mapping_assemblies_must_be_defined(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """P3B.8 fix 5: mapping -> prefab_assemblies.csv is an error, the reverse a warning."""
+    mapping = pd.DataFrame([{"build_code": "X", "assembly_id": "A"},
+                            {"build_code": "Y", "assembly_id": "B"}])
+    monkeypatch.setattr(kit_import, "PREFAB_ASSEMBLIES_PATH", _prefab_assemblies(tmp_path, "A"))
+    with pytest.raises(ValueError, match=r"not defined in .*prefab_assemblies.csv: \['B'\]"):
+        kit_import.validate_mapped_assemblies(mapping)
+    monkeypatch.setattr(kit_import, "PREFAB_ASSEMBLIES_PATH", None)
+    with pytest.raises(ValueError, match=r"--prefab-assemblies \(not given\)"):
+        kit_import.validate_mapped_assemblies(mapping)
+
+    monkeypatch.setattr(kit_import, "PREFAB_ASSEMBLIES_PATH",
+                        _prefab_assemblies(tmp_path, "A", "B"))
+    kit_import.validate_mapped_assemblies(mapping)
+    kit_import.warn_unmapped_prefab_assemblies(pd.DataFrame({"assembly_id": ["A"]}))
+    err = capsys.readouterr().err
+    assert "prefab assembly B has no mapped elements" in err
+    assert "prefab assembly A" not in err
+
+
+def test_prefab_assemblies_file_is_validated(tmp_path: Path) -> None:
+    from engines.schedule.adapters.manufacton.prefab_assemblies import load_prefab_assemblies
+
+    assert load_prefab_assemblies(None) == []
+    rows = load_prefab_assemblies(_prefab_assemblies(tmp_path, "SOUTH-WALL", "NORTH"))
+    assert [(row["assembly_id"], row["part_prefix"]) for row in rows] == [
+        ("SOUTH-WALL", "SOUTH"), ("NORTH", "NORTH")]
+    with pytest.raises(ValueError, match="listed twice"):
+        load_prefab_assemblies(_prefab_assemblies(tmp_path, "A", "A"))
+    bad = tmp_path / "bad.csv"
+    bad.write_text("assembly_id,assembly_name\nA,a\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="missing columns"):
+        load_prefab_assemblies(bad)
 
 
 def _build_code_map(groups: dict[str, list[str]]) -> pd.DataFrame:
