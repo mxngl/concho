@@ -32,7 +32,7 @@ or `validate_config_file(path)` (returns errors and warnings).
 |---|---|
 | Unknown or missing required field | error |
 | `tvd`: exactly one of `total_target` or `budget` + `target` | error |
-| `tvd.cluster_split` (`basis: amount`): course clusters A–H + `carved_out` custom clusters sum to the total target within `target_sum_tolerance` (fraction of the total) | error outside, warning inside the tolerance if not exact |
+| `tvd.cluster_split` (`basis: amount`): course clusters A–H + `carved_out` custom clusters sum to the total target within `target_sum_tolerance` (fraction of the total) | error outside (warning if `target_sum_override` is set), warning inside the tolerance if not exact |
 | `tvd.custom_clusters` with `mode: on_top`: listed with the gap above the total | warning |
 | `tvd.target` above the course budget formula result | warning |
 | Shares sum to 1.0: `cluster_split` with `basis: pct`, every `reference_columns[].shares`, `cogeneration.splits` | error |
@@ -142,6 +142,7 @@ Generated from `docs/schema/project_config.schema.json`; do not edit by hand.
 | `tvd.custom_clusters[].mode` | `"carved_out"` \| `"on_top"` | yes |  | `carved_out`: part of the total target (course clusters get the rest). `on_top`: added on top of the total target (reported as a warning). |
 | `tvd.custom_clusters[].is_course_data` | `false` |  | `false` | Always false: custom clusters are team data. |
 | `tvd.target_sum_tolerance` | number |  | `0.001` | Allowed difference between the sum of the cluster targets and the total target, as a fraction of the total target (0.001 = 0.1 %). (≥ 0, < 1) |
+| `tvd.target_sum_override` | string \| null |  | `null` | Accept cluster targets outside `target_sum_tolerance`: the reason why the mismatch is intended (e.g. 'targets from an older worksheet, reconciled in week 6'). null (default) = a mismatch outside the tolerance is an error. The TVD engine reports the gap with status `override`. |
 | `stv` | object | yes |  | Sustainable Target Value (life-cycle carbon, energy, water). |
 | `stv.course_team` | `"Pacific"` \| `"Atlantic"` \| `"Ridge"` \| `"Island"` \| `"River"` \| `"Central"` \| `"Express"` | yes |  | Team row of the course STV workbook used for the targets. |
 | `stv.lifetime_years` | integer |  | `50` | Building lifetime. (> 0, ≤ 200) |

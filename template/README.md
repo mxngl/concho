@@ -28,6 +28,9 @@ validation rules: [`docs/config.md`](../docs/config.md). Check your copy with
     `carved_out`: its 250,000 comes out of the total, clusters A–H share the rest. With
     `on_top` it would be added to the total instead (reported as a warning).
   - `target_sum_tolerance`: 0.001 = cluster targets may differ from the total by 0.1 %.
+  - `target_sum_override` (not set here): a reason string that accepts cluster targets
+    outside the tolerance; the TVD engine then reports status `override` instead of
+    failing.
 - **`stv`**: `course_team` picks the team row of the course STV workbook (Pacific, Atlantic,
   Ridge, Island, River, Central, Express). The workbook path comes from the env var named in
   `course_workbook_env`, never from this file.

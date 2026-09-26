@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 
 from engines.common.config import (
     CLUSTER_NAMES,
+    ROUNDING_AMOUNT,
     CourseCluster,
     ExplicitSplit,
     ProjectConfig,
@@ -33,6 +34,8 @@ class ProjectTargets:
     # Custom cluster name → "carved_out" | "on_top" (not course data).
     custom_modes: dict[str, str] = field(default_factory=dict)
     target_sum_tolerance: float = 0.001
+    # Reason for accepting a mismatch outside the tolerance (tvd.target_sum_override).
+    target_sum_override: str | None = None
 
     @classmethod
     def from_config(cls, config: ProjectConfig) -> ProjectTargets:
@@ -61,28 +64,69 @@ class ProjectTargets:
             cluster_targets=targets,
             custom_modes={c.name: c.mode for c in tvd.custom_clusters},
             target_sum_tolerance=tvd.target_sum_tolerance,
+            target_sum_override=tvd.target_sum_override,
+        )
+
+    @property
+    def course_sum(self) -> float:
+        """Sum of the course clusters A-H (all clusters that are not custom clusters)."""
+        return sum(v for n, v in self.cluster_targets.items() if n not in self.custom_modes)
+
+    def _mode_sum(self, mode: str) -> float:
+        return sum(self.cluster_targets[n] for n, m in self.custom_modes.items() if m == mode)
+
+    @property
+    def gap(self) -> float:
+        """(A-H + carved-out custom clusters) − total target."""
+        return self.course_sum + self._mode_sum("carved_out") - self.total_target
+
+    @property
+    def tolerance_amount(self) -> float:
+        return self.target_sum_tolerance * self.total_target
+
+    @property
+    def consistency_status(self) -> str:
+        """``ok`` | ``within_tolerance`` | ``override`` | ``failed``."""
+        gap = abs(self.gap)
+        if gap < ROUNDING_AMOUNT:
+            return "ok"
+        if gap <= self.tolerance_amount:
+            return "within_tolerance"
+        return "override" if self.target_sum_override else "failed"
+
+    def _gap_text(self) -> str:
+        gap, total = self.gap, self.total_target
+        pct = gap / total * 100 if total else 0.0
+        return (
+            f"course clusters A-H ({self.course_sum:,.2f}) + carved-out custom clusters "
+            f"({self._mode_sum('carved_out'):,.2f}) = "
+            f"{self.course_sum + self._mode_sum('carved_out'):,.2f}, gap {gap:+,.2f} "
+            f"({pct:+.4f} %) vs. the total target {total:,.2f} (tolerance "
+            f"{self.target_sum_tolerance:g} = {self.tolerance_amount:,.2f})"
         )
 
     def check(self) -> list[str]:
-        """Consistency of the targets (course + carved-out vs. total), as in the config
-        validation. Raises ``ValueError`` outside the tolerance; returns notes otherwise."""
-        on_top = {n for n, m in self.custom_modes.items() if m == "on_top"}
-        counted = sum(v for n, v in self.cluster_targets.items() if n not in on_top)
-        diff = counted - self.total_target
-        limit = self.target_sum_tolerance * self.total_target
-        if abs(diff) > limit:
+        """Cluster target consistency (P3.3): A-H + carved-out custom clusters must sum to
+        the total target within ``target_sum_tolerance``. Raises ``ValueError`` outside the
+        tolerance unless ``target_sum_override`` is set; returns notes otherwise."""
+        status = self.consistency_status
+        if status == "failed":
             raise ValueError(
-                f"cluster targets (without on-top clusters) sum to {counted:,.2f}, "
-                f"{abs(diff):,.2f} {'above' if diff > 0 else 'below'} the total target "
-                f"{self.total_target:,.2f} (tolerance {limit:,.2f})."
+                f"cluster targets do not match the total target: {self._gap_text()}. Fix "
+                "the cluster targets, mark a custom cluster as on_top, raise "
+                "tvd.target_sum_tolerance, or accept the mismatch with "
+                "tvd.target_sum_override (a reason)."
             )
         notes = []
-        if abs(diff) >= 0.005:
+        if status == "within_tolerance":
+            notes.append(f"cluster targets within tolerance: {self._gap_text()}.")
+        elif status == "override":
             notes.append(
-                f"cluster targets differ from the total target by {diff:+,.2f} "
-                f"(within tolerance {self.target_sum_tolerance:g})."
+                f"cluster targets outside tolerance, accepted by tvd.target_sum_override "
+                f"('{self.target_sum_override}'): {self._gap_text()}."
             )
-        for name in sorted(on_top):
+        on_top = sorted(n for n, m in self.custom_modes.items() if m == "on_top")
+        for name in on_top:
             notes.append(
                 f"custom cluster '{name}' ({self.cluster_targets[name]:,.2f}) is on top of "
                 "the total target (not course data)."
