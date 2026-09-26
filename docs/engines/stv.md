@@ -23,7 +23,9 @@ Formulas (`engine.py`):
 - **Embodied:** per construction item, amount × LCA factor × unit multiplier, split into
   materials, transport and construction.
 - **Use phase:** annual grid electricity, on-site renewables, cogeneration, natural gas and
-  water (900 occupants, 250 days/year; rainwater offset capped at total water use), × 50 years.
+  water (900 occupants, 250 days/year), × 50 years. The rainwater credit is capped at toilet
+  + urinal + landscaping water, as in the course (`Use Phase` H40; since P3.10, decision
+  D12; before it was capped at the total water use).
 - Known divergence from the workbook: the course applies the 0.75 toilet factor whenever the
   urinal cell is non-blank (even at 0); the engine only when `urinal_gpf > 0` (P2.4).
 

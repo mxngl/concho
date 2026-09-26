@@ -19,9 +19,9 @@ template: the workbook as supplied carries stale cached values in some LCA compo
 cells (see ``test_embodied_odp_from_supplied_workbook_differs``).
 
 Known differences between the engine and the course (engine left unchanged, see the
-``test_*_differs`` tests): the toilet factor with a urinal cell of 0, the rainwater cap,
-and the stale cached LCA component values. The cogeneration water/ODP columns are fixed
-since P3.10 (``test_cogen_matches_course``).
+``test_*_differs`` tests): the toilet factor with a urinal cell of 0 and the stale cached
+LCA component values. Fixed in P3.10: the cogeneration water/ODP columns
+(``test_cogen_matches_course``) and the rainwater cap (``test_rainwater_cap_matches_course``).
 """
 
 from __future__ import annotations
@@ -214,7 +214,8 @@ TOILET_URINAL_ZERO = Case(id="toilet_urinal_cell_zero", team="Island", use_phase
 TOILET_URINAL_BLANK = Case(
     id="toilet_urinal_cell_blank", team="Island", use_phase=TOILET_ONLY, urinal_blank=True
 )
-# Rainwater above toilet + urinal + landscaping (course cap) but below total water (engine cap).
+# Rainwater above toilet + urinal + landscaping (course cap, P3.10) but below total water
+# (the engine's cap before P3.10).
 RAINWATER_ABOVE_COURSE_CAP = Case(
     id="rainwater_above_course_cap",
     team="Island",
@@ -436,10 +437,10 @@ def test_toilet_factor_urinal_cell_zero_differs(engine, course):
     assert course_zero[2] < engine_use[2]
 
 
-def test_rainwater_cap_differs(engine, course):
-    """Course caps the rainwater credit at toilet + urinal + landscaping water
-    (``H40 = -MIN(D40*..., H32+H33+H38)``); the engine caps it at the total water use
-    of all fixtures incl. sinks and showers. Below both caps they agree (main cases).
+def test_rainwater_cap_matches_course(engine, course):
+    """P3.10 item 2 (decision D12, follow the course): the rainwater credit is capped at
+    toilet + urinal + landscaping water (``H40 = -MIN(D40*..., H32+H33+H38)``), not at the
+    total water use. With rainwater above that cap the sink/shower water remains.
     """
     case = RAINWATER_ABOVE_COURSE_CAP
     engine_use = _vector(engine.calculate(case.engine_inputs()).breakdown.use_phase)
@@ -450,16 +451,11 @@ def test_rainwater_cap_differs(engine, course):
         f"rainwater above course cap: use-phase water course {course_use[2]:,.0f} kg, "
         f"engine {engine_use[2]:,.0f} kg"
     )
-    # GWP, energy and ODP do not depend on the cap.
-    assert engine_use[:2] == pytest.approx(course_use[:2], rel=REL)
-    assert engine_use[3] == pytest.approx(course_use[3], rel=REL)
-    # Course: the credit nets out toilet + urinal + landscaping only; sinks/showers remain.
     capped = water[32] + water[33] + water[38]
     assert water[40] == pytest.approx(-capped, rel=REL)
     assert course_use[2] == pytest.approx(50 * (water[39] - capped), rel=REL)
     assert course_use[2] > 0
-    # Engine: the credit nets out all fixtures, so the use-phase water is 0.
-    assert engine_use[2] == pytest.approx(0.0, abs=1e-6)
+    assert engine_use == pytest.approx(course_use, rel=REL)
 
 
 def test_embodied_odp_from_supplied_workbook_differs(engine, engine_recalculated, course):
