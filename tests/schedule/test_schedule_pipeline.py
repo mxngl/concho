@@ -118,12 +118,12 @@ def test_takt_zones_assigns_elements_to_zones(pipeline: dict[str, Path]) -> None
     assert not (pipeline["model"] / "takt_zones.json").exists()
 
 
-def test_takt_zone_polygon_drops_last_corner() -> None:
-    """Characterizes a bug kept from the original calibrator (fix in Phase 3B).
+def test_takt_zone_polygon_uses_every_corner() -> None:
+    """P3B.8 fix 1: an open ring of N corners is a polygon with N corners.
 
-    ``assign_takt_ids`` builds ``MplPath(corners, closed=True)``, which uses the last corner
-    as the close code, so an open ring of N corners is treated as N-1 corners. The Island
-    ``takt_zones.json`` stores open rings (see engines/schedule/README.md, "Findings").
+    The original built ``MplPath(corners, closed=True)``, which ignores the last corner (it
+    becomes the close code), so an open ring was tested as N-1 corners. The Island
+    ``takt_zones.json`` stores open rings.
     """
     import pandas as pd
 
@@ -131,16 +131,14 @@ def test_takt_zone_polygon_drops_last_corner() -> None:
 
     square = [[0, 0], [10, 0], [10, 10], [0, 10]]
     elements = pd.DataFrame(
-        {"Level": ["L 1", "L 1"], "Bounding Box Center X (ft)": [8.0, 2.0],
-         "Bounding Box Center Y (ft)": [2.0, 8.0]}
+        {"Level": ["L 1", "L 1", "L 1"], "Bounding Box Center X (ft)": [8.0, 2.0, 12.0],
+         "Bounding Box Center Y (ft)": [2.0, 8.0, 5.0]}
     )
-    open_ring = assign_takt_ids(elements, {"L 1": [{"zone_name": "Z", "corners_model_xy": square}]})
-    # (2, 8) lies in the square but outside the triangle (0,0)-(10,0)-(10,10).
-    assert list(open_ring["takt_id"]) == ["Z", ""]
-    closed = assign_takt_ids(
-        elements, {"L 1": [{"zone_name": "Z", "corners_model_xy": [*square, square[0]]}]}
-    )
-    assert list(closed["takt_id"]) == ["Z", "Z"]
+    # (2, 8) lies in the square but outside the triangle (0,0)-(10,0)-(10,10) that the
+    # original tested; (12, 5) lies outside the square.
+    for ring in (square, [*square, square[0]]):
+        zones = {"L 1": [{"zone_name": "Z", "corners_model_xy": ring}]}
+        assert list(assign_takt_ids(elements, zones)["takt_id"]) == ["Z", "Z", ""]
 
 
 def test_llm_context_derives_disciplines(pipeline: dict[str, Path]) -> None:

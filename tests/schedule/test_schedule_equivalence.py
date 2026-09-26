@@ -25,7 +25,9 @@ Also checks the reference sha256 values of docs/ROADMAP.md §1 (P0.4).
 
 from __future__ import annotations
 
+import csv
 import hashlib
+import io
 import os
 import re
 import shutil
@@ -123,6 +125,16 @@ COMPARED_OUTPUTS = [
      "Micro_Schedule_Takt_Viewer.html"),
     ("spatial-viewer", f"{PE}/spatial_visualizer_micro.html", "spatial_visualizer_micro.html"),
 ]
+
+# Outputs that a P3B.8 bug fix changes on purpose (see engines/schedule/README.md, "Fixed in
+# P3B.8"). They are checked by a dedicated function instead of byte equality.
+P3B8_CHANGED_OUTPUTS = {
+    ("takt-zones", "central_bim_model_with_takt.csv"): "_check_takt_ids_fix",
+}
+
+# P3B.8 fix 1 (takt zones keep their last corner): changed takt_id values in the Island model.
+TAKT_FIX_NEWLY_ASSIGNED = 900  # no takt zone before, one now
+TAKT_FIX_MOVED = 1  # other zone (element 1293125, L 1 Zone 5 -> L 1 Zone 1)
 
 _GUID = re.compile(r"\{[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}\}")
 # Takt_Model_Viewer.html links the FBX relative to its own folder, which differs per layout.
@@ -368,12 +380,37 @@ def test_output_matches_original(
     orig_path = runs["orig"] / original
     new_path = runs["new"] / MIGRATED_DIRS[step] / migrated
     assert new_path.exists(), f"migrated step {step} did not write {migrated}"
+    if (step, migrated) in P3B8_CHANGED_OUTPUTS:
+        check = globals()[P3B8_CHANGED_OUTPUTS[(step, migrated)]]
+        check(*(_normalize(path.read_text(encoding="utf-8"), runs)
+                for path in (orig_path, new_path)))
+        return
     if migrated.endswith(".xlsx"):
         assert _xlsx_values(new_path) == _xlsx_values(orig_path)
         return
     orig_text = _normalize(orig_path.read_text(encoding="utf-8"), runs)
     new_text = _normalize(new_path.read_text(encoding="utf-8"), runs)
     assert new_text == orig_text
+
+
+def _check_takt_ids_fix(orig_text: str, new_text: str) -> None:
+    """P3B.8 fix 1: only ``takt_id`` differs, and only by the complete polygons."""
+    orig_rows = list(csv.DictReader(io.StringIO(orig_text)))
+    new_rows = list(csv.DictReader(io.StringIO(new_text)))
+    assert len(new_rows) == len(orig_rows)
+    newly_assigned = moved = 0
+    for old, new in zip(orig_rows, new_rows, strict=True):
+        assert {k: v for k, v in new.items() if k != "takt_id"} == {
+            k: v for k, v in old.items() if k != "takt_id"
+        }
+        if old["takt_id"] == new["takt_id"]:
+            continue
+        assert new["takt_id"], f"element {old['ElementId']} lost its takt zone"
+        if old["takt_id"]:
+            moved += 1
+        else:
+            newly_assigned += 1
+    assert (newly_assigned, moved) == (TAKT_FIX_NEWLY_ASSIGNED, TAKT_FIX_MOVED)
 
 
 def _sha256(data: bytes) -> str:
@@ -397,10 +434,13 @@ def test_takt_schedule_reproduces_reference_checksum(runs: dict[str, object]) ->
 
 
 def test_central_bim_model_reproduces_reference_checksum(runs: dict[str, object]) -> None:
-    """Identical except for ``source_schedule``, which holds each run's absolute input path.
+    """Identical except for ``source_schedule`` and, since P3B.8 fix 1, ``takt_id``.
 
-    The committed file was written on the author's machine; its folder prefix is read from
-    the committed file itself and substituted for this run's prefix before hashing.
+    ``source_schedule`` holds each run's absolute input path: the committed file was written
+    on the author's machine, so its folder prefix is read from the committed file itself and
+    substituted for this run's prefix before hashing. ``takt_id`` changes on purpose (fix 1,
+    checked by ``_check_takt_ids_fix``); the committed values are put back before hashing,
+    which proves that every other byte is still the reference.
     """
     ipd = runs["ipd"]
     relative = f"{ZONES_OUT}/central_bim_model_with_takt.csv"
@@ -412,7 +452,21 @@ def test_central_bim_model_reproduces_reference_checksum(runs: dict[str, object]
         encoding="utf-8"
     )
     regenerated = regenerated.replace(f"{current_dir}{os.sep}", match.group(1))
+    regenerated = _with_column_from(regenerated, committed, "takt_id")
     assert _sha256(regenerated.encode("utf-8")) == REFERENCE_SHA256[relative]
+
+
+def _with_column_from(text: str, source: str, column: str) -> str:
+    """``text`` (pandas CSV) with ``column`` replaced by the values of ``source``."""
+    rows = list(csv.reader(io.StringIO(text)))
+    source_rows = list(csv.reader(io.StringIO(source)))
+    index = rows[0].index(column)
+    assert source_rows[0].index(column) == index and len(source_rows) == len(rows)
+    for row, source_row in zip(rows[1:], source_rows[1:], strict=True):
+        row[index] = source_row[index]
+    out = io.StringIO()
+    csv.writer(out, lineterminator="\n").writerows(rows)
+    return out.getvalue()
 
 
 @pytest.mark.xfail(

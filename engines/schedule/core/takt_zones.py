@@ -180,6 +180,11 @@ def assign_takt_ids(bim_df: pd.DataFrame, zones_by_level: dict[str, list[dict[st
         point = (center_x, center_y)
         for zone in level_zones:
             polygon_points = np.array(zone["corners_model_xy"], dtype=float)
+            # P3B.8 fix 1: with closed=True, matplotlib treats the last vertex as the CLOSEPOLY
+            # code and ignores its coordinates, so an open ring of N corners was tested as N-1
+            # corners. Repeat the first corner so every clicked corner counts (a ring that is
+            # already closed only gets a zero-length edge).
+            polygon_points = np.vstack([polygon_points, polygon_points[:1]])
             polygon_path = MplPath(polygon_points, closed=True)
             if polygon_path.contains_point(point, radius=1e-9):
                 enriched.at[row_index, "takt_id"] = zone["zone_name"]

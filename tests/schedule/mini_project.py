@@ -65,9 +65,9 @@ STRUCTURAL = [
              "", "12 CF"),
 ]
 
-# Rings repeat their first corner: the calibrator treats the last corner as the "close"
-# code and drops it (see test_takt_zone_polygon_drops_last_corner).
-ZONE_1 = [[-1, -1], [20, -1], [20, 21], [-1, 21], [-1, -1]]
+# Zone 1 is an open ring (as the interactive calibrator writes it), zone 2 repeats its first
+# corner; both must work (P3B.8 fix 1, test_takt_zone_polygon_uses_every_corner).
+ZONE_1 = [[-1, -1], [20, -1], [20, 21], [-1, 21]]
 ZONE_2 = [[20, -1], [41, -1], [41, 21], [20, 21], [20, -1]]
 TAKT_ZONES = {
     "levels": {

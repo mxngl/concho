@@ -10,7 +10,8 @@ comments and formatting are ignored) with the migrated module. Allowed differenc
   ``BACKGROUND_BY_LEVEL`` (repo-relative paths replaced by ``configure()``);
 - the functions listed in ``CHANGED_FUNCTIONS`` (path lookups, ``None`` guards for optional
   inputs, ``main``);
-- new CLI helpers (``configure``, ``build_parser``, ``main``, ``parse_floor_plan``).
+- new CLI helpers (``configure``, ``build_parser``, ``main``, ``parse_floor_plan``);
+- the P3B.8 bug fixes listed in ``P3B8_CHANGED_FUNCTIONS`` / ``P3B8_NEW_FUNCTIONS``.
 
 Everything else (rules, constants, task logic) must be identical.
 """
@@ -70,6 +71,13 @@ CHANGED_FUNCTIONS = {
     "viewers/takt_viewer.py": {"load_wbs_by_task_id", "main"},
 }
 
+# P3B.8 bug fixes to the original code, per migrated module (see engines/schedule/README.md,
+# "Fixed in P3B.8"): functions whose body changed on purpose, and new helper functions.
+P3B8_CHANGED_FUNCTIONS = {
+    "core/takt_zones.py": {"assign_takt_ids"},  # fix 1: keep the last polygon corner
+}
+P3B8_NEW_FUNCTIONS: dict[str, set[str]] = {}
+
 NEW_FUNCTIONS = {"configure", "build_parser", "main", "parse_floor_plan"}
 PATH_CONSTANT = re.compile(r"(_PATH|_PATHS|_DIR|_GLOB)$|^(ROOT|BACKGROUND_BY_LEVEL)$")
 
@@ -105,9 +113,11 @@ def test_only_paths_and_cli_changed(ipd_challenge_dir: Path, original: str) -> N
     )
     assert {name for name in changed if not name.startswith("=")} == CHANGED_FUNCTIONS.get(
         migrated, set()
-    )
+    ) | P3B8_CHANGED_FUNCTIONS.get(migrated, set())
     assert not {name for name in removed if not name.startswith("=")}
-    assert {name for name in added if not name.startswith("=")} <= NEW_FUNCTIONS
+    assert {name for name in added if not name.startswith("=")} <= NEW_FUNCTIONS | (
+        P3B8_NEW_FUNCTIONS.get(migrated, set())
+    )
 
 
 def test_every_migrated_module_is_covered() -> None:

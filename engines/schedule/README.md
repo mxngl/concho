@@ -250,14 +250,35 @@ Deviations to review:
    and the spatial viewer subtitle mention `Micro_Schedule_Generator/…`, and `Missing_data.md`
    says `ALICE_macro.xlsx`.
 
+## Fixed in P3B.8
+
+Bug fixes to the original code, one commit each. Every fixed function is listed in
+`P3B8_CHANGED_FUNCTIONS` of `test_schedule_migration_diff.py`; the equivalence test compares
+each step in isolation (on the original run's intermediate files), so a fix only changes the
+outputs of the step it fixes. The chained effect on the Island outputs is pinned in
+`tests/fixtures/schedule_golden.json`.
+
+**Fix 1: takt-zone polygons keep their last corner** (`core/takt_zones.py`,
+`assign_takt_ids`). `MplPath(corners, closed=True)` uses the last vertex only as the "close"
+code and ignores its coordinates, so a zone clicked with N corners was tested as N−1 corners
+(the drawing used matplotlib's `Polygon` patch, which closes the ring itself, so the plot
+looked right). The Island `takt_zones.json` stores open rings (19 zones, none closed). The
+fix repeats the first corner before building the path; an already closed ring only gets a
+zero-length edge. Island effect: 901 of the 3,971 elements change zone (the P1.7 estimate):
+900 elements without a zone get one (L -1 230, L 0 277, L 1 394; mostly mullions, duct
+fittings, walls and ducts) and one duct fitting (1293125) moves from L 1 Zone 5 to L 1
+Zone 1; none loses its zone. Elements with a takt id: 1,876 → 2,776. The takt plan does not
+read `takt_id` (it groups `room_takt_zones.csv`), so it is unchanged (16 zones, 192.36 h). The
+micro schedule only copies `takt_id` (931 rows change); the Island rules split by level and
+room, not by takt zone, so no date, duration or row changes. Downstream only the copied
+column changes: LLM context (901 rows), `Prefab_Wall_Mapping.csv` (272 rows), the delivery
+units' `takt_zones` (172 rows) and the takt viewer (4,442 → 4,630 lines). Test:
+`test_takt_zone_polygon_uses_every_corner`.
+
 ## Findings (kept as-is, for Phase 3B)
 
-1. **Takt-zone polygons lose their last corner** (`core/takt_zones.py`, `assign_takt_ids`).
-   `MplPath(corners, closed=True)` treats the last vertex as the close code, so a zone
-   drawn with N corners is tested as N−1 corners. The Island `takt_zones.json` stores open
-   rings (19 zones, none closed). With complete polygons, 2,776 instead of 1,876 of the 3,971
-   elements would get a takt id (901 assignments differ). Pinned by
-   `test_takt_zone_polygon_drops_last_corner`.
+1. ~~**Takt-zone polygons lose their last corner**~~ — fixed in P3B.8 (fix 1, see
+   [Fixed in P3B.8](#fixed-in-p3b8)).
 2. **`delivery-windows` crashes without Manufacton outputs.** Without production orders,
    `load_delivery_units()` returns micro-schedule units without a `source` column, and
    `production_order_window_series()` raises `KeyError: 'source'`, after most CSVs and PNGs
