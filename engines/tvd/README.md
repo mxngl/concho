@@ -110,6 +110,9 @@ The new cost DB format with plain numbers and a validator comes in P3.4.
 - `tests/tvd/test_tvd_project_config.py` (P3.2): the Island example config vs. an invented
   second config (`tests/fixtures/configs/river_test.project_config.json`) change exactly the
   project values (targets, GSF, names) in the results JSON and the dashboard.
+- `tests/tvd/test_tvd_target_consistency.py` (P3.3): the target check (mismatch fails with
+  the gap in $ and %, `target_sum_override` passes with status `override`, `carved_out` vs.
+  `on_top`) and the `target_consistency` block, on the invented fixture.
 - `tests/tvd/test_tvd_equivalence.py`: runs this engine and the original `tvd_analysis.py` on
   `AUTOTVD_DIR/qto/*.csv` + `AUTOTVD_DIR/cost_data.csv` and compares the results JSON (all fields
   except timestamps, label, paths, the project/team names and the `target_consistency` block),
