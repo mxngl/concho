@@ -15,6 +15,11 @@ The original batch script (not committed in IPD_Challenge) ran each trade on its
 the construction items per (assembly, material type) and combined the trade results in the
 order architecture, mep, structural. This test repeats exactly that.
 
+Since P3.2 the team, lifetime and use phase come from the Island example config
+(``engines/common/examples/island_2026.project_config.json``); the numbers are unchanged. A
+second, invented config (course team "River", modeled use phase) must change exactly the
+targets and the use phase.
+
 Skipped unless the fixtures are present (``python scripts/fetch_fixtures.py``).
 """
 
@@ -26,8 +31,10 @@ from pathlib import Path
 
 import pytest
 
+from engines.common.config import load_config
 from engines.stv import STVEngine, STVInputs
 from engines.stv.models import ConstructionItem, STVResults
+from engines.stv.project import STVProjectSettings
 from engines.stv.reference import STVReferenceData
 from engines.stv.revit_architecture import load_architecture_schedule
 from engines.stv.revit_mep import load_mep_schedule
@@ -35,6 +42,9 @@ from engines.stv.revit_structural import load_structural_schedule
 
 REL = 1e-6
 TEAM = "Island"
+REPO_ROOT = Path(__file__).resolve().parents[2]
+ISLAND_CONFIG = REPO_ROOT / "engines" / "common" / "examples" / "island_2026.project_config.json"
+RIVER_CONFIG = REPO_ROOT / "tests" / "fixtures" / "configs" / "river_test.project_config.json"
 WORKBOOK = "STV_Template/STV_ConceptA_Bambo.xlsx"
 SCHEDULES = "revit_schedules/Current"
 
@@ -104,20 +114,34 @@ def _assert_close(actual, expected, path: str = "") -> None:
 
 
 @pytest.fixture(scope="module")
-def trade_results(ipd_challenge_dir) -> dict[str, STVResults]:
-    engine = STVEngine(STVReferenceData.from_workbook(ipd_challenge_dir / WORKBOOK))
+def reference_data(ipd_challenge_dir) -> STVReferenceData:
+    return STVReferenceData.from_workbook(ipd_challenge_dir / WORKBOOK)
+
+
+def _run_trades(reference_data, ipd_challenge_dir, settings: STVProjectSettings,
+                use_phase_trade: str | None = None) -> dict[str, STVResults]:
+    """One result per trade; the use phase (if any) goes into ``use_phase_trade`` only."""
+    engine = STVEngine(reference_data, lifetime_years=settings.lifetime_years)
     results = {}
     for trade, (loader, files) in TRADES.items():
         items = _trade_items(loader, [ipd_challenge_dir / SCHEDULES / f for f in files])
         payload = {
-            "team": TEAM,
+            "team": settings.team,
             "construction_items": [
                 {"assembly": i.assembly, "material_type": i.material_type, "amount": i.amount}
                 for i in items
             ],
+            "use_phase": settings.use_phase if trade == use_phase_trade else {},
         }
         results[trade] = engine.calculate(STVInputs.from_dict(payload))
     return results
+
+
+@pytest.fixture(scope="module")
+def trade_results(reference_data, ipd_challenge_dir) -> dict[str, STVResults]:
+    settings = STVProjectSettings.from_config(load_config(ISLAND_CONFIG))
+    assert (settings.team, settings.lifetime_years, settings.use_phase) == (TEAM, 50, {})
+    return _run_trades(reference_data, ipd_challenge_dir, settings, "architecture")
 
 
 @pytest.fixture(scope="module")
@@ -158,3 +182,28 @@ def test_ipd_copy_of_project_file_is_identical(autostv_dir, ipd_challenge_dir):
     # The AutoSTV dashboard file is a byte-identical copy of IPD_Challenge's version.
     ipd = ipd_challenge_dir / "outputs/stv_versions/Current/project/stv_results.json"
     assert ipd.read_bytes() == (autostv_dir / EXPECTED_PROJECT).read_bytes()
+
+
+def test_river_config_changes_targets_and_use_phase(reference_data, ipd_challenge_dir, project):
+    settings = STVProjectSettings.from_config(load_config(RIVER_CONFIG))
+    trades = _run_trades(reference_data, ipd_challenge_dir, settings, "architecture")
+    river = STVResults.combine(list(trades.values()), team=settings.team).to_dict()
+    team = reference_data.get_team("River")
+
+    assert river["team"] == "River"
+    assert river["targets"]["carbon"] == pytest.approx(6.38e6 * team.target_carbon_factor)
+    assert river["targets"]["energy"] == pytest.approx(1.51e8 * team.target_energy_factor)
+    assert river["targets"]["water"] == pytest.approx(team.target_water_factor)
+    assert river["targets"] != project["targets"]
+    # Embodied impacts and construction items are independent of the project config.
+    for key in ("embodied_materials", "embodied_transport", "embodied_construction",
+                "embodied"):
+        assert river["breakdown"][key] == project["breakdown"][key]
+    assert river["construction_items"] == project["construction_items"]
+    # Use phase from the config: River grid factors x 100,000 kWh x 50 years (+ gas, water).
+    assert river["breakdown"]["use_electricity"]["carbon"] == pytest.approx(
+        team.grid_electricity.carbon * 100_000 * 50, rel=REL
+    )
+    assert river["breakdown"]["use_heating"]["energy"] == pytest.approx(37 * 500 * 50, rel=REL)
+    assert river["breakdown"]["use_water"]["water"] > 0
+    assert project["breakdown"]["use_phase"]["carbon"] == 0.0

@@ -45,14 +45,20 @@ pytestmark = pytest.mark.skipif(
 
 openpyxl = pytest.importorskip("openpyxl")
 
+from engines.common.config import load_config  # noqa: E402
 from engines.tvd.engine import compute  # noqa: E402
 from engines.tvd.summary import grand_total_of  # noqa: E402
 
 REL = 1e-6
 SUMMARY = "TVD Summary"
+# Project values only (targets, GSF); they do not affect the line items compared here.
+ISLAND_CONFIG = (
+    Path(__file__).resolve().parents[2]
+    / "engines" / "common" / "examples" / "island_2026.project_config.json"
+)
 
-# Cluster letter -> (course sheet, engine cluster name). Engine names follow the Island
-# cost DB; clusters A-C use takeoff quantities (engines/tvd/island_defaults.py).
+# Cluster letter -> (course sheet, engine cluster name). Engine names are the canonical
+# course cluster names; clusters A-C use takeoff quantities (engines/tvd/rules.py).
 CLUSTERS = {
     "A": ("A Substructure", "Substructure"),
     "B": ("B Shell", "Shell"),
@@ -185,7 +191,7 @@ def _engine_rows(items: list[Item]) -> tuple[list[dict], list[dict]]:
 
 def _engine(items: list[Item]):
     takeoff, cost = _engine_rows(items)
-    run = compute(takeoff, [], cost)
+    run = compute(takeoff, [], cost, load_config(ISLAND_CONFIG))
     assert len(run.results) == len(items)
     subcodes: dict[str, float] = defaultdict(float)
     for r in run.results:

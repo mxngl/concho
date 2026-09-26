@@ -1,34 +1,52 @@
-"""Legacy TVD HTML/PDF dashboard renderer, moved unchanged from AutoTVD.
+"""Legacy TVD HTML/PDF dashboard renderer, moved from AutoTVD.
 
 Source: mxngl/AutoTVD, tag ``island-2026-final`` (4201147), ``tvd_analysis.py``
-(``CLUSTER_COLORS``, ``_cluster_color`` and ``generate_html``). The body below is a
-verbatim copy; only the imports at the top are new.
+(``CLUSTER_COLORS``, ``_cluster_color`` and ``generate_html``). The body is a copy of the
+original; since P3.2 the team name and the gross floor area come from the caller
+(``project_config``) instead of hardcoded strings, and the cluster colours are keyed by the
+canonical course cluster names plus a palette for custom clusters.
 
 Temporary: replaced by a static dashboard that reads the results JSON (P7.1).
-The Island strings and the ``30000`` GSF literal in the JS are removed in P3.2.
 """
 
+import html
 import json
 import re
 from datetime import datetime
 
+from engines.common.config import CLUSTER_NAMES, CourseCluster
 from engines.tvd.quantities import _UNMAPPED_EXPORT_COLS
 from engines.tvd.summary import fmt_usd
 
-CLUSTER_COLORS = {
-    "Substructure":             "#A85520",   # dark terracotta — earth/foundation
-    "Shell":                    "#C46626",   # primary terracotta — structure
-    "Interiors":                "#7A9B76",   # sage green — interior spaces
-    "Services":                 "#5A7A56",   # dark sage — mechanical/utility
-    "Equipment and Furnishings":"#9BB08A",   # light sage — furnishings
-    "Special Contruction":      "#D4834A",   # light terracotta — specialty
-    "Building Sitework":        "#6B6B6B",   # medium charcoal — site/ground
-    "General Conditions":       "#424242",   # dark charcoal — administration
-    "Equipment Rental":         "#4A7A9B",   # steel blue — crane & hoisting
+# Course clusters A-H (canonical display names).
+COURSE_CLUSTER_COLORS = {
+    CLUSTER_NAMES[CourseCluster.A]: "#A85520",   # dark terracotta — earth/foundation
+    CLUSTER_NAMES[CourseCluster.B]: "#C46626",   # primary terracotta — structure
+    CLUSTER_NAMES[CourseCluster.C]: "#7A9B76",   # sage green — interior spaces
+    CLUSTER_NAMES[CourseCluster.D]: "#5A7A56",   # dark sage — mechanical/utility
+    CLUSTER_NAMES[CourseCluster.E]: "#9BB08A",   # light sage — furnishings
+    CLUSTER_NAMES[CourseCluster.F]: "#D4834A",   # light terracotta — specialty
+    CLUSTER_NAMES[CourseCluster.G]: "#6B6B6B",   # medium charcoal — site/ground
+    CLUSTER_NAMES[CourseCluster.H]: "#424242",   # dark charcoal — administration
 }
+# Custom (non-course) clusters get these colours in the order of the targets.
+CUSTOM_CLUSTER_PALETTE = ["#4A7A9B", "#8E6C8A", "#B5A642", "#5F9EA0"]
+DEFAULT_CLUSTER_COLOR = "#94a3b8"
 
-def _cluster_color(name: str) -> str:
-    return CLUSTER_COLORS.get(name, "#94a3b8")
+
+def cluster_colors(targets: dict[str, float]) -> dict[str, str]:
+    """Course cluster colours plus one palette colour per custom cluster in ``targets``."""
+    colors = dict(COURSE_CLUSTER_COLORS)
+    custom = [name for name in targets if name not in COURSE_CLUSTER_COLORS]
+    for i, name in enumerate(custom):
+        colors[name] = CUSTOM_CLUSTER_PALETTE[i % len(CUSTOM_CLUSTER_PALETTE)]
+    return colors
+
+
+def _js_inner(text: str) -> str:
+    """``text`` escaped for use inside a single-quoted JS string in a <script> block."""
+    inner = json.dumps(text, ensure_ascii=False)[1:-1]
+    return inner.replace("'", "\\'").replace("</", "<\\/")
 
 
 
@@ -40,11 +58,20 @@ def generate_html(
     data_source: str,
     targets: dict[str, float],
     total_target: float,
-    gross_sf: int = 30_000,
+    gross_sf: float,
     unmapped_rows: list[dict] | None = None,
     history_versions: list[dict] | None = None,
+    *,
+    team_name: str,
 ) -> str:
     ts = datetime.now().strftime("%Y-%m-%d %H:%M")
+    colors = cluster_colors(targets)
+
+    def _cluster_color(name: str) -> str:
+        return colors.get(name, DEFAULT_CLUSTER_COLOR)
+
+    team_html = html.escape(team_name)
+    team_js = _js_inner(team_name)
 
     # ── JS-embedded version data ──────────────────────────────────────────────
     _current_ver = {
@@ -56,7 +83,7 @@ def generate_html(
     }
     history_versions_js  = json.dumps(history_versions or [])
     current_version_js   = json.dumps(_current_ver)
-    cluster_colors_js    = json.dumps(CLUSTER_COLORS)
+    cluster_colors_js    = json.dumps(colors)
     cluster_targets_js   = json.dumps(targets)
     gross_sf_js          = json.dumps(gross_sf)
 
@@ -412,7 +439,7 @@ def generate_html(
 <header>
   <div>
     <h1>Target Value Design Dashboard</h1>
-    <div class="header-subtitle">Island Team 2026</div>
+    <div class="header-subtitle">{team_html}</div>
   </div>
   <div class="header-right">
     <button class="export-pdf-btn" id="exportPdfBtn" onclick="generatePDF()" title="Export executive summary as PDF">
@@ -554,7 +581,7 @@ def generate_html(
 </div>
 
 <footer>
-  Island Team 2026 &middot; Last updated: {ts} &middot; Data: {data_source}
+  {team_html} &middot; Last updated: {ts} &middot; Data: {data_source}
 </footer>
 
 <script>
@@ -1147,7 +1174,7 @@ function downloadChart(canvasId, title, filename) {{
   // Subtitle
   ctx.fillStyle = dark ? '#9a9a9a' : '#6b6b6b';
   ctx.font = Math.round(tmp.width * 0.015) + 'px system-ui, -apple-system, sans-serif';
-  ctx.fillText('Island Team 2026  ·  TVD Dashboard  ·  ' + new Date().toLocaleDateString('en-US', {{year:'numeric',month:'long',day:'numeric'}}), 20, 14 + Math.round(tmp.width * 0.024));
+  ctx.fillText('{team_js}  ·  TVD Dashboard  ·  ' + new Date().toLocaleDateString('en-US', {{year:'numeric',month:'long',day:'numeric'}}), 20, 14 + Math.round(tmp.width * 0.024));
 
   // Chart canvas
   ctx.drawImage(src, 0, PAD_T);
@@ -1157,7 +1184,7 @@ function downloadChart(canvasId, title, filename) {{
   ctx.font = Math.round(tmp.width * 0.013) + 'px system-ui, -apple-system, sans-serif';
   ctx.textAlign = 'right';
   ctx.textBaseline = 'bottom';
-  ctx.fillText('AutoTVD  ·  Island Team 2026', tmp.width - 16, tmp.height - 8);
+  ctx.fillText('AutoTVD  ·  {team_js}', tmp.width - 16, tmp.height - 8);
 
   const link = document.createElement('a');
   link.download = filename.replace(/[^a-zA-Z0-9_-]/g, '_') + '.jpg';
@@ -1204,7 +1231,7 @@ async function generatePDF() {{
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(7.5);
       doc.setTextColor(168, 168, 168);
-      doc.text('Island Team 2026  ·  TVD Dashboard', W - M, 14.5, {{ align: 'right' }});
+      doc.text('{team_js}  ·  TVD Dashboard', W - M, 14.5, {{ align: 'right' }});
     }}
 
     function sectionLabel(doc, text, y) {{
@@ -1228,7 +1255,7 @@ async function generatePDF() {{
         doc.setDrawColor(...cBorder);
         doc.setLineWidth(0.3);
         doc.line(M, H - 10, W - M, H - 10);
-        doc.text('TVD Executive Summary  ·  Island Team 2026  ·  Generated ' + new Date().toLocaleDateString('en-US', {{year:'numeric',month:'long',day:'numeric'}}), M, H - 6);
+        doc.text('TVD Executive Summary  ·  {team_js}  ·  Generated ' + new Date().toLocaleDateString('en-US', {{year:'numeric',month:'long',day:'numeric'}}), M, H - 6);
         doc.text('Page ' + i + ' of ' + n, W - M, H - 6, {{ align: 'right' }});
       }}
     }}
@@ -1250,9 +1277,9 @@ async function generatePDF() {{
     const mBoxW = (CW - 9) / 4;
     const metrics = [
       {{ label: 'TOTAL ESTIMATE',  value: fmtS(grandTotal),  sub: curDate,          col: cDark   }},
-      {{ label: 'TVD TARGET',      value: fmtS(grandTarget), sub: '30,000 GSF',     col: cMuted  }},
+      {{ label: 'TVD TARGET',      value: fmtS(grandTarget), sub: GROSS_SF_JS.toLocaleString('en-US') + ' GSF', col: cMuted  }},
       {{ label: 'DELTA',           value: (grandDelta < 0 ? '-' : '+') + fmtS(Math.abs(grandDelta)), sub: grandPct + '%', col: grandDelta < 0 ? cUnder : cOver }},
-      {{ label: '$ / SF',          value: '$' + Math.round(grandTotal / 30000),     sub: 'per Gross SF',   col: cAccent }},
+      {{ label: '$ / SF',          value: '$' + Math.round(grandTotal / GROSS_SF_JS),     sub: 'per Gross SF',   col: cAccent }},
     ];
     metrics.forEach((m, i) => {{
       const bx = M + i * (mBoxW + 3);

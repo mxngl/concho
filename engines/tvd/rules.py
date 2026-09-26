@@ -1,15 +1,19 @@
-"""Island Team 2026 project constants for the TVD engine.
+"""Default quantity rule tables of the TVD engine (engine defaults, not project config).
 
-temporary – replaced by project_config in P3.1/P3.2
-
-Moved unchanged from mxngl/AutoTVD ``tvd_analysis.py`` (tag ``island-2026-final``).
-These are team data, not course data. "Special Contruction" keeps the typo that
-appears in the Island ``cost_data.csv`` (fixed in P3.2).
+Moved from AutoTVD ``tvd_analysis.py`` in P1.3; the project values (targets, GSF, names)
+that used to live next to them come from ``project_config`` since P3.2 (see
+:mod:`engines.tvd.targets`). These tables move into the cost DB in P3.4
+(``quantity_rule``: ``mirror:<AC>``, ``count_codes:<AC,...>``, ``split_keywords``).
+They are team data, not course data.
 """
 
-# Cluster names (from cost_data.csv) that use TAKEOFF quantities.
-# All other clusters fall back to Fixed Quantity only.
-TAKEOFF_CLUSTERS = {"Substructure", "Shell", "Interiors"}
+from engines.common.config import CourseCluster
+
+# Course clusters whose cost lines use TAKEOFF quantities (A Substructure, B Shell,
+# C Interiors). All other clusters fall back to Fixed Quantity only.
+TAKEOFF_CLUSTERS: frozenset[CourseCluster] = frozenset(
+    {CourseCluster.A, CourseCluster.B, CourseCluster.C}
+)
 
 # Revit categories to exclude from area/length/volume aggregation
 EXCLUDE_CATEGORIES = {"Furniture"}
@@ -40,20 +44,3 @@ AC_KEYWORD_SPLIT: dict[str, list[tuple[list[str], str]]] = {
 # One C1030 stall is counted per element with any of these ACs
 # (counted across ALL categories, including those in EXCLUDE_CATEGORIES).
 TOILET_ACS: set[str] = {"D2010"}
-
-# Cluster target values (from MARQUESINA TVD worksheet — Island Team 2026).
-# Keys must exactly match the "Cluster Name" column in cost_data.csv.
-# Note: "Special Contruction" preserves the typo that appears in cost_data.csv.
-CLUSTER_TARGETS: dict[str, float] = {
-    "Substructure":              1_781_276,
-    "Shell":                     3_826_446,
-    "Interiors":                 2_005_842,
-    "Services":                  4_041_448,
-    "Equipment and Furnishings": 1_319_286,
-    "Special Contruction":       1_001_839,   # typo matches cost_data.csv
-    "Building Sitework":         1_435_258,
-    "General Conditions":        1_294_457,
-    "Equipment Rental":            400_000,
-}
-TOTAL_TARGET: float = 16_700_000
-GROSS_SF: int = 30_000          # gross square footage for $/SF index

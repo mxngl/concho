@@ -14,7 +14,8 @@ and validates a file beyond types:
 - referenced files exist (warning for optional files);
 - no secrets in the file (tokens, URLs with credentials, Discord IDs).
 
-The engines do not read this config yet (P3.2 / P3B.2); they keep their Island defaults.
+Since P3.2 the TVD and STV engines and the TVD dashboard read their project values from it
+(``engines.tvd.targets``, ``engines.stv.project``); the schedule engines follow in P3B.2.
 
 Usage::
 
