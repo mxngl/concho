@@ -27,13 +27,14 @@ stv = [
 
 [project.scripts]
 concho-stv = "engines.stv.cli:main"
+concho-tvd = "engines.tvd.cli:main"
 
 [project.urls]
 Repository = "https://github.com/mxngl/concho"
 
-# src-less layout: only the `engines` package is importable.
+# src-less layout: only the `engines` and `dashboards` packages are importable.
 [tool.setuptools.packages.find]
-include = ["engines", "engines.*"]
+include = ["engines", "engines.*", "dashboards", "dashboards.*"]
 
 [tool.ruff]
 target-version = "py311"
@@ -46,9 +47,11 @@ select = ["E", "F", "W", "I", "B", "UP"]
 # P1.2: the STV engine is kept as a verbatim port of IPD_Challenge@989a6b7 so the diff
 # against the source stays reviewable; lint cleanup of these rules is left for Phase 3.
 "engines/stv/*.py" = ["E501", "I001", "UP017", "UP035", "UP037", "B905", "F841", "W293"]
+# Verbatim copy of the AutoTVD HTML f-string (P1.3); replaced by a static page in P7.1.
+"dashboards/tvd/legacy_render.py" = ["E501", "W605"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["engines", "check_forbidden"]
+known-first-party = ["engines", "dashboards", "check_forbidden"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

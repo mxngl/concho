@@ -1,0 +1,4 @@
+ElementId,Category,Family,Type,Level,Mark,Assembly Code,Length,Area,Volume,Material,Comments
+2001,Structural Foundations,Footing,Pad,L0,,A1010,,16 SF,27.00 CF,Concrete,
+2002,Structural Foundations,Footing,Pad,L0,,A1010,,16 SF,27.00 CF,Concrete,
+1020,Walls,Basic Wall,Partition,L1,,C1010,,80 SF,,Gypsum,
