@@ -1,4 +1,4 @@
-"""Golden test: the Island 2026 schedule outputs of all 14 steps (P2.6).
+"""Golden test: the Island 2026 schedule outputs of all 15 steps (P2.6, P3B.8).
 
 Re-runs every migrated step (``python -m engines.schedule <step>``) on the IPD_Challenge@989a6b7
 inputs and compares each output file with ``tests/fixtures/schedule_golden.json``:
@@ -55,7 +55,7 @@ def golden_args(ipd: Path, out: Path) -> dict[str, list[str]]:
 
 
 def run_pipeline(ipd: Path, out: Path) -> dict[str, dict[str, object]]:
-    """Run all 14 steps into ``out``; return exit code and last stderr line per step."""
+    """Run all 15 steps into ``out``; return exit code and last stderr line per step."""
     steps = {}
     for step, args in golden_args(ipd, out).items():
         proc = _run(["-m", "engines.schedule", step, *args], cwd=out.parent)
@@ -347,7 +347,7 @@ def main(argv: list[str]) -> int:
         golden = generate(ipd, Path(tmp))
     golden = {
         "_comment": [
-            "P2.6 golden record of the Island 2026 schedule outputs (all 14 steps).",
+            "P2.6 golden record of the Island 2026 schedule outputs (all 15 steps).",
             "Inputs: IPD_Challenge@989a6b7 + engines/schedule/examples/island. No output files are",
             "committed; sha256 is taken after masking run-root paths, P6 GUIDs and the FBX link",
             "(xlsx: cell values; png: existence only). Regenerate with",

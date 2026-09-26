@@ -114,12 +114,26 @@ BIM_MAP = [
     ["MEP Rough-In", "discipline:MEP", "3", "count", "crew"],
     ["Ceiling Installation", "Category:Ceilings", "2", "count", "crew"],
 ]
-ROOM_TAKT_ZONES = [
-    ["room_takt_id", "room_id", "room_number", "room_name", "level", "area_sf", "volume_cf",
-     "location_x_ft", "location_y_ft", "location_z_ft"],
-    ["L 1 Room 101", "R1", "101", "Office", "L 1", "400", "4800", "10", "10", "0"],
-    ["L 1 Room 102", "R2", "102", "Lab", "L 1", "400", "4800", "30", "10", "0"],
+# Revit room boundary export (one row per boundary segment): two 20 x 20 ft rooms.
+ROOM_BOUNDARY_COLUMNS = [
+    "RoomId", "RoomNumber", "RoomName", "Level", "Area (SF)", "Volume (CF)",
+    "Room Location X (ft)", "Room Location Y (ft)", "Room Location Z (ft)", "Boundary Loop",
+    "Segment Index", "Start X (ft)", "Start Y (ft)", "Start Z (ft)", "End X (ft)",
+    "End Y (ft)", "End Z (ft)", "Boundary Element Id",
 ]
+
+
+def _room_boundaries(room, x0):
+    room_id, number, name = room
+    corners = [(x0, 0), (x0 + 20, 0), (x0 + 20, 20), (x0, 20)]
+    return [
+        [room_id, number, name, "L 1", "400", "4800", x0 + 10, 10, 0, 1, index + 1,
+         *start, 0, *corners[(index + 1) % 4], 0, ""]
+        for index, start in enumerate(corners)
+    ]
+
+
+ROOM_BOUNDARIES = [*_room_boundaries(ROOM_1, 0), *_room_boundaries(ROOM_2, 20)]
 
 
 def _write_csv(path: Path, rows: list[list[object]]) -> Path:
@@ -145,7 +159,8 @@ def write_mini_project(root: Path) -> dict[str, Path]:
         "crew": _write_csv(inputs / "Crew.csv", CREWS),
         "equipment": _write_csv(inputs / "Equipment.csv", EQUIPMENT),
         "bim_map": _write_csv(inputs / "ALICE_BIM_Map.csv", BIM_MAP),
-        "room_takt_zones": _write_csv(inputs / "room_takt_zones.csv", ROOM_TAKT_ZONES),
+        "room_boundaries": _write_csv(inputs / "Mini_Room_Boundaries.csv",
+                                      [ROOM_BOUNDARY_COLUMNS, *ROOM_BOUNDARIES]),
         # Header only: the kit import then derives the prefab-wall mapping itself.
         "build_code_mapping": _write_csv(inputs / "build_code_mapping.csv",
                                          [["build_code", "assembly_id"]]),

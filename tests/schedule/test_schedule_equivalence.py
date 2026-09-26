@@ -45,6 +45,7 @@ FUZOR_OUT = f"{PE}/Fuzor_Mapper/outputs"
 TAKT_OUT = "src/Takt_engine/outputs"
 ZONES_OUT = "outputs/takt_zones"
 DELIVERY_OUT = "outputs/delivery_window_analysis"
+ROOMS_OUT = "outputs/room_boundaries"
 
 # sha256 of the committed Island reference outputs (docs/ROADMAP.md §1, P0.4).
 REFERENCE_SHA256 = {
@@ -165,16 +166,16 @@ def _migrated_args(ipd: Path, new: Path, inputs_from: Path | None = None) -> dic
     Outputs always go to ``new``.
     """
     alice, micro, prefab, fuzor = new / "alice", new / "micro", new / "prefab", new / "fuzor"
-    zones = new / "takt_zones"
+    zones, rooms = new / "takt_zones", new / "rooms"
     if inputs_from is not None:
         alice, micro, prefab, fuzor = (
             inputs_from / ALICE_OUT, inputs_from / MICRO_OUT, inputs_from / PREFAB_OUT,
             inputs_from / FUZOR_OUT,
         )
-        zones = inputs_from / ZONES_OUT
+        zones, rooms = inputs_from / ZONES_OUT, inputs_from / ROOMS_OUT
     out = {
         "zones": new / "takt_zones", "alice": new / "alice", "prefab": new / "prefab",
-        "micro": new / "micro", "fuzor": new / "fuzor",
+        "micro": new / "micro", "fuzor": new / "fuzor", "rooms": new / "rooms",
     }
     committed_prefab = ipd / PREFAB_OUT
     return {
@@ -268,10 +269,16 @@ def _migrated_args(ipd: Path, new: Path, inputs_from: Path | None = None) -> dic
             "--assembly-map", str(committed_prefab / "Revit_Assembly_Id_Map.csv"),
             "--out-dir", str(new / "delivery"),
         ],
+        # P3B.8 fix 2: generator for room_takt_zones.csv (no original script). In the isolated
+        # comparison the takt plan reads the committed file, as the original did.
+        "room-takt-zones": [
+            "--room-boundaries", str(_room_boundaries(ipd)),
+            "--out-dir", str(out["rooms"]),
+        ],
         "takt-plan": [
             *TAKT_ARGS,
             "--central-bim", str(zones / "central_bim_model.csv"),
-            "--room-takt-zones", str(ipd / "outputs" / "room_boundaries" / "room_takt_zones.csv"),
+            "--room-takt-zones", str(rooms / "room_takt_zones.csv"),
             "--crew", str(alice / "Crew.csv"),
             "--equipment", str(alice / "Equipment.csv"),
             "--productivity-rates", str(ipd / TAKT_OUT / "Takt_Productivity_Rates.csv"),
@@ -318,7 +325,8 @@ MIGRATED_DIRS = {
     "takt-zones": "takt_zones", "llm-context": "takt_zones", "alice-inputs": "alice",
     "prefab-walls": "prefab", "micro-schedule": "micro", "alice-p6-xml": "alice",
     "fuzor-xml": "fuzor", "manufacton-parts": "prefab", "manufacton-assemblies": "prefab",
-    "manufacton-orders": "prefab", "delivery-windows": "delivery", "takt-plan": "takt",
+    "manufacton-orders": "prefab", "delivery-windows": "delivery",
+    "room-takt-zones": "rooms", "takt-plan": "takt",
     "takt-viewer": "micro", "spatial-viewer": "viewers",
 }
 
@@ -467,6 +475,37 @@ def _with_column_from(text: str, source: str, column: str) -> str:
     out = io.StringIO()
     csv.writer(out, lineterminator="\n").writerows(rows)
     return out.getvalue()
+
+
+# P3B.8 fix 2: the committed room_takt_zones.csv was made from an earlier export of the room
+# boundaries than the committed one (both in IPD commit c071034). (room_id, column) ->
+# (committed, regenerated); every other value is identical.
+ROOM_TAKT_ZONES_NEWER_EXPORT = {
+    ("1440376", "area_sf"): ("5587.212", "5587.307"),  # L 1 Room 150
+    ("1440376", "boundary_segments"): ("223", "241"),
+    ("1440382", "boundary_segments"): ("4", "5"),  # L 1 Room 156
+    ("1440384", "boundary_segments"): ("4", "6"),  # L 1 Room 158
+    ("1440385", "boundary_segments"): ("4", "5"),  # L 1 Room 159
+}
+
+
+def test_room_takt_zones_reproduces_committed_file(runs: dict[str, object]) -> None:
+    """The new generator rebuilds IPD's committed room_takt_zones.csv from the export."""
+    committed = list(csv.DictReader(
+        (runs["ipd"] / ROOMS_OUT / "room_takt_zones.csv").open(encoding="utf-8", newline="")
+    ))
+    generated = list(csv.DictReader(
+        (runs["new"] / "rooms" / "room_takt_zones.csv").open(encoding="utf-8", newline="")
+    ))
+    assert [row["room_takt_id"] for row in generated] == [
+        row["room_takt_id"] for row in committed]
+    differences = {
+        (old["room_id"], column): (old[column], new[column])
+        for old, new in zip(committed, generated, strict=True)
+        for column in old
+        if old[column] != new[column]
+    }
+    assert differences == ROOM_TAKT_ZONES_NEWER_EXPORT
 
 
 @pytest.mark.xfail(

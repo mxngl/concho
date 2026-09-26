@@ -120,10 +120,15 @@ def test_only_paths_and_cli_changed(ipd_challenge_dir: Path, original: str) -> N
     )
 
 
+# Modules without an original script (P3B.8 fix 2: IPD_Challenge has no generator for
+# room_takt_zones.csv).
+NEW_MODULES = {"core/room_takt_zones.py"}
+
+
 def test_every_migrated_module_is_covered() -> None:
     migrated = {
         str(path.relative_to(SCHEDULE))
         for path in SCHEDULE.rglob("*.py")
         if path.name not in {"__init__.py", "__main__.py", "cli.py"}
     }
-    assert migrated == set(MODULES.values())
+    assert migrated == set(MODULES.values()) | NEW_MODULES

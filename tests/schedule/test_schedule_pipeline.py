@@ -40,14 +40,14 @@ def _run(*args: object) -> None:
 
 @pytest.fixture(scope="module")
 def pipeline(tmp_path_factory: pytest.TempPathFactory) -> dict[str, Path]:
-    """Run all 14 steps in pipeline order; return the output folders."""
+    """Run all 15 steps in pipeline order; return the output folders."""
     root = tmp_path_factory.mktemp("schedule_pipeline")
     inp = write_mini_project(root)
     tpl = root / "templates"
     tpl.mkdir()
     out = {name: root / "out" / name for name in
-           ["model", "alice", "prefab", "micro", "fuzor", "manufacton", "delivery", "takt",
-            "viewers"]}
+           ["model", "alice", "prefab", "micro", "fuzor", "manufacton", "delivery", "rooms",
+            "takt", "viewers"]}
     model, micro = out["model"], out["micro"]
     bim = model / "central_bim_model_with_takt.csv"
     context = model / "central_bim_model_llm_context.csv"
@@ -88,8 +88,10 @@ def pipeline(tmp_path_factory: pytest.TempPathFactory) -> dict[str, Path]:
          "--production-order-items", mf / "Production_Order_Items.xlsx",
          "--kit-map", mf / "Revit_Kit_Parameter_Map.csv",
          "--assembly-map", mf / "Revit_Assembly_Id_Map.csv", "--out-dir", out["delivery"])
+    _run("room-takt-zones", "--room-boundaries", inp["room_boundaries"],
+         "--out-dir", out["rooms"])
     _run("takt-plan", "--central-bim", model / "central_bim_model.csv",
-         "--room-takt-zones", inp["room_takt_zones"], "--crew", inp["crew"],
+         "--room-takt-zones", out["rooms"] / "room_takt_zones.csv", "--crew", inp["crew"],
          "--equipment", inp["equipment"], "--out-dir", out["takt"])
     _run("takt-viewer", "--micro-schedule", micro_csv, "--out-dir", out["viewers"])
     _run("spatial-viewer", "--micro-schedule", micro_csv, "--out-dir", out["viewers"])
@@ -100,7 +102,7 @@ def test_cli_lists_every_step(capsys: pytest.CaptureFixture[str]) -> None:
     assert main([]) == 0
     listing = capsys.readouterr().out
     assert all(step in listing for step in STEPS)
-    assert len(STEPS) == 14
+    assert len(STEPS) == 15
 
 
 def test_cli_rejects_unknown_step() -> None:
@@ -200,6 +202,17 @@ def test_delivery_windows(pipeline: dict[str, Path]) -> None:
     assert {"1 day", "1 week"} <= metrics
     orders = _rows(pipeline["delivery"] / "production_order_count_by_delivery_window.csv")
     assert {row["window"] for row in orders} == {"1 day", "3 days", "1 week"}
+
+
+def test_room_takt_zones(pipeline: dict[str, Path]) -> None:
+    """P3B.8 fix 2: one row per room of the boundary export, the takt planner's input."""
+    rows = _rows(pipeline["rooms"] / "room_takt_zones.csv")
+    assert [(row["room_takt_id"], row["room_id"], row["boundary_segments"]) for row in rows] == [
+        ("L 1 Room 101", "R1", "4"), ("L 1 Room 102", "R2", "4")]
+    assert rows[1] | {"room_takt_id": "", "boundary_segments": ""} == {
+        "room_takt_id": "", "room_id": "R2", "room_number": "102", "room_name": "Lab",
+        "level": "L 1", "area_sf": "400", "volume_cf": "4800", "location_x_ft": "30",
+        "location_y_ft": "10", "location_z_ft": "0", "boundary_segments": ""}
 
 
 def test_takt_plan(pipeline: dict[str, Path]) -> None:

@@ -30,7 +30,7 @@ flowchart TD
   zonesjson[/"takt_zones.json<br/>(interactive calibration)"/]:::ext
   alicexlsx[/"ALICE export workbook .xlsx"/]:::ext
   bimmap[/"ALICE_BIM_Map.csv<br/>micro_schedule_rules.json"/]:::ext
-  rooms[/"*_Room_Boundaries.csv<br/>room_takt_zones.csv"/]:::ext
+  rooms[/"*_Room_Boundaries.csv<br/>(revit-addin export)"/]:::ext
   mtpl[/"Manufacton templates .xlsx<br/>vendors.csv, build-code mapping"/]:::ext
 
   S1["1 takt-zones"] --> CB[("central_bim_model.csv<br/>central_bim_model_with_takt.csv")]
@@ -60,16 +60,19 @@ flowchart TD
   MIC --> S11["11 delivery-windows"] --> DEL[("delivery CSVs + PNGs")]
   CTX --> S11
   PO --> S11
-  CB --> S12["12 takt-plan"] --> TK[("Takt_*.csv, Takt_Report.md<br/>Takt_Planner.html")]
-  MAC --> S12
-  rooms --> S12
-  MIC --> S13["13 takt-viewer"]:::viewer
-  MIC --> S14["14 spatial-viewer"]:::viewer
+  rooms --> S12["12 room-takt-zones"] --> RTZ[("room_takt_zones.csv")]
+  CB --> S13["13 takt-plan"] --> TK[("Takt_*.csv, Takt_Report.md<br/>Takt_Planner.html")]
+  RTZ --> S13
+  MAC --> S13
+  rooms -. optional .-> S13
+  MIC --> S14["14 takt-viewer"]:::viewer
+  MIC --> S15["15 spatial-viewer"]:::viewer
 ```
 
 Orange = optional tool adapter, blue = HTML viewer, grey = input from outside the pipeline.
-Run the steps in the numbered order. Steps 6, 7, 12, 13 and 14 only need the outputs named in
-the table, so they can run in any order once those exist.
+Run the steps in the numbered order. Steps 6, 7 and 12–15 only need the outputs named in the
+table, so they can run in any order once those exist. Step 12 (`room-takt-zones`, added in
+P3B.8) only reads the Revit room boundary export and feeds step 13 (`takt-plan`).
 
 | # | Step (`concho-schedule …`) | Module | Original script (IPD_Challenge@989a6b7) | Reads | Writes (in `--out-dir`) |
 |---|---|---|---|---|---|
@@ -84,13 +87,14 @@ the table, so they can run in any order once those exist.
 | 9 | `manufacton-assemblies` | `adapters/manufacton/assembly_import.py` | `Prefab_BIM_Mapper/generate_assembly_import.py` | Manufacton assembly template, `Parts_Import.xlsx`, `Parts_Summary.csv`, `Micro_Schedule.csv`, `central_bim_model_with_takt.csv`, `Revit_4D_Build_Code_Map.csv` | `Assembly_Import.xlsx` |
 | 10 | `manufacton-orders` | `adapters/manufacton/kit_import.py` | `Prefab_BIM_Mapper/generate_kit_import.py` | Manufacton order + item templates, `vendors.csv`, `4d_build_code_to_assembly_id_mapping.csv`, `Assembly_Import.xlsx`, `Parts_Summary.csv`, `Revit_4D_Build_Code_Map.csv`, `Micro_Schedule.csv`, LLM context | `Production_Order.xlsx`, `Production_Order_Items.xlsx`, `Revit_Assembly_Id_Map.csv`, `Revit_Kit_Parameter_Map.csv` |
 | 11 | `delivery-windows` | `core/delivery_windows.py` | `Logistics_Analysis/compare_delivery_windows.py` | `Micro_Schedule.csv`, LLM context, the four step-10 outputs | `delivery_units_by_micro_schedule.csv`, `delivery_window_daily_timeseries.csv`, `delivery_window_summary_metrics.csv`, `production_order_count_by_delivery_window.csv`, 7 PNG charts |
-| 12 | `takt-plan` | `core/takt_planner.py` | `src/Takt_engine/takt_planner.py` | `central_bim_model.csv`, `room_takt_zones.csv`, `Crew.csv`; optional `Equipment.csv`, productivity rates CSV (else built-in), `*_Room_Boundaries.csv`, FBX | `Takt_Zones.csv`, `Takt_Schedule.csv`, `Takt_Crew_Idle_Report.csv`, `Takt_Element_Allocations.csv`, `Takt_Element_Splits.csv`, `Takt_Equipment_Inputs.csv`, `Takt_Productivity_Rates.csv`, `Takt_Report.md`, `Takt_Zone_Map_<level>.png`, `Takt_Planner.html` (+ `Takt_Model_Viewer.html` with `--fbx`) |
-| 13 | `takt-viewer` | `viewers/takt_viewer.py` | `Micro_Schedule_Generator/generate_takt_viewer.py` | `Micro_Schedule.csv`; optional ALICE workbook | `Micro_Schedule_Takt_Viewer.html` |
-| 14 | `spatial-viewer` | `viewers/spatial_visualizer.py` | `src/Planning_engine/generate_spatial_visualizer.py` | `Micro_Schedule.csv`; optional `--floor-plan LEVEL=PNG` | `spatial_visualizer_micro.html` |
+| 12 | `room-takt-zones` | `core/room_takt_zones.py` | none (new in P3B.8; IPD_Challenge only has the committed output `outputs/room_boundaries/room_takt_zones.csv`) | `*_Room_Boundaries.csv` | `room_takt_zones.csv` (one row per room: `room_takt_id, room_id, room_number, room_name, level, area_sf, volume_cf, location_x/y/z_ft, boundary_segments`) |
+| 13 | `takt-plan` | `core/takt_planner.py` | `src/Takt_engine/takt_planner.py` | `central_bim_model.csv`, `room_takt_zones.csv`, `Crew.csv`; optional `Equipment.csv`, productivity rates CSV (else built-in), `*_Room_Boundaries.csv`, FBX | `Takt_Zones.csv`, `Takt_Schedule.csv`, `Takt_Crew_Idle_Report.csv`, `Takt_Element_Allocations.csv`, `Takt_Element_Splits.csv`, `Takt_Equipment_Inputs.csv`, `Takt_Productivity_Rates.csv`, `Takt_Report.md`, `Takt_Zone_Map_<level>.png`, `Takt_Planner.html` (+ `Takt_Model_Viewer.html` with `--fbx`) |
+| 14 | `takt-viewer` | `viewers/takt_viewer.py` | `Micro_Schedule_Generator/generate_takt_viewer.py` | `Micro_Schedule.csv`; optional ALICE workbook | `Micro_Schedule_Takt_Viewer.html` |
+| 15 | `spatial-viewer` | `viewers/spatial_visualizer.py` | `src/Planning_engine/generate_spatial_visualizer.py` | `Micro_Schedule.csv`; optional `--floor-plan LEVEL=PNG` | `spatial_visualizer_micro.html` |
 
 Relative original paths are under `src/Planning_engine/` unless they start with `src/`.
 
-**Tool-free core.** Steps 1, 2, 5 and 12 need no ALICE, Fuzor or Manufacton licence. Step 5
+**Tool-free core.** Steps 1, 2, 5, 12 and 13 need no ALICE, Fuzor or Manufacton licence. Step 5
 also accepts a hand-written `Macro_Schedule.csv` (`task_id, task_name, start_date,
 end_date`) plus `Tasks.csv` / `Crew.csv` / `Equipment.csv`. It also accepts an ALICE export
 CSV with `Task ID, Task Name, Start Date, End Date` (like
@@ -129,13 +133,15 @@ concho-schedule micro-schedule --macro-schedule $OUT/alice/Macro_Schedule.csv --
     --llm-context $OUT/model/central_bim_model_llm_context.csv \
     --prefab-wall-mapping $OUT/prefab/Prefab_Wall_Mapping.csv --rules $EX/micro_schedule_rules.json \
     --room-boundaries $IPD/revit_schedules/04_Island_ARCH_Concept2_Room_Boundaries.csv --out-dir $OUT/micro
+concho-schedule room-takt-zones \
+    --room-boundaries $IPD/revit_schedules/04_Island_ARCH_Concept2_Room_Boundaries.csv --out-dir $OUT/rooms
 concho-schedule takt-plan --level "L 1" --rooms-per-zone 2 --central-bim $OUT/model/central_bim_model.csv \
-    --room-takt-zones $IPD/outputs/room_boundaries/room_takt_zones.csv --crew $OUT/alice/Crew.csv \
+    --room-takt-zones $OUT/rooms/room_takt_zones.csv --crew $OUT/alice/Crew.csv \
     --equipment $OUT/alice/Equipment.csv \
     --productivity-rates $IPD/src/Takt_engine/outputs/Takt_Productivity_Rates.csv \
     --room-boundaries $IPD/revit_schedules/04_Island_ARCH_Concept2_Room_Boundaries.csv --out-dir $OUT/takt
 # adapters, delivery windows and viewers: see tests/schedule/test_schedule_equivalence.py
-# (_migrated_args) for the full Island argument list of all 14 steps.
+# (_migrated_args) for the full Island argument list of all 15 steps.
 ```
 
 ## Inputs
@@ -159,15 +165,14 @@ the bamboo design:
 | ALICE export workbook (`ALICE_macro.xlsx`, `ALICE_Macro_with_crews_equipment_productivity.xlsx`) | `alice-inputs`, optional for `alice-p6-xml`, `takt-viewer` | export from ALICE (project → export to Excel); Island: IPD_Challenge `src/Planning_engine/ALICE_BIM_mapper/inputs/` and `…/ALICE_VARIATIONS/` |
 | Manufacton templates `Parts Import.xlsx`, `Assembly.Import.xlsx`, `ORDER IMPORT TEMPLATE.xlsx` (sheet `ORDERS`), `ITEM IMPORT TEMPLATE.xlsx` (sheet `ITEMS`) | steps 8–10 | Manufacton import templates (download in Manufacton); Island copies: IPD_Challenge `src/Planning_engine/Prefab_BIM_Mapper/inputs/`. `Kit Import.xlsx` there is not read by any script |
 | `Fuzor_Schedule_Format.xml` | not read by any script (reference P6 XML layout for Fuzor) | IPD_Challenge `src/Planning_engine/Fuzor_Mapper/inputs/` |
-| Revit schedule exports (`*_Architecture_TakeOff.csv`, `*_Structural_Schedule.csv`, `*_MEP_TakeOff.csv`, `*_Room_Boundaries.csv`) | `takt-zones`, `micro-schedule`, `takt-plan` | the Revit add-in in `revit-addin/`; Island: IPD_Challenge `revit_schedules/` (`Current/` = the set used for the central model) |
+| Revit schedule exports (`*_Architecture_TakeOff.csv`, `*_Structural_Schedule.csv`, `*_MEP_TakeOff.csv`, `*_Room_Boundaries.csv`) | `takt-zones`, `micro-schedule`, `room-takt-zones`, `takt-plan` | the Revit add-in in `revit-addin/`; Island: IPD_Challenge `revit_schedules/` (`Current/` = the set used for the central model) |
 | `takt_zones.json` | `takt-zones --takt-zones` | output of an interactive `takt-zones` run; Island: IPD_Challenge `outputs/takt_zones/` |
-| `room_takt_zones.csv` | `takt-plan` | **no generator in IPD_Challenge@989a6b7** (committed output only, `outputs/room_boundaries/`); columns listed in `takt-plan --help` |
 | cropped floor plan PNGs | interactive `takt-zones`, `spatial-viewer` | cropped from the architectural PDFs with IPD_Challenge `src/floor_plancropper.py` (a notebook cell using PyMuPDF; **not migrated** because the calibrator does not import it); Island: `floor_plans/` |
 | FBX model | optional `takt-plan --fbx` | Revit FBX export; binary, never committed (`*.fbx` is git-ignored) |
 
 ## Tests
 
-- `tests/schedule/test_schedule_pipeline.py` (runs in CI): all 14 steps run through
+- `tests/schedule/test_schedule_pipeline.py` (runs in CI): all 15 steps run through
   `concho-schedule` on an invented mini project (`tests/schedule/mini_project.py`), plus the
   ALICE workbook conversion. The Manufacton templates are generated with the column layout
   the adapters check.
@@ -175,7 +180,7 @@ the bamboo design:
   `IPD_CHALLENGE_DIR`, or `IPD_Challenge` in the P2.1 fixture folder from
   `scripts/fetch_fixtures.py`; runs in the CI job `reference`, skipped elsewhere): runs the original scripts in a temporary copy of the
   checkout and the migrated CLIs on the same inputs. Every CSV/MD/HTML/XML/xlsx output of
-  all 14 steps must match; only run-root paths, the random P6 GUIDs and the relative FBX
+  all 14 original steps must match; only run-root paths, the random P6 GUIDs and the relative FBX
   link are masked. It also checks the §1 reference checksums (see below).
 - `tests/schedule/test_schedule_migration_diff.py` (same checkout): compares each migrated
   module with its original as an AST. Only path constants, the listed path/`None`-guard
@@ -274,6 +279,26 @@ room, not by takt zone, so no date, duration or row changes. Downstream only the
 column changes: LLM context (901 rows), `Prefab_Wall_Mapping.csv` (272 rows), the delivery
 units' `takt_zones` (172 rows) and the takt viewer (4,442 → 4,630 lines). Test:
 `test_takt_zone_polygon_uses_every_corner`.
+
+**Fix 2: generator for `room_takt_zones.csv`** (new step 12 `room-takt-zones`,
+`core/room_takt_zones.py`). The takt planner reads one row per room, but IPD_Challenge only
+had the committed output. The new step builds it from the room boundary export
+(`*_Room_Boundaries.csv`, one row per boundary segment): the first row of each room gives
+id, number, name, level, area, volume and location (copied as exported), `boundary_segments`
+counts its segment rows (all loops), and `room_takt_id` is `"<level> Room <number>"`, the id
+the micro schedule already derives from the same file. It sits between the micro-schedule
+branch and `takt-plan` in the diagram above (it only needs the Revit export). Island check:
+the 41 rooms, their order and all ids, names, levels, volumes and locations match the
+committed file. Five values differ because the committed file was made from an earlier export
+of the same rooms (both committed in IPD commit c071034): room 150's area (5,587.212 →
+5,587.307 SF) and the segment counts of rooms 150 (223 → 241), 156 (4 → 5), 158 (4 → 6) and
+159 (4 → 5); pinned in `test_room_takt_zones_reproduces_committed_file`. Effect on the takt
+plan: only `Takt_Zones.csv` changes (L 1 Takt Zone 8, rooms 201 + 150: area 5,658.684 →
+5,658.779 SF); the schedule is unchanged (16 zones, 192.36 h, still the §1 checksum
+`17fa80…`), because the planner does not size tasks by room area. The golden run now feeds
+`takt-plan` the generated file; the equivalence test still gives it the committed file, as the
+original did. The plot PNGs and `room_boundary_plot_summary.csv` next to the committed file
+are not reproduced (nothing reads them).
 
 ## Findings (kept as-is, for Phase 3B)
 

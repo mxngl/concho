@@ -1,6 +1,6 @@
 {
   "_comment": [
-    "P2.6 golden record of the Island 2026 schedule outputs (all 14 steps).",
+    "P2.6 golden record of the Island 2026 schedule outputs (all 15 steps).",
     "Inputs: IPD_Challenge@989a6b7 + engines/schedule/examples/island. No output files are",
     "committed; sha256 is taken after masking run-root paths, P6 GUIDs and the FBX link",
     "(xlsx: cell values; png: existence only). Regenerate with",
@@ -39,6 +39,9 @@
       "error": "ValueError: Build code not found in 4D build-code map: `Exterior Wall Install | L -1 | PREFAB_WALL_LNEG1_001`"
     },
     "delivery-windows": {
+      "returncode": 0
+    },
+    "room-takt-zones": {
       "returncode": 0
     },
     "takt-plan": {
@@ -432,6 +435,13 @@
         "prefab_groups": 131
       }
     },
+    "rooms/room_takt_zones.csv": {
+      "sha256": "76707cd92ea57e58c0462c1ae25275a20f85353115876708792982f8c5247d8c",
+      "metrics": {
+        "rows": 41,
+        "columns": 11
+      }
+    },
     "takt/Takt_Crew_Idle_Report.csv": {
       "sha256": "e6768241ed418e58269014f10601dde88403365a6393e5be54e994122dbde91e",
       "metrics": {
@@ -507,7 +517,7 @@
       "metrics": {}
     },
     "takt/Takt_Zones.csv": {
-      "sha256": "3966493dbb27b1d4c72be70ad2be0d43fb6a9af4312448a0328c38cda08ca233",
+      "sha256": "8a3cb1e9331694e194490e434a78af8d036864bcdacb4905b732f15b0bce02fe",
       "metrics": {
         "rows": 16,
         "columns": 7,

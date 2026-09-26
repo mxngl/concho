@@ -2,13 +2,13 @@
 
 The schedule engines (`engines/schedule/`) turn Revit exports and an ALICE macro schedule
 into a central BIM model with takt zones, an element-level micro schedule, a takt plan,
-delivery analyses and the optional ALICE / Fuzor / Manufacton exports. The pipeline, its 14
+delivery analyses and the optional ALICE / Fuzor / Manufacton exports. The pipeline, its 15
 steps, the inputs and the known findings are described in
 [`engines/schedule/README.md`](../../engines/schedule/README.md).
 
 ## Golden test (P2.6)
 
-`tests/schedule/test_schedule_golden.py` reruns all 14 steps (`python -m engines.schedule
+`tests/schedule/test_schedule_golden.py` reruns all 15 steps (`python -m engines.schedule
 <step>`) on the IPD_Challenge@989a6b7 inputs. The Island rules and BIM map come from
 `engines/schedule/examples/island/` (byte-identical to the 989a6b7 copies). It compares
 every output with `tests/fixtures/schedule_golden.json`:
@@ -16,7 +16,7 @@ every output with `tests/fixtures/schedule_golden.json`:
 - **Exit status per step.** `manufacton-orders` fails on this data (README finding 3), so
   its error line is pinned. `delivery-windows` therefore reads the committed Manufacton
   workbooks, as in the P1.7 equivalence test.
-- **The set of output files** (43).
+- **The set of output files** (44).
 - **sha256 per file**, after the P1.7 masking: run-root paths, random P6 GUIDs and the
   relative FBX link. xlsx files are hashed by cell values. The 8 PNG charts only have to
   exist, because matplotlib rendering is not stable across machines.
