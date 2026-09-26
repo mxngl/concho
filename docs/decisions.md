@@ -18,6 +18,7 @@ Status values: **decided** · **working assumption** (acted on, still to be conf
 | D9 | Location of the transcript agent and ClashBot | open |
 | D10 | Origin of `6.38e6` / `1.51e8` | open |
 | D11 | Urinal `null` vs. `0` in `project_config` (P3.10 item 3) | decided |
+| D12 | Rainwater credit cap (P3.10 item 2) | decided |
 
 ---
 
@@ -89,6 +90,27 @@ Status values: **decided** · **working assumption** (acted on, still to be conf
     (course: non-blank cell);
   - the key must be present unless `use_phase.not_modeled` is true, so the choice is always
     explicit.
-- **Consequences:** The schema (P3.1) already distinguishes the two. The engine change
-  (factor 0.75 for any non-null value, 1.0 for `null`) and its test belong to P3.10 and the
-  config wiring in P3.2; until then the engine keeps its current behaviour.
+- **Rationale:** follow the course (roadmap §0, hard rule 6: course logic untouched in the
+  engines); `null` only adds the "blank cell" case that a number cannot express.
+- **Consequences:** The schema (P3.1) distinguishes the two. **Implemented in P3.10**
+  (2026-09-26): `WaterUseInputs.urinal_gpf` is optional; the engine applies 0.75 for any
+  number (incl. 0) and 1.0 for `None`; `project_config` passes the value through;
+  `--stv-workbook-input` reads a blank urinal cell as `None`. Course-equivalence cases for
+  urinal = 0 and blank (`test_toilet_factor_matches_course`). Island results unchanged (no
+  use phase); the River test config uses `null`.
+
+## D12: Rainwater credit cap (P3.10 item 2)
+
+- **Status:** decided (2026-09-26, P3.10)
+- **Context:** P2.4 found that the course STV workbook caps the rainwater credit at toilet +
+  urinal + landscaping water (`Use Phase` H40 = `-MIN(D40 × …, H32 + H33 + H38)`), while the
+  engine capped it at the total water use (all fixtures incl. sinks and showers). With more
+  rainwater than toilet + urinal + landscaping need, the engine netted out sink and shower
+  water too and reported less use-phase water than the course.
+- **Decision:** follow the course (roadmap §0, hard rule 6): the credit is
+  `min(collected, toilet + urinal + landscaping water)`; sink and shower water is never
+  offset.
+- **Consequences:** `engines/stv/engine.py` changed in P3.10; course-equivalence case
+  `test_rainwater_cap_matches_course`. Rainwater below both caps gives the same result as
+  before. Island results unchanged (no use phase); the Island LAMARCASINA workbook variant
+  (396,183 gal rainwater, below its toilet water) is unchanged as well.
