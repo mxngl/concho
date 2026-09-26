@@ -25,6 +25,9 @@ stv = [
     "matplotlib==3.11.2",
 ]
 
+[project.scripts]
+concho-stv = "engines.stv.cli:main"
+
 [project.urls]
 Repository = "https://github.com/mxngl/concho"
 
@@ -38,6 +41,11 @@ line-length = 100
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "UP"]
+
+[tool.ruff.lint.per-file-ignores]
+# P1.2: the STV engine is kept as a verbatim port of IPD_Challenge@989a6b7 so the diff
+# against the source stays reviewable; lint cleanup of these rules is left for Phase 3.
+"engines/stv/*.py" = ["E501", "I001", "UP017", "UP035", "UP037", "B905", "F841", "W293"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["engines", "check_forbidden"]
