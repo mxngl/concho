@@ -21,9 +21,13 @@ from pathlib import Path
 
 import pytest
 
-AUTOTVD_DIR = os.environ.get("AUTOTVD_DIR")
+# Resolved to an absolute path: both implementations run as subprocesses in tmp folders,
+# so a path relative to the pytest working directory would not be found there.
+AUTOTVD_DIR = (
+    Path(os.environ["AUTOTVD_DIR"]).resolve() if os.environ.get("AUTOTVD_DIR") else None
+)
 
-pytestmark = pytest.mark.skipif(not AUTOTVD_DIR, reason="AUTOTVD_DIR not set")
+pytestmark = pytest.mark.skipif(AUTOTVD_DIR is None, reason="AUTOTVD_DIR not set")
 
 SNAPSHOT_LABEL = "Equivalence check"
 
@@ -74,7 +78,7 @@ def _single(folder: Path, pattern: str) -> Path:
 
 @pytest.fixture(scope="module")
 def outputs(tmp_path_factory) -> dict[str, Path]:
-    base = Path(AUTOTVD_DIR)
+    base = AUTOTVD_DIR
     inputs = _inputs(base)
     flags = ["--arch", str(inputs["arch"]), "--struct", str(inputs["struct"]),
              "--cost", str(inputs["cost"])]
@@ -121,7 +125,7 @@ def test_dashboard_html_identical(outputs):
 
 
 def test_island_golden_numbers(outputs):
-    base = Path(AUTOTVD_DIR)
+    base = AUTOTVD_DIR
     for rel, digest in REFERENCE_SHA256.items():
         if hashlib.sha256((base / rel).read_bytes()).hexdigest() != digest:
             pytest.skip(f"{rel} differs from the island-2026-final reference input")
