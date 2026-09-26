@@ -137,12 +137,13 @@ class STVEngine:
             uses_per_person=3 * 250,
             occupants=900,
             rate=water.toilet_gpf,
-            occupancy_factor=0.75 if water.urinal_gpf > 0 else 1.0,
+            # Course: 0.75 whenever the urinal cell is non-blank, even 0 (decision D11).
+            occupancy_factor=1.0 if water.urinal_gpf is None else 0.75,
         )
         urinal = self._water_fixture_vector(
             uses_per_person=3 * 250 * 0.25,
             occupants=900,
-            rate=water.urinal_gpf,
+            rate=water.urinal_gpf or 0.0,
         )
         landscaping = self._water_landscape_vector(water.landscaping_gal)
         total = (

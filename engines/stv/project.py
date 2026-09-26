@@ -70,8 +70,9 @@ class STVProjectSettings:
 def use_phase_payload(use_phase: UsePhase) -> dict[str, Any]:
     """``stv.use_phase`` in the ``STVInputs.from_dict`` format (``not_modeled`` → ``{}``).
 
-    ``cogeneration: null`` and ``water.urinal_gpf: null`` become 0 (no cogeneration, no
-    urinals), as in the engine today; the course handling of an explicit urinal 0 is P3.10.
+    ``cogeneration: null`` = no cogeneration. ``water.urinal_gpf`` is passed as is:
+    ``null`` = no urinals (toilet factor 1.0), a number incl. ``0`` = course behaviour
+    (toilet factor 0.75), decision D11.
     """
     if use_phase.not_modeled:
         return {}
@@ -95,7 +96,7 @@ def use_phase_payload(use_phase: UsePhase) -> dict[str, Any]:
     if water is not None:
         payload["water_use"] = {
             "toilet_gpf": water.toilet_gpf or 0.0,
-            "urinal_gpf": water.urinal_gpf or 0.0,
+            "urinal_gpf": water.urinal_gpf,
             "wc_sink_gpm": water.wc_sink_gpm or 0.0,
             "lab_sink_gpm": water.lab_sink_gpm or 0.0,
             "kitchen_sink_gpm": water.kitchen_sink_gpm or 0.0,

@@ -19,9 +19,10 @@ template: the workbook as supplied carries stale cached values in some LCA compo
 cells (see ``test_embodied_odp_from_supplied_workbook_differs``).
 
 Known differences between the engine and the course (engine left unchanged, see the
-``test_*_differs`` tests): the toilet factor with a urinal cell of 0 and the stale cached
-LCA component values. Fixed in P3.10: the cogeneration water/ODP columns
-(``test_cogen_matches_course``) and the rainwater cap (``test_rainwater_cap_matches_course``).
+``test_*_differs`` test): the stale cached LCA component values of the supplied workbook.
+Fixed in P3.10 and now compared like the main cases: the cogeneration water/ODP columns
+(``test_cogen_matches_course``), the rainwater cap (``test_rainwater_cap_matches_course``)
+and the toilet factor with a urinal cell of 0 (``test_toilet_factor_matches_course``).
 """
 
 from __future__ import annotations
@@ -90,13 +91,17 @@ class Case:
     urinal_blank: bool = False
 
     def engine_inputs(self) -> STVInputs:
+        # The engine gets what the course sheet holds in D33 (decision D11): blank -> None
+        # (no urinals, toilet factor 1.0), otherwise the number, 0 by default (factor 0.75).
+        water = dict(self.use_phase.get("water_use", {}))
+        water["urinal_gpf"] = None if self.urinal_blank else water.get("urinal_gpf", 0.0)
         return STVInputs.from_dict(
             {
                 "team": self.team,
                 "construction_items": [
                     {"assembly": a, "material_type": m, "amount": x} for a, m, x in self.items
                 ],
-                "use_phase": self.use_phase,
+                "use_phase": {**self.use_phase, "water_use": water},
             }
         )
 
@@ -208,9 +213,15 @@ CASES = [
     ),
 ]
 
-# Edge cases that document course-vs-engine differences.
+# Edge cases (formerly course-vs-engine differences, fixed in P3.10).
 TOILET_ONLY = {"water_use": {"toilet_gpf": 1.28}}
-TOILET_URINAL_ZERO = Case(id="toilet_urinal_cell_zero", team="Island", use_phase=TOILET_ONLY)
+# Urinal cell D33 = 0 / engine urinal_gpf = 0 (explicit): toilet factor 0.75 in both.
+TOILET_URINAL_ZERO = Case(
+    id="toilet_urinal_cell_zero",
+    team="Island",
+    use_phase={"water_use": {"toilet_gpf": 1.28, "urinal_gpf": 0.0}},
+)
+# Urinal cell D33 blank / engine urinal_gpf = None: toilet factor 1.0 in both.
 TOILET_URINAL_BLANK = Case(
     id="toilet_urinal_cell_blank", team="Island", use_phase=TOILET_ONLY, urinal_blank=True
 )
@@ -273,7 +284,7 @@ def _write_case(template: Path, case: Case, dest: Path) -> None:
         up[cell] = float(cogen.get(key, 0.0))
     water = payload.get("water_use", {})
     for key, cell in WATER_INPUT_CELLS.items():
-        up[cell] = float(water.get(key, 0.0))
+        up[cell] = float(water.get(key) or 0.0)
     if case.urinal_blank:
         up["D33"] = None
     wb.save(dest)
@@ -417,24 +428,23 @@ def test_cogen_matches_course(engine, course):
 # --- documented differences (engine unchanged) -----------------------------------------
 
 
-def test_toilet_factor_urinal_cell_zero_differs(engine, course):
-    """Course: toilet factor 0.75 whenever D33 is non-blank, even 0. Engine: only if > 0.
-
-    With only a toilet flow rate and D33 = 0 the course use phase is 0.75 x the engine's;
-    with D33 blank both agree. The engine has no "blank" for urinal_gpf (it defaults to
-    0.0), so it follows the course's blank-cell behaviour.
+@pytest.mark.parametrize("case", [TOILET_URINAL_ZERO, TOILET_URINAL_BLANK], ids=lambda c: c.id)
+def test_toilet_factor_matches_course(case, engine, course):
+    """P3.10 item 3 (decision D11): the course applies the 0.75 toilet factor whenever the
+    urinal cell D33 is non-blank, even 0. Engine: ``urinal_gpf`` 0 -> 0.75, None -> 1.0.
+    With only a toilet flow rate, D33 = 0 gives 0.75 x the blank-cell use phase.
     """
-    engine_use = _vector(engine.calculate(TOILET_URINAL_ZERO.engine_inputs()).breakdown.use_phase)
-    course_zero = course[TOILET_URINAL_ZERO.id]["use_phase"]
-    course_blank = course[TOILET_URINAL_BLANK.id]["use_phase"]
+    engine_use = _vector(engine.calculate(case.engine_inputs()).breakdown.use_phase)
+    course_use = course[case.id]["use_phase"]
+    print(f"{case.id}: use-phase water course {course_use[2]:,.0f} kg, "
+          f"engine {engine_use[2]:,.0f} kg")
+    assert engine_use == pytest.approx(course_use, rel=REL)
 
-    print(
-        f"toilet only, D33 = 0: use-phase water course {course_zero[2]:,.0f} kg, "
-        f"engine {engine_use[2]:,.0f} kg ({course_zero[2] / engine_use[2] - 1:+.1%})"
-    )
-    assert course_blank == pytest.approx(engine_use, rel=REL)
-    assert course_zero == pytest.approx(tuple(0.75 * v for v in engine_use), rel=REL)
-    assert course_zero[2] < engine_use[2]
+
+def test_toilet_factor_zero_vs_blank(course):
+    zero = course[TOILET_URINAL_ZERO.id]["use_phase"]
+    blank = course[TOILET_URINAL_BLANK.id]["use_phase"]
+    assert zero == pytest.approx(tuple(0.75 * v for v in blank), rel=REL)
 
 
 def test_rainwater_cap_matches_course(engine, course):

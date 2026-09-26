@@ -110,6 +110,21 @@ def test_toilet_factor_applies_only_with_urinal(reference):
     assert water.water == pytest.approx(gallons * GAL_TO_WATER_KG * 50)
 
 
+@pytest.mark.parametrize("urinal, factor", [
+    (None, 1.0),  # null / key missing = no urinals (course: blank cell)
+    (0.0, 0.75),  # explicit 0 = course behaviour (non-blank cell), decision D11
+    (0.5, 0.75),
+])
+def test_toilet_factor_urinal_null_vs_zero(reference, urinal, factor):
+    water_use = {"toilet_gpf": 1.6}
+    if urinal is not None:
+        water_use["urinal_gpf"] = urinal
+    for payload in (water_use, {**water_use, "urinal_gpf": urinal}):
+        water = _run(reference, use_phase={"water_use": payload}).breakdown.use_water
+        gallons = 900 * 3 * 250 * factor * 1.6 + 900 * 3 * 250 * 0.25 * (urinal or 0.0)
+        assert water.water == pytest.approx(gallons * GAL_TO_WATER_KG * 50)
+
+
 def test_rainwater_reduces_water(reference):
     water_use = {"landscaping_gal": 10_000.0, "rainwater_collection_gal": 4_000.0}
     water = _run(reference, use_phase={"water_use": water_use}).breakdown.use_water

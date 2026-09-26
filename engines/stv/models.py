@@ -123,10 +123,16 @@ class CogenerationInputs:
     cooling_split: float = 0.0
 
 
+def _optional_float(value: Any) -> float | None:
+    return None if value is None else float(value)
+
+
 @dataclass(slots=True)
 class WaterUseInputs:
     toilet_gpf: float = 0.0
-    urinal_gpf: float = 0.0
+    # None = no urinals (course: blank cell, toilet factor 1.0); a number, including 0,
+    # = course behaviour (non-blank cell, toilet factor 0.75). Decision D11.
+    urinal_gpf: float | None = None
     wc_sink_gpm: float = 0.0
     lab_sink_gpm: float = 0.0
     kitchen_sink_gpm: float = 0.0
@@ -187,7 +193,7 @@ class STVInputs:
                 ),
                 water_use=WaterUseInputs(
                     toilet_gpf=float(water_payload.get("toilet_gpf", 0.0)),
-                    urinal_gpf=float(water_payload.get("urinal_gpf", 0.0)),
+                    urinal_gpf=_optional_float(water_payload.get("urinal_gpf")),
                     wc_sink_gpm=float(water_payload.get("wc_sink_gpm", 0.0)),
                     lab_sink_gpm=float(water_payload.get("lab_sink_gpm", 0.0)),
                     kitchen_sink_gpm=float(water_payload.get("kitchen_sink_gpm", 0.0)),
