@@ -1,0 +1,547 @@
+{
+  "_comment": [
+    "P2.6 golden record of the Island 2026 schedule outputs (all 14 steps).",
+    "Inputs: IPD_Challenge@989a6b7 + engines/schedule/examples/island. No output files are",
+    "committed; sha256 is taken after masking run-root paths, P6 GUIDs and the FBX link",
+    "(xlsx: cell values; png: existence only). Regenerate with",
+    "python tests/schedule/test_schedule_golden.py --update, then review the diff."
+  ],
+  "steps": {
+    "takt-zones": {
+      "returncode": 0
+    },
+    "llm-context": {
+      "returncode": 0
+    },
+    "alice-inputs": {
+      "returncode": 0
+    },
+    "prefab-walls": {
+      "returncode": 0
+    },
+    "micro-schedule": {
+      "returncode": 0
+    },
+    "alice-p6-xml": {
+      "returncode": 0
+    },
+    "fuzor-xml": {
+      "returncode": 0
+    },
+    "manufacton-parts": {
+      "returncode": 0
+    },
+    "manufacton-assemblies": {
+      "returncode": 0
+    },
+    "manufacton-orders": {
+      "returncode": 1,
+      "error": "ValueError: Build code not found in 4D build-code map: `Exterior Wall Install | L -1 | PREFAB_WALL_LNEG1_001`"
+    },
+    "delivery-windows": {
+      "returncode": 0
+    },
+    "takt-plan": {
+      "returncode": 0
+    },
+    "takt-viewer": {
+      "returncode": 0
+    },
+    "spatial-viewer": {
+      "returncode": 0
+    }
+  },
+  "files": {
+    "alice/ALICE_Task_Schedule.xml": {
+      "sha256": "6888cd16e3b737e9b5f2390871134c3a958f2e5f50c9ba4955223dea628ff448",
+      "metrics": {
+        "activities": 54
+      }
+    },
+    "alice/ALICE_Task_Schedule_Macro_View.csv": {
+      "sha256": "b2a3696b6a1ab1eac68a5d4b854d79a4a2293fb6e76f0f546b3cf61affa15ed6",
+      "metrics": {
+        "rows": 54,
+        "columns": 11,
+        "activities": 54,
+        "tasks": 37,
+        "first_start": "2029-10-01 09:00",
+        "last_finish": "2030-03-15 19:40",
+        "bim_elements": 2496
+      }
+    },
+    "alice/Crew.csv": {
+      "sha256": "c71220449f8e71d3d0e301f66059b803e8938133123f5462b31bb6442e27d43f",
+      "metrics": {
+        "rows": 16,
+        "columns": 4
+      }
+    },
+    "alice/Equipment.csv": {
+      "sha256": "2b154d8711c1bcf980117a5a7a0806c242dd186fbd687d5870a457561a75a928",
+      "metrics": {
+        "rows": 4,
+        "columns": 3
+      }
+    },
+    "alice/Macro_Schedule.csv": {
+      "sha256": "d267a913b33513586eba4a8a8b7128fce9122b816f51a6435399631ffad529b2",
+      "metrics": {
+        "rows": 37,
+        "columns": 6,
+        "tasks": 37,
+        "first_start": "2029-10-01 09:00",
+        "last_end": "2030-07-05 17:00",
+        "span_calendar_days": 278,
+        "span_weekdays": 200
+      }
+    },
+    "alice/Missing_data.md": {
+      "sha256": "d896a5f6c15189e5eb680702b3b60a8abebeb33e29b603a671a35707aea03831",
+      "metrics": {
+        "lines": 11
+      }
+    },
+    "alice/Tasks.csv": {
+      "sha256": "0b48b01b281e52aa9b4979cdd0129ebdd190ee89c137a4fd3de808e8d9b454bc",
+      "metrics": {
+        "rows": 37,
+        "columns": 4
+      }
+    },
+    "delivery/daily_vs_weekly_delivery_element_count.png": {
+      "metrics": {}
+    },
+    "delivery/daily_vs_weekly_delivery_volume.png": {
+      "metrics": {}
+    },
+    "delivery/delivered_volume_by_takt_zone.png": {
+      "metrics": {}
+    },
+    "delivery/delivery_units_by_micro_schedule.csv": {
+      "sha256": "ef98d21efca90c090489ea03470e5a3f8783e9548f4d306211c8ad710826d329",
+      "metrics": {
+        "rows": 1145,
+        "columns": 12,
+        "by_source": {
+          "Micro Schedule Fallback": 544,
+          "Production Order": 601
+        },
+        "elements": 3491,
+        "first_need_date": "2029-11-09",
+        "last_need_date": "2030-01-17"
+      }
+    },
+    "delivery/delivery_window_daily_timeseries.csv": {
+      "sha256": "c9df89b6194325dc485e5be57b2d4ee50d17cbf2ff4f97825b502b338d1485a0",
+      "metrics": {
+        "rows": 140,
+        "columns": 14
+      }
+    },
+    "delivery/delivery_window_metric_comparison.png": {
+      "metrics": {}
+    },
+    "delivery/delivery_window_summary_metrics.csv": {
+      "sha256": "7eab72da101dcdd99072a1f619505d7ce7bba3878bedca0af2f5b661d80e0360",
+      "metrics": {
+        "rows": 2,
+        "columns": 15,
+        "windows": {
+          "1 day": {
+            "total_delivered_elements": 3491.0,
+            "total_delivered_cf": 69076.18,
+            "max_single_delivery_cf": 8752.17,
+            "max_peak_on_site_cf": 8752.17,
+            "max_peak_on_site_elements": 370.0
+          },
+          "1 week": {
+            "total_delivered_elements": 3491.0,
+            "total_delivered_cf": 69076.18,
+            "max_single_delivery_cf": 18885.95,
+            "max_peak_on_site_cf": 18885.95,
+            "max_peak_on_site_elements": 822.0
+          }
+        }
+      }
+    },
+    "delivery/onsite_inventory_impact.png": {
+      "metrics": {}
+    },
+    "delivery/onsite_storage_area_impact.png": {
+      "metrics": {}
+    },
+    "delivery/production_order_count_by_delivery_window.csv": {
+      "sha256": "ba8f7eeaa0e934efdd8c129ccdc387f98b99edcd4babf75399571bcd4aaf61e8",
+      "metrics": {
+        "rows": 207,
+        "columns": 3,
+        "windows": {
+          "1 day": {
+            "delivery_days": 38,
+            "peak_orders_per_delivery": 44,
+            "orders": 601
+          },
+          "3 days": {
+            "delivery_days": 20,
+            "peak_orders_per_delivery": 87,
+            "orders": 601
+          },
+          "1 week": {
+            "delivery_days": 11,
+            "peak_orders_per_delivery": 155,
+            "orders": 601
+          }
+        }
+      }
+    },
+    "delivery/production_order_count_by_delivery_window.png": {
+      "metrics": {}
+    },
+    "fuzor/Fuzor_Micro_Schedule.xml": {
+      "sha256": "399e9ce6ba004b9e426ffa7964dba2ca81935c60b136cb59448290294265d3d1",
+      "metrics": {
+        "activities": 1929
+      }
+    },
+    "fuzor/Revit_4D_Build_Code_Map.csv": {
+      "sha256": "241b87c8e9491c9dd5704ef3f8911503716a41fe23b2b1e2f6bf13692c582d84",
+      "metrics": {
+        "rows": 2517,
+        "columns": 8
+      }
+    },
+    "micro/Micro_Schedule.csv": {
+      "sha256": "0ee03baa3b08f6f6fffba27a33135a68c515113b4f4b102b612e9b82cc18523e",
+      "metrics": {
+        "rows": 6625,
+        "columns": 38,
+        "tasks": 37,
+        "micro_task_ids": 120,
+        "bim_elements": 2496,
+        "first_start": "2029-10-01 09:00",
+        "last_end": "2030-03-15 19:40",
+        "span_calendar_days": 166,
+        "span_weekdays": 120,
+        "end_without_buffer": "2030-02-26 11:40",
+        "superstructure_start": "2029-12-28 10:40",
+        "superstructure_end": "2030-01-03 10:40",
+        "final_inspections_end": "2030-02-26 11:40",
+        "scheduled_hours_total": 487150.2028,
+        "task_windows": {
+          "A1070": [
+            "2029-10-01 09:00",
+            "2029-10-04 11:00"
+          ],
+          "A1080": [
+            "2029-10-04 11:00",
+            "2029-10-10 14:00"
+          ],
+          "A1090": [
+            "2029-10-04 11:00",
+            "2029-10-09 13:00"
+          ],
+          "A1100": [
+            "2029-10-04 11:00",
+            "2029-10-10 14:00"
+          ],
+          "A1110": [
+            "2029-10-04 11:00",
+            "2029-10-11 15:00"
+          ],
+          "A1120": [
+            "2029-10-04 11:00",
+            "2029-10-15 17:00"
+          ],
+          "A1140": [
+            "2029-10-04 11:00",
+            "2029-10-11 15:00"
+          ],
+          "A1150": [
+            "2029-10-16 09:00",
+            "2029-10-16 17:00"
+          ],
+          "A1170": [
+            "2029-10-17 09:00",
+            "2029-10-26 15:00"
+          ],
+          "A1180": [
+            "2029-10-26 15:00",
+            "2029-11-05 11:00"
+          ],
+          "A1190": [
+            "2029-11-05 11:00",
+            "2029-11-09 14:00"
+          ],
+          "A1200": [
+            "2029-11-09 14:00",
+            "2029-11-12 10:38"
+          ],
+          "A1210": [
+            "2029-11-19 13:45",
+            "2029-11-21 11:20"
+          ],
+          "A1220": [
+            "2029-11-12 09:00",
+            "2029-11-12 12:40"
+          ],
+          "A1230": [
+            "2029-11-19 12:40",
+            "2029-11-26 16:40"
+          ],
+          "A1240": [
+            "2029-11-21 11:20",
+            "2029-11-22 14:39"
+          ],
+          "A1250": [
+            "2029-12-03 16:40",
+            "2029-12-13 14:40"
+          ],
+          "A1260": [
+            "2029-12-20 14:40",
+            "2029-12-28 10:40"
+          ],
+          "A1270": [
+            "2029-11-19 12:40",
+            "2029-11-19 13:45"
+          ],
+          "A1280": [
+            "2029-11-22 14:39",
+            "2029-11-26 16:00"
+          ],
+          "A1330": [
+            "2029-12-28 10:40",
+            "2029-12-31 14:40"
+          ],
+          "A1340": [
+            "2030-01-01 09:00",
+            "2030-01-03 10:40"
+          ],
+          "A1350": [
+            "2029-12-28 11:00",
+            "2030-01-01 03:40"
+          ],
+          "A1420": [
+            "2029-12-31 09:00",
+            "2030-01-03 09:20"
+          ],
+          "A1590": [
+            "2030-01-04 09:00",
+            "2030-01-14 13:15"
+          ],
+          "A1600": [
+            "2030-01-02 14:20",
+            "2030-01-04 01:40"
+          ],
+          "A1610": [
+            "2030-01-04 09:00",
+            "2030-01-11 15:00"
+          ],
+          "A1670": [
+            "2029-12-28 10:40",
+            "2030-01-18 15:40"
+          ],
+          "A1680": [
+            "2029-12-28 10:40",
+            "2030-01-18 15:40"
+          ],
+          "A1690": [
+            "2030-01-04 09:00",
+            "2030-01-11 16:00"
+          ],
+          "A1740": [
+            "2030-01-04 09:00",
+            "2030-01-08 15:30"
+          ],
+          "A1760": [
+            "2030-01-07 14:00",
+            "2030-01-17 16:00"
+          ],
+          "A1820": [
+            "2030-01-18 15:40",
+            "2030-01-30 13:40"
+          ],
+          "A1830": [
+            "2030-01-30 13:40",
+            "2030-02-11 11:40"
+          ],
+          "A1840": [
+            "2030-02-11 11:40",
+            "2030-02-18 15:40"
+          ],
+          "A1860": [
+            "2030-02-18 15:40",
+            "2030-02-26 11:40"
+          ],
+          "A1880": [
+            "2030-02-26 11:40",
+            "2030-03-15 19:40"
+          ]
+        }
+      }
+    },
+    "micro/Micro_Schedule_Log.md": {
+      "sha256": "c25875f98ab063794fb5fcc0358a3da109f79022a08f0bd35126af75d123dbcf",
+      "metrics": {
+        "lines": 47
+      }
+    },
+    "micro/Micro_Schedule_Takt_Viewer.html": {
+      "sha256": "5ac185ab609e43317ae49e8cc7f50096c53585375dd6691537c22fd6bee9107a",
+      "metrics": {
+        "lines": 4442
+      }
+    },
+    "prefab/Assembly_Import.xlsx": {
+      "sha256": "8629185b731947953fbcaf277523309ae869799be40c893e22e74dc371e72f59",
+      "metrics": {
+        "sheet_rows": [
+          1039
+        ]
+      }
+    },
+    "prefab/Parts_Import.csv": {
+      "sha256": "934b055d5c885534e0aea352b1c7570dd15b20c690584808a192506623cf5f33",
+      "metrics": {
+        "rows": 325,
+        "columns": 14
+      }
+    },
+    "prefab/Parts_Import.xlsx": {
+      "sha256": "de65827a2e87b7368c08861a84f5a596a7d05edf63cb0d3b4648a5716b771112",
+      "metrics": {
+        "sheet_rows": [
+          326
+        ]
+      }
+    },
+    "prefab/Parts_Summary.csv": {
+      "sha256": "587125a1a2237db217c3f5171d16e7e8b5277dc383faf5a09d9241d65e7fd868",
+      "metrics": {
+        "rows": 325,
+        "columns": 12,
+        "parts": 325,
+        "elements": 2481
+      }
+    },
+    "prefab/Prefab_Wall_Mapping.csv": {
+      "sha256": "9c04ed78652941eb60de4e477dd0e812d25069a7337d3bc3bea7301365a19e28",
+      "metrics": {
+        "rows": 801,
+        "columns": 9,
+        "prefab_groups": 131
+      }
+    },
+    "takt/Takt_Crew_Idle_Report.csv": {
+      "sha256": "e6768241ed418e58269014f10601dde88403365a6393e5be54e994122dbde91e",
+      "metrics": {
+        "rows": 5,
+        "columns": 5,
+        "utilization": {
+          "ceiling_crew": 0.2823,
+          "doors_crew": 0.3111,
+          "interior_finishes_crew": 0.9324,
+          "interior_walls_crew": 1.0,
+          "mep_rough_in_crew": 0.6387
+        }
+      }
+    },
+    "takt/Takt_Element_Allocations.csv": {
+      "sha256": "964ca8c8710e3f5801e2aeb7b7aa4a21ad7b559a96303b69d5e367bce7eb32ff",
+      "metrics": {
+        "rows": 1063,
+        "columns": 13
+      }
+    },
+    "takt/Takt_Element_Splits.csv": {
+      "sha256": "01473e1223640ea2179700e5ab0876ef784d81100ec7cf6ce3a2fefe2d7f9403",
+      "metrics": {
+        "rows": 0,
+        "columns": 7
+      }
+    },
+    "takt/Takt_Equipment_Inputs.csv": {
+      "sha256": "2b154d8711c1bcf980117a5a7a0806c242dd186fbd687d5870a457561a75a928",
+      "metrics": {
+        "rows": 4,
+        "columns": 3
+      }
+    },
+    "takt/Takt_Model_Viewer.html": {
+      "sha256": "a19bb5303eaffabaa085d6b0b1d769c971356fca6423f75e134d65d981e0d88b",
+      "metrics": {
+        "lines": 331
+      }
+    },
+    "takt/Takt_Planner.html": {
+      "sha256": "f86ac76a9ab5d4455c01607a34f9a44cbf7a08f3ed958d8f3ae416abb30204c7",
+      "metrics": {
+        "lines": 642
+      }
+    },
+    "takt/Takt_Productivity_Rates.csv": {
+      "sha256": "2f9ca868545a8e3ab49797da4948505db285bd59343719be51f7c812cee8a6d2",
+      "metrics": {
+        "rows": 5,
+        "columns": 4
+      }
+    },
+    "takt/Takt_Report.md": {
+      "sha256": "1668d96fa5ca58c0f927a71b87684b9e21aadd5bd4566171a1182f6f7fbaa0ad",
+      "metrics": {
+        "lines": 43
+      }
+    },
+    "takt/Takt_Schedule.csv": {
+      "sha256": "17fa8009033019405aff0fda921f011bb0f821426a2c4d5eb9042e0a60b8379b",
+      "metrics": {
+        "rows": 80,
+        "columns": 16,
+        "zones": 16,
+        "total_hours": 192.36,
+        "first_start": "2030-01-02 09:00",
+        "last_finish": "2030-01-23 12:21"
+      }
+    },
+    "takt/Takt_Zone_Map_L_1.png": {
+      "metrics": {}
+    },
+    "takt/Takt_Zones.csv": {
+      "sha256": "3966493dbb27b1d4c72be70ad2be0d43fb6a9af4312448a0328c38cda08ca233",
+      "metrics": {
+        "rows": 16,
+        "columns": 7,
+        "zones": 16,
+        "rooms": 32
+      }
+    },
+    "takt_zones/central_bim_model.csv": {
+      "sha256": "682cb262c5784dd3a128c381592ac95b05d8bfb35a9df7651fb6175570b00481",
+      "metrics": {
+        "rows": 3971,
+        "columns": 81
+      }
+    },
+    "takt_zones/central_bim_model_llm_context.csv": {
+      "sha256": "e74d228f1106268b56b1073d9da1f464477be9e8196924d3f2a70365fe666eba",
+      "metrics": {
+        "rows": 3971,
+        "columns": 33
+      }
+    },
+    "takt_zones/central_bim_model_with_takt.csv": {
+      "sha256": "580c0659bd43a6611f5b425d9a7638d859535d8af633e797c74df1da6be60e99",
+      "metrics": {
+        "rows": 3971,
+        "columns": 82,
+        "with_takt_id": 1876
+      }
+    },
+    "viewers/spatial_visualizer_micro.html": {
+      "sha256": "54bc00889f29b58aeb8c8fa9c9c1dc3b56b1d2fdbb72af6a517006913c8536d5",
+      "metrics": {
+        "lines": 481
+      }
+    }
+  }
+}
