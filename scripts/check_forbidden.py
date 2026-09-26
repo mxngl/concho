@@ -4,7 +4,10 @@ Checks every file listed by ``git ls-files`` for:
 - forbidden file names: course workbooks (``*.xlsx``) and meeting transcripts
   (``*Transcript*``, ``*.vtt``, ``*.vtt.*``);
 - forbidden content: GitHub raw tokens, n8n webhook URLs with a UUID path,
-  the Hostinger VPS domain and local Windows user paths.
+  the Hostinger VPS domain and local Windows user paths;
+- under ``agent/`` only: Discord snowflake IDs (a standalone 17-20 digit
+  number), unless the line contains ``$env`` (placeholder such as
+  ``{{ $env.DISCORD_GUILD_ID }}``).
 
 Usage: ``python scripts/check_forbidden.py`` (exit code 1 on any finding).
 """
@@ -28,6 +31,16 @@ CONTENT_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     ("local Windows user path", re.compile(r"C:\\Users\\", re.IGNORECASE)),
 ]
 
+# Applied only to files under AGENT_DIR. A snowflake is a standalone run of
+# 17-20 digits: not part of a longer word/number and not the fractional part
+# of a decimal. UUIDs (hex groups of at most 12 chars), typeVersion and
+# position values never have 17 consecutive digits.
+AGENT_DIR = "agent/"
+AGENT_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
+    ("Discord snowflake ID", re.compile(r"(?<![0-9A-Za-z_.])[0-9]{17,20}(?![0-9A-Za-z_])")),
+]
+AGENT_ALLOW_MARKER = "$env"
+
 # (name, glob), matched case-insensitively against the file name.
 PATH_PATTERNS: list[tuple[str, str]] = [
     ("Excel workbook", "*.xlsx"),
@@ -43,13 +56,22 @@ def check_path(path: str) -> list[str]:
     return [label for label, glob in PATH_PATTERNS if fnmatch.fnmatchcase(name, glob)]
 
 
-def check_text(text: str) -> list[tuple[int, str]]:
-    """Return ``(line_number, pattern_name)`` for every forbidden match in ``text``."""
+def check_text(text: str, path: str = "") -> list[tuple[int, str]]:
+    """Return ``(line_number, pattern_name)`` for every forbidden match in ``text``.
+
+    ``path`` (repo-relative, ``/``-separated) enables the agent-only patterns
+    for files under ``agent/``.
+    """
+    in_agent = path.replace("\\", "/").startswith(AGENT_DIR)
     hits = []
     for lineno, line in enumerate(text.splitlines(), start=1):
         for label, pattern in CONTENT_PATTERNS:
             if pattern.search(line):
                 hits.append((lineno, label))
+        if in_agent and AGENT_ALLOW_MARKER not in line:
+            for label, pattern in AGENT_PATTERNS:
+                if pattern.search(line):
+                    hits.append((lineno, label))
     return hits
 
 
@@ -70,7 +92,7 @@ def main(root: Path | None = None) -> int:
         if not full.is_file():
             continue
         text = full.read_bytes().decode("utf-8", errors="ignore")
-        for lineno, label in check_text(text):
+        for lineno, label in check_text(text, path):
             findings.append(f"{path}:{lineno}: forbidden content ({label})")
 
     for finding in findings:
