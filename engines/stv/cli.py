@@ -10,7 +10,8 @@ but one). ``--architecture-history-dir`` runs stay construction-only, as before.
 
 Revit exports are mapped with the STV mapping table (P3.6): ``--stv-mapping``, else
 ``files.stv_mapping`` of ``--config``, else the default table ``template/stv_mapping.csv``
-(with a warning). The export flags take one or more files.
+(with a warning). The export flags take one or more files. The results JSON then has a
+``mapping_coverage`` block (``engines/stv/coverage.py``).
 """
 
 from __future__ import annotations
@@ -25,6 +26,7 @@ from pathlib import Path
 from engines.common.config import validate_config_file
 
 from .central_bim import load_central_bim_model
+from .coverage import build_mapping_coverage
 from .custom_materials import CustomMaterialsError
 from .engine import LIFETIME_YEARS, STVEngine
 from .mapping import (
@@ -233,6 +235,7 @@ def _run_architecture_history(
             payload, team=team, template_path=template_path, lifetime_years=lifetime_years,
             reference_data=reference_data,
         )
+        results.mapping_coverage = build_mapping_coverage([report], mapping, results)
         timestamp = _parse_schedule_timestamp(schedule_path).isoformat()
         history.append(
             _history_entry(
@@ -517,6 +520,8 @@ def main() -> None:
         payload, team=team, template_path=args.template, lifetime_years=lifetime_years,
         reference_data=reference_data,
     )
+    if mapping is not None:
+        results.mapping_coverage = build_mapping_coverage(mapped_reports, mapping, results)
 
     results_path.write_text(
         json.dumps(results.to_dict(), indent=2),

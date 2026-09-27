@@ -64,8 +64,8 @@ more than one input has one). Other inputs:
 CSVs),
 `--architecture-history-dir`, `--central-bim-model`, `--stv-workbook-input`, and
 `--combine-results a/stv_results.json b/stv_results.json` (no workbook needed).
-Outputs: `stv_results.json` (with per-item `estimated` flags), `history.json`, PNG charts and
-per-discipline item reports.
+Outputs: `stv_results.json` (with a `mapping_coverage` block and per-item `estimated` flags
+when exports were mapped), `history.json`, PNG charts and per-discipline item reports.
 
 Island "Current" in one call (all six exports; same 2,517,183.14 kgCO₂e as the per-trade runs):
 

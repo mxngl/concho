@@ -122,7 +122,7 @@ kg). `count` fits the catalog's count units (Turbine, Panel, Charger, …), not 
 
 **Estimates:** a quantity that comes from a fallback (marked above) is flagged. Each line item
 of the results carries `estimated` (true/false) and `estimated_amount` (the part of `amount`
-from estimates).
+from estimates), and the coverage report sums quantity and kgCO₂e resting on estimates.
 
 ### Validation
 
@@ -192,6 +192,42 @@ weight). Left out on purpose: members that need a density (steel, timber, glulam
 ducts (size threshold), windows (pane count and frame are rarely exported), roof structure
 (B1020), and anything without an Assembly Code (e.g. the MEP export). Teams copy it and
 extend it; the coverage report lists what is left.
+
+### Coverage report: `mapping_coverage`
+
+When Revit exports are mapped, `stv_results.json` gets a `mapping_coverage` block
+(`engines/stv/coverage.py`):
+
+- `mapping_file`; `total`: element counts and kgCO₂e over all disciplines;
+- `disciplines.<architecture|structural|mep>`: `sources`; `elements` (`total`, `mapped`,
+  `zero_quantity`, `unmapped`, `mapped_pct` = mapped / total × 100); `by_quantity`: the
+  export's own `area_sf`, `volume_cf`, `length_ft`, total and mapped (`mapped_pct`); `kgco2e`
+  of the discipline; `estimated` (elements, quantity per STV item, kgCO₂e and its share);
+  `unmapped_types` and `zero_quantity_types` (category, family, type, count, up to five
+  materials, area/volume/length sums; zero-quantity types with the rule rows);
+- `rules`: every rule with `won` (elements it mapped, `won_zero_quantity` of them with 0
+  quantity), `lost_to_priority` (it matched, but a rule of the same specificity with a lower
+  priority won) and `lost_to_specificity` (a more specific rule won), so overlaps are visible;
+- `cross_discipline_elements`: ElementIds in more than one discipline export, with how each
+  occurrence maps (input for P3.9; nothing is deduplicated here).
+
+`--combine-results` merges the blocks of the inputs (disciplines and rule counts summed);
+cross-discipline elements cannot be recovered there (`null` with a note), so run all
+exports in one `concho-stv` call (the export flags take several files) to get them.
+
+Island (all six Current exports in one call, `engines/common/examples/island_2026.project_config.json`):
+
+| Discipline | Elements | Mapped | Zero qty | Unmapped | Mapped by area / volume / length | kgCO₂e | on estimates |
+|---|---|---|---|---|---|---|---|
+| architecture | 1,986 | 1,331 (67.0 %) | 3 | 652 | 72.8 % / 89.3 % / 93.8 % | 1,921,565.69 | 0 |
+| structural | 505 | 338 (66.9 %) | 0 | 167 | 36.2 % / 46.4 % / 100 % | 544,319.12 | 0 |
+| mep | 1,516 | 1,346 (88.8 %) | 74 | 96 | 73.9 % / 46.5 % / 95.1 % | 51,298.33 | 5,731.34 (11.2 %) |
+
+Unmapped/zero quantity = the rows skipped before P3.6 (655 / 167 / 170). Structural: 166
+`Parts` (Structural Bamboo (CLB)) and the floor 1241457; MEP zero quantity: 74 return
+grilles without airflow. 35 ElementIds appear in two disciplines, among them the floors
+1241457 (architecture: 6,848 sf Concrete; structural: unmapped), 1789623 and 1789655 (both
+mapped in both).
 
 ## Island 2026 reference result
 
