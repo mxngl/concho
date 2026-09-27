@@ -56,6 +56,9 @@ class TvdRun:
             ts=ts,
             project_name=self.project.project_name,
             team_name=self.project.team_name,
+            target_derivation=(
+                self.project.derivation.block() if self.project.derivation else None
+            ),
             target_consistency=self.project.target_consistency(),
             cost_db_validation=self.cost_db_validation,
         )

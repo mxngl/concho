@@ -186,6 +186,44 @@ Island 2026 (reference test, converted into a temporary folder): 48 rows, **0 er
 reliability columns not rated, D5030 and D5090 mislabels), no exact duplicates; the TVD run
 on it reproduces the AutoTVD results (grand total 16,065,644.29, unmapped 1693, DNC 75).
 
+## Target derivation (P3.5)
+
+`engines/tvd/derivation.py` derives the cluster targets A–H from `project_config` (`tvd`) the
+way the course workbook's **TVD Targets** and **TVD Owners** sheets do. All inputs come from
+the config; the engine never reads the workbook. The result is the `target_derivation` block
+of the results JSON (before `target_consistency`).
+
+### Budget (`TVD Targets` C5:C11)
+
+| Course cell | Config | Meaning |
+|---|---|---|
+| C5 | `tvd.budget.grant` | construction grant from the donor |
+| C6 | `tvd.budget.grant_year` | grant year |
+| C7 | `tvd.budget.construction_year` | construction year |
+| C8 | `tvd.budget.inflation` | expected inflation (fraction) |
+| C9 | `tvd.budget.roi` | return on investment (fraction) |
+| C10 | – (computed) | **budget** = grant × (1 − inflation + roi) ^ (construction_year − grant_year) |
+| C11 | `tvd.target` | the team's **total target**, an explicit input |
+
+A target above the budget is a warning (config validation, engine notes and
+`target_derivation.warnings`), not an error. With `tvd.total_target` instead of
+`budget` + `target` there is no budget (`budget: null`).
+
+### `target_derivation` block
+
+| Key | Meaning |
+|---|---|
+| `method` | `explicit` or `derive_from_references` (`tvd.cluster_split.method`) |
+| `budget` | `{grant, grant_year, construction_year, years, inflation, roi, amount}` (C5:C10), or `null` |
+| `total_target` | the total target (C11 / `tvd.total_target`) |
+| `target_above_budget` | `true`/`false`, `null` without a budget |
+| `course_cluster_base` | amount split among A–H: total target − carved-out custom clusters (course: C11) |
+| `clusters` | per course cluster `A`…`H`: `name`, `final_share` (share of `course_cluster_base`), `target` ($) |
+| `warnings` | e.g. target above budget |
+
+For an explicit split with `basis: amount`, `final_share` = amount / `course_cluster_base`
+(Island 2026: the shares sum to 1.00035, the 5,852 gap of `target_consistency`).
+
 ## Cent rounding of line totals (P3.10 item 4)
 
 The engine rounds each **line total to cents when it computes it**, and every sum is built

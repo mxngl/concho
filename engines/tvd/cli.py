@@ -93,6 +93,11 @@ def main(argv: list[str] | None = None) -> int:
         project.check()
     except (NotImplementedError, ValueError) as exc:
         parser.error(str(exc))
+    budget = project.derivation.budget_amount if project.derivation else None
+    if budget is not None:
+        print(f"   Budget (course formula): {budget:,.2f}; total target "
+              f"{project.total_target:,.2f}"
+              + (" (above the budget!)" if project.total_target > budget else ""))
     tc = project.target_consistency()
     print(f"   Target consistency: {tc['status']} (A-H + carved-out vs. total "
           f"{tc['gap']:+,.2f}, {tc['gap_pct']:+.4f} %; incl. on-top {tc['gap_incl_on_top']:+,.2f})")

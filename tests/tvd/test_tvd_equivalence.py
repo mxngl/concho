@@ -95,6 +95,8 @@ def _canonical(obj):
 
 def _strip_meta(payload: dict) -> dict:
     payload = json.loads(json.dumps(payload))
+    # P3.5: new block, not in the original; tested in test_island_target_derivation.
+    payload.pop("target_derivation", None)
     # P3.3: new block, not in the original; tested in test_island_target_consistency.
     payload.pop("target_consistency", None)
     # P3.4: new block, not in the original; tested in test_island_cost_db_validation.
