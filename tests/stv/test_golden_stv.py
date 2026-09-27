@@ -331,3 +331,27 @@ def test_island_cli_single_run(monkeypatch, tmp_path, ipd_challenge_dir):
     coverage = result["mapping_coverage"]
     assert coverage["mapping_file"].endswith("engines/stv/examples/island/stv_mapping.csv")
     assert DOUBLE_FLOORS <= {x["element_id"] for x in coverage["cross_discipline_elements"]}
+
+
+# --- P3.7: bamboo proxies flagged, no custom material ------------------------------------
+
+# kgCO2e of the proxy rules of the Island mapping file (bamboo as concrete floor,
+# steel-stud walls, glulam columns and beams); docs/engines/stv.md.
+PROXY_KGCO2E = {"Floor": 349_607.170808, "Interior Wall": 123_625.979178,
+                "Beams": 72_139.4414088, "Columns": 25_239.9219634}
+
+
+def test_island_proxy_flags(project):
+    flags = project["data_flags"]
+    assert flags["custom_material"] is False and flags["proxy"] is True
+    assert flags["custom_materials"]["embodied"]["carbon"] == 0.0
+    for assembly, kgco2e in PROXY_KGCO2E.items():
+        block = flags["by_assembly"][assembly]
+        assert block["proxy"] is True
+        assert block["proxy_embodied"]["carbon"] == pytest.approx(kgco2e, rel=REL)
+    assert flags["proxies"]["embodied"]["carbon"] == pytest.approx(
+        sum(PROXY_KGCO2E.values()), rel=REL)
+    assert flags["proxies"]["share_of_embodied"]["carbon"] == pytest.approx(
+        sum(PROXY_KGCO2E.values()) / PROJECT["carbon"], rel=REL)
+    assert not any(flags["by_assembly"][a]["proxy"] for a in ("Foundation", "MEP", "Roof",
+                                                               "Exterior Wall"))
