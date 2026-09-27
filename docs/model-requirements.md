@@ -22,14 +22,43 @@ build of the add-in: [`revit-addin/README.md`](../revit-addin/README.md).
    `count_codes` rules).
 6. Run the three takeoffs (Add-Ins → External Tools → Architecture / Structural / MEP TakeOff)
    and check the **summary dialog**: it shows the share of elements with an Assembly Code and
-   the elements without one by category (fix the top categories first), and how many elements
-   have no `Length` / `Area` / `Volume` (left empty, never written as 0). For MEP in metric
+   the elements without one by category (fix the top categories first), and per quantity
+   (`Length` / `Area` / `Volume`) how many elements have none, with the top categories (left
+   empty, never written as 0). For MEP in metric
    projects it also counts elements whose `Size` was left empty and elements where STV would
-   have to fall back to the `Parameter Snapshot` (see [MEP](#model_mep_takeoffcsv-70-columns)).
-7. **English Revit category names**: the engines map by category name (`Walls`, `Ducts`,
-   `Furniture`, …). A localized Revit writes localized names; STV's mapping coverage then
-   reports those elements as unmapped. Language-independent category names are a follow-up
-   (P4.5, engine part).
+   have to fall back to the `Parameter Snapshot` (see [MEP](#model_mep_takeoffcsv-71-columns)).
+7. **Any Revit UI language.** The engines map by English category name (`Walls`, `Ducts`,
+   `Furniture`, …). The add-in writes the English name from a fixed `BuiltInCategory` table in
+   any Revit language (P4.5, see [Categories](#categories-p45)); the Revit name is kept in the
+   last column `Category (local)`.
+
+## Categories (P4.5)
+
+`Category` is the English Revit category name, taken from a fixed table keyed by the element's
+`BuiltInCategory` (`revit-addin/Categories.cs`), independent of the Revit UI language. The name
+Revit shows (e.g. `Wände` in a German Revit) is in the last column `Category (local)`. The
+summary dialog uses the English names. A category that is not in the table (none of the
+exported ones) falls back to the Revit name.
+
+| Export | English names in the table |
+|---|---|
+| Architecture | Walls, Doors, Windows, Floors, Roofs, Ceilings, Parts, Curtain Panels, Curtain Wall Mullions, Stairs, Runs, Landings, Railings¹, Generic Models, Casework, Furniture, Furniture Systems, Plumbing Fixtures |
+| Structural | Floors, Parts, Structural Columns, Structural Framing, Structural Foundations, Structural Stiffeners¹, Structural Trusses¹, Structural Connections¹, Structural Connection Plates/Bolts/Anchors¹, Structural Rebar¹, Structural Area/Path/Fabric Reinforcement¹ |
+| MEP | Ducts, Duct Fittings, Duct Accessories¹, Air Terminals, Flex Ducts, Pipes, Pipe Fittings, Pipe Accessories, Flex Pipes, Cable Trays¹, Cable Tray Fittings¹, Conduits¹, Conduit Fittings¹, Plumbing Fixtures, Mechanical Equipment, Electrical Equipment, Electrical Fixtures, Lighting Fixtures¹, Sprinklers¹ |
+
+¹ Not in the English reference exports or the STV mapping tables; taken from the English Revit
+UI. Check in an English Revit: `Category` and `Category (local)` must be identical in every
+row; a difference means a wrong table entry.
+
+**Parts** (P4.5): `Original Category` is the English category of the part's source element
+(`Part.GetSourceElementIds`, following part-of-part chains), which also decides which parts
+are exported (ceiling parts in Architecture; floor, structural, foundation and rebar parts in
+Structural). `Assembly Code` of a part is the source element's code (instance, else type); the
+part's own value only if the source has none. `Part Source Id` is the source element's
+ElementId (empty for non-parts and for sources in linked models), so the engines can tell parts
+from their host elements (double counting, P3.9). Part quantities come from the part's computed
+built-in parameters (`DPART_LENGTH_COMPUTED`, `DPART_AREA_COMPUTED`, `DPART_VOLUME_COMPUTED`,
+`DPART_HEIGHT_COMPUTED`, `DPART_LAYER_WIDTH` as thickness).
 
 ## Assembly Codes
 
@@ -132,7 +161,7 @@ Engines: **TVD** reads the Architecture and Structural exports (`--arch`, `--str
 all three, **Schedule** the combined element context built from all three. "Used by" lists the
 engines that read the column.
 
-## `<model>_Architecture_TakeOff.csv` and `<model>_Structural_Schedule.csv` (56 columns)
+## `<model>_Architecture_TakeOff.csv` and `<model>_Structural_Schedule.csv` (58 columns)
 
 Same header for both. Architecture exports walls, doors, windows, floors, roofs, ceilings,
 curtain panels/mullions, stairs (runs, landings), railings, generic models, casework, furniture,
@@ -145,22 +174,22 @@ by its parts).
 | # | Column | Unit | Source (Revit) | Required | Used by |
 |---|---|---|---|---|---|
 | 1 | `ElementId` | integer | `Element.Id` | required (always set) | TVD, STV, Schedule |
-| 2 | `Category` | text | category name | required (always set) | TVD, STV, Schedule |
+| 2 | `Category` | text | English category name from the `BuiltInCategory` ([Categories](#categories-p45)) | required (always set) | TVD, STV, Schedule |
 | 3 | `Family` | text | family name (family instances only; empty for system families) | recommended | TVD, STV, Schedule |
 | 4 | `Type` | text | type name | recommended | TVD, STV, Schedule |
-| 5 | `Original Category` | text | parts only: `Original Category` (Architecture also `Original Category Id`) | optional | Schedule |
+| 5 | `Original Category` | text | parts only: English category of the source element; `Original Category` parameter text if the source can't be resolved | optional | Schedule |
 | 6 | `Original Family` | text | parts only: `Original Family` / `Original Family Name` | optional | Schedule |
 | 7 | `Original Type` | text | parts only: `Original Type` / `Original Type Name` | optional | Schedule |
 | 8 | `Level` | text | `Level` parameter, else the element's level | recommended | TVD (unmapped list), Schedule |
 | 9 | `Mark` | text | BIP `ALL_MODEL_MARK`, `Mark` | optional (`DNC` marker) | TVD, Schedule |
-| 10 | `Assembly Code` | Uniformat code | BIP `UNIFORMAT_CODE` / `ASSEMBLY_CODE` (2026), `Assembly Code` | **required** | TVD, STV, Schedule |
+| 10 | `Assembly Code` | Uniformat code | BIP `UNIFORMAT_CODE` / `ASSEMBLY_CODE` (2026), `Assembly Code`; parts: of the source element | **required** | TVD, STV, Schedule |
 | 11 | `Assembly Description` | text | BIP `UNIFORMAT_DESCRIPTION` / `ASSEMBLY_DESCRIPTION` (2026), `Assembly Description` | recommended | STV, Schedule |
-| 12 | `Length` | ft | BIP `CURVE_ELEM_LENGTH`, `Length`; BIP `STRUCTURAL_FRAME_CUT_LENGTH`, `Cut Length`; `Span` | required for LF-priced codes | TVD, STV, Schedule |
-| 13 | `Width` | ft | BIP `WALL_ATTR_WIDTH_PARAM`, `DOOR_WIDTH`, `WINDOW_WIDTH`, `FAMILY_WIDTH_PARAM`, `Width`; `Actual Width` | optional | STV, Schedule |
-| 14 | `Depth` | ft | `Depth`; BIP `FLOOR_ATTR_THICKNESS_PARAM`, `CEILING_THICKNESS`, `ROOF_ATTR_THICKNESS_PARAM`, `Thickness`; `Structural Depth` | optional | Schedule |
-| 15 | `Height` | ft | BIP `DOOR_HEIGHT`, `WINDOW_HEIGHT`, `FAMILY_HEIGHT_PARAM`, `Height`; thickness as in `Depth` | optional | STV, Schedule |
-| 16 | `Area` | SF | BIP `HOST_AREA_COMPUTED`, `Area`; `Host Area Computed`; `Computed Area` | required for SF-priced codes | TVD, STV, Schedule |
-| 17 | `Volume` | CF | BIP `HOST_VOLUME_COMPUTED`, `Volume`; `Host Volume Computed` | required for CY/CF-priced codes | TVD, STV, Schedule |
+| 12 | `Length` | ft | BIP `DPART_LENGTH_COMPUTED`, `CURVE_ELEM_LENGTH`, `Length`; BIP `STRUCTURAL_FRAME_CUT_LENGTH`, `Cut Length`; `Span`; else the length of the element's location curve | required for LF-priced codes | TVD, STV, Schedule |
+| 13 | `Width` | ft | BIP `WALL_ATTR_WIDTH_PARAM`, `CURTAIN_WALL_PANELS_WIDTH`, `STAIRS_RUN_ACTUAL_RUN_WIDTH`, `DOOR_WIDTH`, `WINDOW_WIDTH`, `FAMILY_WIDTH_PARAM`, `Width`; `Actual Width` | optional | STV, Schedule |
+| 14 | `Depth` | ft | `Depth`; BIP `DPART_LAYER_WIDTH`, `FLOOR_ATTR_THICKNESS_PARAM`, `CEILING_THICKNESS`, `ROOF_ATTR_THICKNESS_PARAM`, `Thickness`; `Structural Depth` | optional | Schedule |
+| 15 | `Height` | ft | BIP `DPART_HEIGHT_COMPUTED`, `CURTAIN_WALL_PANELS_HEIGHT`, `DOOR_HEIGHT`, `WINDOW_HEIGHT`, `FAMILY_HEIGHT_PARAM`, `Height`; thickness as in `Depth` | optional | STV, Schedule |
+| 16 | `Area` | SF | BIP `DPART_AREA_COMPUTED`, `HOST_AREA_COMPUTED`, `Area`; `Host Area Computed`; `Computed Area` | required for SF-priced codes | TVD, STV, Schedule |
+| 17 | `Volume` | CF | BIP `DPART_VOLUME_COMPUTED`, `HOST_VOLUME_COMPUTED`, `Volume`; `Host Volume Computed` | required for CY/CF-priced codes | TVD, STV, Schedule |
 | 18 | `Weight` | kg | `Weight`, `Calculated Weight`, `Mass` | optional | – |
 | 19 | `Unit Weight` | kg/m, kN/m³ or kg/m³ | `Material: Unit weight`, `Unit Weight`, `Weight per Unit Length`, `Mass per Unit Length` | optional | – |
 | 20 | `Material` | text | names of the element's materials, `; `-separated | recommended | TVD (unmapped list), STV, Schedule |
@@ -173,13 +202,37 @@ by its parts).
 | 46–54 | *room columns* | see below | room of the element | recommended | Schedule |
 | 55 | `Comments` | text | BIP `ALL_MODEL_INSTANCE_COMMENTS`, `Comments` | optional (`DNC` marker) | TVD |
 | 56 | `Parameter Snapshot` | text (display units) | see below | optional | STV, Schedule |
+| 57 | `Part Source Id` | integer | parts only: ElementId of the source element (P4.5) | optional | – (for P3.9) |
+| 58 | `Category (local)` | text | category name as Revit shows it (UI language, P4.5) | optional | – |
 
 Both exports use the same parameter lookups, except `Base Level` / `Top Level`: Architecture
 reads them from the instance, else the type; Structural only from the instance. The schedule
 engine's Manufacton parts adapter uses `Height` / `Length` / `Depth` text as part labels; since
 P4.5 these are decimal feet (`12`) instead of `12' - 0"`.
 
-## `<model>_MEP_TakeOff.csv` (70 columns)
+### Quantity coverage by category (P4.5 item 6)
+
+Which categories have `Length` / `Area` / `Volume` at all, from the English Architecture export
+of `04_Island_ARCH_Concept2` (1,965 elements; 849 / 42 / 117 without Length / Area / Volume, the
+same Area/Volume gaps as in the German Revit test), and what covers them in a localized Revit:
+
+| Category | Length | Area | Volume | Source in any language |
+|---|---|---|---|---|
+| Walls | all | all but 1 | 309 of 385 | `CURVE_ELEM_LENGTH`, `HOST_AREA_COMPUTED`, `HOST_VOLUME_COMPUTED`; curtain/storefront walls have no volume |
+| Curtain Wall Mullions | all | all | all | `CURVE_ELEM_LENGTH`, else location curve; `HOST_*_COMPUTED` |
+| Parts (ceiling parts) | none | all | all | `DPART_AREA_COMPUTED`, `DPART_VOLUME_COMPUTED`, `DPART_LENGTH_COMPUTED` where Revit has one (P4.5: were empty in the German test) |
+| Floors, Ceilings, Roofs | none | all | all | `HOST_AREA_COMPUTED`, `HOST_VOLUME_COMPUTED`; no length by nature |
+| Doors, Windows, Curtain Panels, Generic Models, Plumbing Fixtures, Casework | family `Length` only (windows, casework) | all but 1–2 | all but 1–2 | `HOST_*_COMPUTED`; family parameters such as `Length` are named by the family author and not localized, so the name lookup finds them in any language; panels also `CURTAIN_WALL_PANELS_WIDTH/HEIGHT` |
+| Furniture | 68 of 370 (family `Length`) | 349 | 349 | as above; 21 furniture families have no geometry-based area/volume |
+| Stairs, Runs, Landings | none | none | none | Revit has no computed length/area/volume for them; runs get `Width` from `STAIRS_RUN_ACTUAL_RUN_WIDTH`. Priced by count (`EA`/`FLIGHT`) |
+
+**Genuinely without a quantity** (no built-in parameter exists): `Length` for area/volume
+elements (floors, ceilings, roofs, panels, doors, furniture, generic models, parts without a
+computed length), all three for stairs/runs/landings, `Volume` for curtain/storefront walls, and
+area/volume for families without solid geometry (some furniture). The summary dialog lists the
+top categories per missing quantity, so a model can be checked against this table.
+
+## `<model>_MEP_TakeOff.csv` (71 columns)
 
 Ducts, duct fittings/accessories/terminals, flex ducts, pipes, pipe fittings/accessories, flex
 pipes, cable trays and fittings, conduits and fittings, plumbing fixtures, mechanical and
@@ -188,7 +241,7 @@ electrical equipment, electrical and lighting fixtures, sprinklers.
 | # | Column | Unit | Source (Revit) | Required | Used by |
 |---|---|---|---|---|---|
 | 1 | `ElementId` | integer | `Element.Id` | required (always set) | STV, Schedule |
-| 2 | `Category` | text | category name | required (always set) | STV, Schedule |
+| 2 | `Category` | text | English category name from the `BuiltInCategory` ([Categories](#categories-p45)) | required (always set) | STV, Schedule |
 | 3 | `Family` | text | family name (empty for system families: ducts, pipes, …) | recommended | STV, Schedule |
 | 4 | `Type` | text | type name | recommended | STV, Schedule |
 | 5 | `Level` | text | `Level` parameter, else the element's level | recommended | Schedule |
@@ -201,7 +254,7 @@ electrical equipment, electrical and lighting fixtures, sprinklers.
 | 12 | `Diameter` | in | BIP `RBS_CURVE_DIAMETER_PARAM`, `RBS_PIPE_DIAMETER_PARAM`, `RBS_CONDUIT_DIAMETER_PARAM`, `Diameter`; `Nominal Diameter`; `Duct Diameter` | recommended | STV |
 | 13 | `Width` | in | BIP `RBS_CURVE_WIDTH_PARAM`, `RBS_CABLETRAY_WIDTH_PARAM`, `Width`; `Nominal Width`; `Duct Width` | recommended | STV, Schedule |
 | 14 | `Height` | in | BIP `RBS_CURVE_HEIGHT_PARAM`, `RBS_CABLETRAY_HEIGHT_PARAM`, `Height`; `Nominal Height`; `Duct Height` | recommended | STV, Schedule |
-| 15 | `Length` | ft as **feet-inch text** `12' - 6.375"` | BIP `CURVE_ELEM_LENGTH`, `Length`; `Duct Length`; `Computed Length`; `Length 1`; `Duct Length 1` | required for ducts/pipes/trays/conduits | STV, Schedule |
+| 15 | `Length` | ft as **feet-inch text** `12' - 6.375"` | BIP `CURVE_ELEM_LENGTH`, `Length`; `Duct Length`; `Computed Length`; `Length 1`; `Duct Length 1`; else the location curve length | required for ducts/pipes/trays/conduits | STV, Schedule |
 | 16 | `Area` | SF | BIP `RBS_CURVE_SURFACE_AREA`, `HOST_AREA_COMPUTED`, `Area`; `Surface Area` | recommended | STV, Schedule |
 | 17 | `Volume` | CF | BIP `HOST_VOLUME_COMPUTED`, `Volume` | optional | STV, Schedule |
 | 18 | `Material` | text | names of the element's materials, `; `-separated | recommended | STV, Schedule |
@@ -230,6 +283,7 @@ electrical equipment, electrical and lighting fixtures, sprinklers.
 | 68 | `Comments` | text | BIP `ALL_MODEL_INSTANCE_COMMENTS`, `Comments` | optional | – |
 | 69 | `Parameter Snapshot` | text (display units) | see below | optional | STV, Schedule |
 | 70 | `Assembly Code` | Uniformat code | BIP `UNIFORMAT_CODE` / `ASSEMBLY_CODE` (2026), `Assembly Code` | **required** (new in P4.3) | – (not read by an engine yet) |
+| 71 | `Category (local)` | text | category name as Revit shows it (UI language, P4.5) | optional | – |
 
 **`Length` is the one text column** of the exports: a fixed, culture-invariant feet-inch format
 generated from the internal value: whole feet, inches with 3 decimals, no fractions
@@ -248,8 +302,9 @@ columns are filled whenever Revit has the value. In metric projects the summary 
 the MEP elements where STV would still fall back to the snapshot (dimensions, length or flow
 empty but present in the snapshot).
 
-Connector columns 34–35 are empty when the sum is 0; 36–38 likewise. `Assembly Code` is the last
-column so readers that use column positions keep working; no engine reads it from the MEP export
+Connector columns 34–35 are empty when the sum is 0; 36–38 likewise. `Assembly Code` (P4.3) and
+`Category (local)` (P4.5) were appended at the end so readers that use column positions keep
+working; no engine reads it from the MEP export
 yet (TVD takes only Architecture and Structural). Checked in P4.3: the STV MEP importer gives
 identical results with and without the new column.
 
@@ -291,7 +346,9 @@ the element's location point, curve midpoint or bounding-box center. Empty if no
 `name=value` pairs joined by ` | `, sorted by name, from instance and then type parameters whose
 name contains one of the export's keywords (instance value wins; empty values skipped).
 **Values are Revit display text in the project's units and UI language** (`Duct Width=4"` or
-`Duct Width=100 mm`); the snapshot is informational and not unit-safe. Engines should read the
+`Duct Width=100 mm`); the snapshot is informational and not unit-safe. The keywords below are
+English, so in a localized Revit the snapshot only holds parameters whose (localized or family)
+names happen to contain them. Engines should read the
 main columns; STV only falls back to a few snapshot values when a main column is empty.
 Keywords:
 

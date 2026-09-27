@@ -122,16 +122,19 @@ are prefixed with the model file name (`<model>_...csv`). The full contract (uni
 parameter, required/optional per column, Assembly Codes) is in
 [`docs/model-requirements.md`](../docs/model-requirements.md).
 
-### `<model>_Structural_Schedule.csv` and `<model>_Architecture_TakeOff.csv` (56 columns, same header)
+### `<model>_Structural_Schedule.csv` and `<model>_Architecture_TakeOff.csv` (58 columns, same header)
 
 `ElementId`, `Category`, `Family`, `Type`, `Original Category`, `Original Family`, `Original Type`,
 `Level`, `Mark`, `Assembly Code`, `Assembly Description`, `Length`, `Width`, `Depth`, `Height`,
 `Area`, `Volume`, `Weight`, `Unit Weight`, `Material`, `Type Comments`, `Base Level`, `Top Level`,
-`Base Offset`, `Top Offset`, *spatial columns*, *room columns*, `Comments`, `Parameter Snapshot`
+`Base Offset`, `Top Offset`, *spatial columns*, *room columns*, `Comments`, `Parameter Snapshot`,
+`Part Source Id`, `Category (local)`
 
-`Original Category/Family/Type` are filled for Revit parts only (the element the part was cut from).
+`Original Category/Family/Type` and `Part Source Id` are filled for Revit parts only (the element the
+part was cut from; a part's `Assembly Code` is taken from that element). `Category` is the English
+category name in any Revit language (`Categories.cs`); `Category (local)` is the name Revit shows.
 
-### `<model>_MEP_TakeOff.csv` (70 columns)
+### `<model>_MEP_TakeOff.csv` (71 columns)
 
 `ElementId`, `Category`, `Family`, `Type`, `Level`, `Mark`, `System Name`, `System Type`,
 `Service Type`, `Classification`, `Size`, `Diameter`, `Width`, `Height`, `Length`, `Area`,
@@ -140,10 +143,10 @@ parameter, required/optional per column, Assembly Codes) is in
 `Current`, `Apparent Load`, `Connected Load`, `Connector Count`, `Connector Flow`,
 `Connector Demand`, `Connector Max Diameter (in)`, `Connector Max Width (in)`,
 `Connector Max Height (in)`, *spatial columns*, *room columns*, `Comments`, `Parameter Snapshot`,
-`Assembly Code`
+`Assembly Code`, `Category (local)`
 
-`Assembly Code` was added in P4.3 as the **last** column, so readers that use column positions
-keep working (the STV importer reads by column name and gives identical results).
+`Assembly Code` (P4.3) and `Category (local)` (P4.5) were appended at the end, so readers that
+use column positions keep working (the STV importer reads by column name).
 
 ### Shared column groups
 

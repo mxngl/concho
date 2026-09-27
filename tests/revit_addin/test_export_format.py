@@ -44,7 +44,7 @@ ARCH_COLUMNS = [
     "Original Type", "Level", "Mark", "Assembly Code", "Assembly Description", "Length",
     "Width", "Depth", "Height", "Area", "Volume", "Weight", "Unit Weight", "Material",
     "Type Comments", "Base Level", "Top Level", "Base Offset", "Top Offset", "Comments",
-    "Parameter Snapshot",
+    "Parameter Snapshot", "Part Source Id", "Category (local)",
 ]
 REPO_ROOT = Path(__file__).resolve().parents[2]
 # Since P3.6 the STV importers map rows with a mapping table; the Island table reproduces the
@@ -57,7 +57,7 @@ MEP_COLUMNS = [
     "ElementId", "Category", "Family", "Type", "Level", "Mark", "System Name", "System Type",
     "Size", "Diameter", "Width", "Height", "Length", "Area", "Volume", "Material", "Weight",
     "Unit Weight", "Airflow", "Flow", "Connector Flow", "Comments", "Parameter Snapshot",
-    "Assembly Code",
+    "Assembly Code", "Category (local)",
 ]
 
 
@@ -159,7 +159,8 @@ def test_size_examples():
 
 ARCH_ROWS = [
     # Exterior wall: B2010, 312.5 SF, 1'-0" thick, 25.25' long.
-    {"ElementId": "1", "Category": "Walls", "Family": "Basic Wall", "Type": "Exterior - Brick",
+    {"ElementId": "1", "Category": "Walls", "Category (local)": "Wände", "Family": "Basic Wall",
+     "Type": "Exterior - Brick",
      "Assembly Code": "B2010", "Length": fmt(25.25), "Width": fmt(1.0), "Height": fmt(12.375),
      "Area": fmt(312.5), "Volume": fmt(312.5), "Material": "Brick"},
     # Interior wall, same code as a second one to test the sum.
@@ -178,6 +179,10 @@ ARCH_ROWS = [
      "Material": "Concrete"},
     {"ElementId": "6", "Category": "Furniture", "Family": "Desk", "Type": "Desk",
      "Assembly Code": "E2020", "Area": fmt(12.0)},
+    # Ceiling part (P4.5): English category, code and quantities of the source ceiling 99.
+    {"ElementId": "8", "Category": "Parts", "Category (local)": "Bauteile",
+     "Original Category": "Ceilings", "Part Source Id": "99", "Assembly Code": "C3030",
+     "Area": fmt(123.0), "Volume": fmt(15.375), "Height": fmt(0.125), "Material": "Gypsum"},
     # No Assembly Code: unmapped in TVD.
     {"ElementId": "7", "Category": "Roofs", "Family": "Basic Roof", "Type": "Green Roof",
      "Area": fmt(1500.5), "Volume": fmt(750.25), "Material": "Green"},
@@ -211,6 +216,8 @@ def test_tvd_reads_numeric_architecture_export():
     assert code_qtys["B1010"]["area_sf"] == pytest.approx(6847.99)
     assert "E2020" not in code_qtys  # Furniture excluded from quantities ...
     assert all_counts["E2020"] == 1  # ... but counted for count_codes
+    assert code_qtys["C3030"]["area_sf"] == pytest.approx(123.0)
+    assert code_qtys["C3030"]["volume_cf"] == pytest.approx(15.375)
     assert unmapped == 1
     assert dnc == 0
 
@@ -263,7 +270,8 @@ def test_stv_reads_numeric_structural_export(tmp_path):
 
 MEP_ROWS = [
     # Rectangular duct 12"x8", 20' - 2.813" long → Steel Duct 12"D (ft) by length.
-    {"ElementId": "21", "Category": "Ducts", "Family": "", "Type": "Rectangular Duct",
+    {"ElementId": "21", "Category": "Ducts", "Category (local)": "Luftkanäle", "Family": "",
+     "Type": "Rectangular Duct",
      "Size": '12"x8"', "Width": fmt(12.0), "Height": fmt(8.0), "Length": fmt_feet_inches(20.234375),
      "Area": fmt(33.72), "Volume": fmt(13.49), "Material": "Galvanized"},
     # Round duct Ø18" → Steel Duct 18"D (ft).
