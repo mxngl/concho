@@ -19,7 +19,8 @@ search with a config file + folder dialog.
 | `QTO.addin` | Revit manifest; registers the external commands below |
 | `Structural_TakeOff.cs`, `Architecture_TakeOff.cs`, `MEP_TakeOff.cs` | Quantity takeoff commands (CSV export) |
 | `SpatialElementData.cs`, `RoomSpatialData.cs` | Spatial data shared by the takeoffs: element location/bounding box, room assignment, room boundary export |
-| `ExportSummary.cs` | Summary dialog after each takeoff: element count, % with Assembly Code, missing codes by category |
+| `ExportSummary.cs` | Summary dialog after each takeoff: element count, % with Assembly Code, missing codes by category, quantities not found, MEP metric warnings |
+| `ParameterReader.cs`, `BuildingQuantities.cs`, `MepQuantities.cs` | Unit-safe, language-independent parameter reading (built-in parameter first, English name as fallback; conversion from internal units) |
 | `ExportPathHelper.cs` | Reads the export folder from `concho_addin.json` next to the DLL (folder dialog if missing) and builds the CSV file name |
 | `Push_TaskName_To_Revit.cs` | Push 4D Build Code command |
 | `Push_Manufacton_Parameters_To_Revit.cs`, `Push_Kit_To_Revit.cs`, `Push_Assembly_To_Revit.cs`, `CsvParameterPushHelper.cs` | Prefab parameter push commands and their shared CSV/parameter helper |
@@ -108,10 +109,15 @@ Release zips per Revit version (P4.2): `.github/workflows/revit-addin-release.ym
 
 ## CSV export columns
 
-All files are UTF-8, comma-separated, one row per element, with standard CSV quoting. Parameter
-values (`Length`, `Area`, `Volume`, ...) are Revit's display strings (`AsValueString`, i.e. project
-units) taken from the instance and, if empty, the type; columns with `(ft)`, `(SF)`, `(CF)`, `(in)`
-or `(deg)` are computed numbers in those units (invariant culture, up to 3 decimals). File names
+All files are UTF-8, comma-separated, one row per element, with standard CSV quoting.
+Quantities (`Length`, `Area`, `Volume`, dimensions, weights, flows, ...) are converted from Revit's
+internal units into fixed units (ft, SF, CF, MEP dimensions in inches, kg, m³/s, ...) and written
+as plain invariant decimals, so the CSV is the same for imperial and metric projects (P4.5;
+`ParameterReader.cs`, `BuildingQuantities.cs`, `MepQuantities.cs`). Exception: MEP `Length` is a
+fixed feet-inch text (`12' - 6.375"`) that the STV importer can parse. Parameters are looked up
+by built-in parameter first (any Revit language), then by English name, on the instance and then
+the type; `Parameter Snapshot` stays display text in project units. Columns with `(ft)`, `(SF)`,
+`(CF)`, `(in)` or `(deg)` in the name are computed numbers in those units. File names
 are prefixed with the model file name (`<model>_...csv`). The full contract (unit, source
 parameter, required/optional per column, Assembly Codes) is in
 [`docs/model-requirements.md`](../docs/model-requirements.md).

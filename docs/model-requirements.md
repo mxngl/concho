@@ -1,4 +1,4 @@
-# Model requirements and export contract (P4.3)
+# Model requirements and export contract (P4.3, P4.5)
 
 What a team's Revit model must contain so the Concho engines can use its exports, and every
 column of the CSV files the Revit add-in (`revit-addin/`, `QTO.dll`) writes. Installation and
@@ -9,10 +9,11 @@ build of the add-in: [`revit-addin/README.md`](../revit-addin/README.md).
 1. **Assembly Code on every element type** (Uniformat, level 3, e.g. `B2010`), from week 1. It is
    the key the TVD engine prices by; elements without it are reported as *unmapped* and cost $0.
    See [Assembly Codes](#assembly-codes).
-2. **Imperial project units** (Manage → Project Units): length in feet (`ft-in` or decimal
-   feet), area in SF, volume in CF. The engines read `Length`, `Area` and `Volume` from Revit's
-   display strings and take the first number; a metric model is read without an error but with
-   wrong quantities.
+2. **Any project units** (imperial or metric). Since P4.5 the add-in converts every quantity
+   from Revit's internal units into fixed export units (ft, SF, CF, …; see
+   [Units](#units-p45)), so the same model gives the same CSV numbers whatever its display
+   units. Exports from add-in versions before P4.5 (display strings) are still read, but only
+   correctly from imperial models.
 3. Elements on **levels** and in **rooms** (the schedule engine groups by level and room).
 4. **Materials** assigned to the element types (STV maps embodied carbon by category, family
    and material).
@@ -21,7 +22,14 @@ build of the add-in: [`revit-addin/README.md`](../revit-addin/README.md).
    `count_codes` rules).
 6. Run the three takeoffs (Add-Ins → External Tools → Architecture / Structural / MEP TakeOff)
    and check the **summary dialog**: it shows the share of elements with an Assembly Code and
-   the elements without one by category. Fix the top categories first.
+   the elements without one by category (fix the top categories first), and how many elements
+   have no `Length` / `Area` / `Volume` (left empty, never written as 0). For MEP in metric
+   projects it also counts elements whose `Size` was left empty and elements where STV would
+   have to fall back to the `Parameter Snapshot` (see [MEP](#model_mep_takeoffcsv-70-columns)).
+7. **English Revit category names**: the engines map by category name (`Walls`, `Ducts`,
+   `Furniture`, …). A localized Revit writes localized names; STV's mapping coverage then
+   reports those elements as unmapped. Language-independent category names are a follow-up
+   (P4.5, engine part).
 
 ## Assembly Codes
 
@@ -60,9 +68,9 @@ type share one code.
    the cost DB doesn't price them; they show up as missing in the summary dialog and as
    unmapped in TVD.
 
-The add-in reads `Assembly Code` from the element (instance parameter) and, if empty, from its
-type, by parameter **name** (English Revit UI; a localized Revit has a different parameter name
-and would export empty codes, not tested).
+The add-in reads `Assembly Code` from the built-in parameter (`BuiltInParameter.UNIFORMAT_CODE`,
+named `ASSEMBLY_CODE` in the Revit 2026 API) on the element and, if empty, on its type, so it
+works in any Revit UI language. The English parameter name `Assembly Code` is only a fallback.
 
 ## General format
 
@@ -76,13 +84,49 @@ and would export empty codes, not tested).
 - Every column is always present; the value is empty when Revit has no value. *Required* below
   means the **model** must provide a value for the engines to work; *recommended* means an
   engine uses the value when present; *optional* columns are informational.
-- **Parameter values** (unit "display") are Revit's display strings (`AsValueString`) in the
-  project units, e.g. `136' - 0"`, `6590 SF`, `42.75 CF`, taken from the first listed parameter
-  that has a value on the instance and, if empty, on the type. Yes/No parameters are `True` /
-  `False`; element references (e.g. `Level`) are the element name.
-- **Computed numbers** (columns with `(ft)`, `(SF)`, `(CF)`, `(in)`, `(deg)`) are plain decimals
-  in those units, invariant culture (`.` decimal separator), up to 3 decimals, computed from
-  Revit's internal units (feet).
+- **Quantities** (every column with a unit in the tables below) are plain decimals: converted
+  from Revit's internal units with `UnitUtils.ConvertFromInternalUnits` into the unit given per
+  column, invariant culture (`.` decimal separator), no unit suffix, no thousands separator,
+  up to 6 decimals (`312.5`, `0.008333`). Independent of the project's display units. The
+  one exception is MEP `Length` (fixed feet-inch text, see the MEP table).
+- **Lookups**: each column lists its source parameters in order. `BIP:` names a built-in
+  parameter, read first (language-independent); the English name after it is the fallback.
+  Each candidate is tried on the instance, then on its type. Numeric columns only take Double
+  parameters whose spec fits the column unit (e.g. `Power Factor` is not read as `Power`); a
+  text parameter is never written into a numeric column. If no candidate has a value, the
+  column stays **empty** (not 0) and the summary dialog counts it for `Length`/`Area`/`Volume`.
+- **Text values**: element references (e.g. `Level`) are the element name; Yes/No parameters
+  `True` / `False`.
+- **Computed numbers** (columns with `(ft)`, `(SF)`, `(CF)`, `(in)`, `(deg)` in the name) are
+  plain decimals in those units, up to 3 decimals, computed from Revit's internal units.
+
+### Units (P4.5)
+
+| Quantity | Export unit | Columns |
+|---|---|---|
+| length (Architecture, Structural) | ft (decimal feet) | `Length`, `Width`, `Depth`, `Height`, `Base Offset`, `Top Offset` |
+| length (MEP) | ft, as feet-inch text `12' - 6.375"` | `Length` |
+| MEP dimensions and thicknesses | in (decimal inches) | `Diameter`, `Width`, `Height`, `Insulation Thickness`, `Lining Thickness` |
+| area | SF | `Area` |
+| volume | CF | `Volume` |
+| mass / weight | kg (a force-type weight in kgf, same number) | `Weight` |
+| mass or weight per length, unit weight | kg/m (kgf/m); per volume kN/m³ or kg/m³, by the parameter's spec | `Unit Weight` |
+| air and water flow | m³/s | `Airflow`, `Flow`, `Connector Flow` |
+| pressure | Pa | `Pressure Drop` |
+| cooling / heating capacity, power | W | `Cooling Capacity`, `Heating Capacity`, `Power` |
+| voltage | V | `Voltage` |
+| current | A | `Current` |
+| apparent power | VA | `Apparent Load`, `Connected Load` |
+
+These are the units the engines read without conversion: TVD takes `Length`/`Area`/`Volume`
+as LF/SF/CF; STV reads plain MEP dimensions as inches, weights as kg and flows as m³/s.
+
+**Old exports** (add-in before P4.5) contain display strings in the project units (`136' -
+0"`, `6590 SF`, `30 m³/h`). The engines still read them, but only correctly from **imperial**
+models (a metric model's `612 m²` is read as 612 SF). Their TVD lengths are also slightly low:
+TVD's display-string parser reads `9' - 7 3/4"` as 9 ft (inches with a fraction are dropped;
+Island ARCH export: 3,638 instead of 3,771 LF on coded elements, −3.5 %). The numeric format
+carries the exact values.
 
 Engines: **TVD** reads the Architecture and Structural exports (`--arch`, `--struct`), **STV**
 all three, **Schedule** the combined element context built from all three. "Used by" lists the
@@ -108,30 +152,32 @@ by its parts).
 | 6 | `Original Family` | text | parts only: `Original Family` / `Original Family Name` | optional | Schedule |
 | 7 | `Original Type` | text | parts only: `Original Type` / `Original Type Name` | optional | Schedule |
 | 8 | `Level` | text | `Level` parameter, else the element's level | recommended | TVD (unmapped list), Schedule |
-| 9 | `Mark` | text | `Mark` | optional (`DNC` marker) | TVD, Schedule |
-| 10 | `Assembly Code` | Uniformat code | `Assembly Code` (instance, else type) | **required** | TVD, STV, Schedule |
-| 11 | `Assembly Description` | text | `Assembly Description` | recommended | STV, Schedule |
-| 12 | `Length` | display (ft) | `Length`, `Cut Length`, `Span` | required for LF-priced codes | TVD, STV, Schedule |
-| 13 | `Width` | display (ft) | `Width`, `Actual Width` | optional | STV, Schedule |
-| 14 | `Depth` | display (ft) | `Depth`, `Thickness`, `Structural Depth` | optional | Schedule |
-| 15 | `Height` | display (ft) | `Height`, `Thickness` | optional | STV, Schedule |
-| 16 | `Area` | display (SF) | `Area`, `Host Area Computed`, `Computed Area` | required for SF-priced codes | TVD, STV, Schedule |
-| 17 | `Volume` | display (CF) | `Volume`, `Host Volume Computed` | required for CY/CF-priced codes | TVD, STV, Schedule |
-| 18 | `Weight` | display | `Weight`, `Calculated Weight`, `Mass` | optional | – |
-| 19 | `Unit Weight` | display | `Material: Unit weight`, `Unit Weight`, `Weight per Unit Length`, `Mass per Unit Length` | optional | – |
+| 9 | `Mark` | text | BIP `ALL_MODEL_MARK`, `Mark` | optional (`DNC` marker) | TVD, Schedule |
+| 10 | `Assembly Code` | Uniformat code | BIP `UNIFORMAT_CODE` / `ASSEMBLY_CODE` (2026), `Assembly Code` | **required** | TVD, STV, Schedule |
+| 11 | `Assembly Description` | text | BIP `UNIFORMAT_DESCRIPTION` / `ASSEMBLY_DESCRIPTION` (2026), `Assembly Description` | recommended | STV, Schedule |
+| 12 | `Length` | ft | BIP `CURVE_ELEM_LENGTH`, `Length`; BIP `STRUCTURAL_FRAME_CUT_LENGTH`, `Cut Length`; `Span` | required for LF-priced codes | TVD, STV, Schedule |
+| 13 | `Width` | ft | BIP `WALL_ATTR_WIDTH_PARAM`, `DOOR_WIDTH`, `WINDOW_WIDTH`, `FAMILY_WIDTH_PARAM`, `Width`; `Actual Width` | optional | STV, Schedule |
+| 14 | `Depth` | ft | `Depth`; BIP `FLOOR_ATTR_THICKNESS_PARAM`, `CEILING_THICKNESS`, `ROOF_ATTR_THICKNESS_PARAM`, `Thickness`; `Structural Depth` | optional | Schedule |
+| 15 | `Height` | ft | BIP `DOOR_HEIGHT`, `WINDOW_HEIGHT`, `FAMILY_HEIGHT_PARAM`, `Height`; thickness as in `Depth` | optional | STV, Schedule |
+| 16 | `Area` | SF | BIP `HOST_AREA_COMPUTED`, `Area`; `Host Area Computed`; `Computed Area` | required for SF-priced codes | TVD, STV, Schedule |
+| 17 | `Volume` | CF | BIP `HOST_VOLUME_COMPUTED`, `Volume`; `Host Volume Computed` | required for CY/CF-priced codes | TVD, STV, Schedule |
+| 18 | `Weight` | kg | `Weight`, `Calculated Weight`, `Mass` | optional | – |
+| 19 | `Unit Weight` | kg/m, kN/m³ or kg/m³ | `Material: Unit weight`, `Unit Weight`, `Weight per Unit Length`, `Mass per Unit Length` | optional | – |
 | 20 | `Material` | text | names of the element's materials, `; `-separated | recommended | TVD (unmapped list), STV, Schedule |
 | 21 | `Type Comments` | text | type parameter `Type Comments` | optional | – |
 | 22 | `Base Level` | text | `Base Level` | optional | Schedule |
 | 23 | `Top Level` | text | `Top Level` | optional | Schedule |
-| 24 | `Base Offset` | display (ft) | `Base Offset` | optional | – |
-| 25 | `Top Offset` | display (ft) | `Top Offset` | optional | – |
+| 24 | `Base Offset` | ft | BIP `WALL_BASE_OFFSET`, `Base Offset` | optional | – |
+| 25 | `Top Offset` | ft | BIP `WALL_TOP_OFFSET`, `Top Offset` | optional | – |
 | 26–45 | *spatial columns* | see below | element location / bounding box | recommended | Schedule |
 | 46–54 | *room columns* | see below | room of the element | recommended | Schedule |
-| 55 | `Comments` | text | `Comments` | optional (`DNC` marker) | TVD |
-| 56 | `Parameter Snapshot` | text | see below | optional | STV, Schedule |
+| 55 | `Comments` | text | BIP `ALL_MODEL_INSTANCE_COMMENTS`, `Comments` | optional (`DNC` marker) | TVD |
+| 56 | `Parameter Snapshot` | text (display units) | see below | optional | STV, Schedule |
 
 Both exports use the same parameter lookups, except `Base Level` / `Top Level`: Architecture
-reads them from the instance, else the type; Structural only from the instance.
+reads them from the instance, else the type; Structural only from the instance. The schedule
+engine's Manufacton parts adapter uses `Height` / `Length` / `Depth` text as part labels; since
+P4.5 these are decimal feet (`12`) instead of `12' - 0"`.
 
 ## `<model>_MEP_TakeOff.csv` (70 columns)
 
@@ -146,44 +192,60 @@ electrical equipment, electrical and lighting fixtures, sprinklers.
 | 3 | `Family` | text | family name (empty for system families: ducts, pipes, …) | recommended | STV, Schedule |
 | 4 | `Type` | text | type name | recommended | STV, Schedule |
 | 5 | `Level` | text | `Level` parameter, else the element's level | recommended | Schedule |
-| 6 | `Mark` | text | `Mark` | optional | Schedule |
-| 7 | `System Name` | text | `System Name`, `System` | optional | Schedule |
+| 6 | `Mark` | text | BIP `ALL_MODEL_MARK`, `Mark` | optional | Schedule |
+| 7 | `System Name` | text | BIP `RBS_SYSTEM_NAME_PARAM`, `System Name`; `System` | optional | Schedule |
 | 8 | `System Type` | text | `System Type` | recommended | STV, Schedule |
 | 9 | `Service Type` | text | `Service Type` | optional | Schedule |
 | 10 | `Classification` | text | `Classification`, `Flow Classification`, `Part Type` | optional | Schedule |
-| 11 | `Size` | display | `Size`, `Nominal Size`, `Overall Size` | recommended | STV, Schedule |
-| 12 | `Diameter` | display (in) | `Diameter`, `Nominal Diameter`, `Duct Diameter` | recommended | STV |
-| 13 | `Width` | display (in) | `Width`, `Nominal Width`, `Duct Width` | recommended | STV, Schedule |
-| 14 | `Height` | display (in) | `Height`, `Nominal Height`, `Duct Height` | recommended | STV, Schedule |
-| 15 | `Length` | display (ft) | `Length`, `Overall Size` | required for ducts/pipes/trays/conduits | STV, Schedule |
-| 16 | `Area` | display (SF) | `Area`, `Surface Area` | recommended | STV, Schedule |
-| 17 | `Volume` | display (CF) | `Volume` | optional | STV, Schedule |
+| 11 | `Size` | text, inches | built by the add-in: `3"` (diameter) or `4"x4"` (width × height), from `Diameter` / `Width`×`Height`, else the largest connector; without dimensions Revit's text (BIP `RBS_CALCULATED_SIZE`, `Size`, `Nominal Size`, `Overall Size`) in imperial projects, **empty** in projects with metric length or size units (counted in the summary dialog) | recommended | STV, Schedule |
+| 12 | `Diameter` | in | BIP `RBS_CURVE_DIAMETER_PARAM`, `RBS_PIPE_DIAMETER_PARAM`, `RBS_CONDUIT_DIAMETER_PARAM`, `Diameter`; `Nominal Diameter`; `Duct Diameter` | recommended | STV |
+| 13 | `Width` | in | BIP `RBS_CURVE_WIDTH_PARAM`, `RBS_CABLETRAY_WIDTH_PARAM`, `Width`; `Nominal Width`; `Duct Width` | recommended | STV, Schedule |
+| 14 | `Height` | in | BIP `RBS_CURVE_HEIGHT_PARAM`, `RBS_CABLETRAY_HEIGHT_PARAM`, `Height`; `Nominal Height`; `Duct Height` | recommended | STV, Schedule |
+| 15 | `Length` | ft as **feet-inch text** `12' - 6.375"` | BIP `CURVE_ELEM_LENGTH`, `Length`; `Duct Length`; `Computed Length`; `Length 1`; `Duct Length 1` | required for ducts/pipes/trays/conduits | STV, Schedule |
+| 16 | `Area` | SF | BIP `RBS_CURVE_SURFACE_AREA`, `HOST_AREA_COMPUTED`, `Area`; `Surface Area` | recommended | STV, Schedule |
+| 17 | `Volume` | CF | BIP `HOST_VOLUME_COMPUTED`, `Volume` | optional | STV, Schedule |
 | 18 | `Material` | text | names of the element's materials, `; `-separated | recommended | STV, Schedule |
-| 19 | `Weight` | display | `Weight`, `Calculated Weight`, `Mass` | optional | STV |
-| 20 | `Unit Weight` | display | `Unit Weight`, `Weight per Unit Length`, `Mass per Unit Length` | optional | STV |
-| 21 | `Insulation Thickness` | display (in) | `Insulation Thickness` | optional | – |
-| 22 | `Lining Thickness` | display (in) | `Lining Thickness` | optional | – |
-| 23 | `Airflow` | display | `Air Flow`, `Airflow`, `Calculated Supply/Exhaust/Return Air Flow`, `Flow` | optional | STV |
-| 24 | `Flow` | display | `Flow`, `Flow Rate`, `Actual Flow`, `Demand Flow` | optional | STV |
-| 25 | `Pressure Drop` | display | `Pressure Drop`, `Calculated Pressure Drop`, `Fitting Pressure Drop`, `Loss Method` | optional | – |
-| 26 | `Cooling Capacity` | display | `Cooling Capacity`, `Total Cooling Capacity`, `Sensible Cooling Capacity` | optional | – |
-| 27 | `Heating Capacity` | display | `Heating Capacity`, `Heating Load`, `Total Heating Capacity` | optional | – |
-| 28 | `Power` | display | `Power`, `Power Factor`, `Motor Power`, `Input Power` | optional | – |
-| 29 | `Voltage` | display | `Voltage` | optional | – |
-| 30 | `Current` | display | `Current`, `Current Rating` | optional | – |
-| 31 | `Apparent Load` | display | `Apparent Load` | optional | – |
-| 32 | `Connected Load` | display | `Connected Load`, `Load Name` | optional | – |
+| 19 | `Weight` | kg | `Weight`, `Calculated Weight`, `Mass` | optional | STV |
+| 20 | `Unit Weight` | kg/m, kN/m³ or kg/m³ | `Unit Weight`, `Weight per Unit Length`, `Mass per Unit Length` | optional | STV |
+| 21 | `Insulation Thickness` | in | BIP `RBS_REFERENCE_INSULATION_THICKNESS`, `Insulation Thickness` | optional | – |
+| 22 | `Lining Thickness` | in | BIP `RBS_REFERENCE_LINING_THICKNESS`, `Lining Thickness` | optional | – |
+| 23 | `Airflow` | m³/s | `Air Flow`, `Airflow`, `Calculated Supply/Exhaust/Return Air Flow`, BIP `RBS_DUCT_FLOW_PARAM`/`RBS_PIPE_FLOW_PARAM` `Flow`, `Supply Air Outlet Flow`, `Supply Air Inlet Flow`, `Return Air Inlet Flow` | optional | STV |
+| 24 | `Flow` | m³/s | BIP `RBS_DUCT_FLOW_PARAM`, `RBS_PIPE_FLOW_PARAM`, `Flow`; `Flow Rate`; `Actual Flow`; `Demand Flow` | optional | STV |
+| 25 | `Pressure Drop` | Pa | BIP `RBS_DUCT_PRESSURE_DROP`, `RBS_PIPE_PRESSUREDROP_PARAM`, `Pressure Drop`; `Calculated Pressure Drop`; `Fitting Pressure Drop` | optional | – |
+| 26 | `Cooling Capacity` | W | `Cooling Capacity`, `Total Cooling Capacity`, `Sensible Cooling Capacity` | optional | – |
+| 27 | `Heating Capacity` | W | `Heating Capacity`, `Heating Load`, `Total Heating Capacity` | optional | – |
+| 28 | `Power` | W | `Power`, `Motor Power`, `Input Power` | optional | – |
+| 29 | `Voltage` | V | `Voltage` | optional | – |
+| 30 | `Current` | A | `Current`, `Current Rating` | optional | – |
+| 31 | `Apparent Load` | VA | `Apparent Load` | optional | – |
+| 32 | `Connected Load` | VA | `Connected Load` | optional | – |
 | 33 | `Connector Count` | integer | number of MEP connectors | optional | – |
-| 34 | `Connector Flow` | number (internal units) | sum of connector `Flow` | optional | STV |
-| 35 | `Connector Demand` | number (internal units) | sum of connector `Demand` | optional | – |
+| 34 | `Connector Flow` | m³/s | sum of connector `Flow` | optional | STV |
+| 35 | `Connector Demand` | number (Revit internal units, domain-dependent) | sum of connector `Demand` | optional | – |
 | 36 | `Connector Max Diameter (in)` | in | largest connector radius × 2 | optional | – |
 | 37 | `Connector Max Width (in)` | in | largest connector width | optional | – |
 | 38 | `Connector Max Height (in)` | in | largest connector height | optional | – |
 | 39–58 | *spatial columns* | see below | element location / bounding box | recommended | Schedule |
 | 59–67 | *room columns* | see below | room of the element | recommended | Schedule |
-| 68 | `Comments` | text | `Comments` | optional | – |
-| 69 | `Parameter Snapshot` | text | see below | optional | STV, Schedule |
-| 70 | `Assembly Code` | Uniformat code | `Assembly Code` (instance, else type) | **required** (new in P4.3) | – (not read by an engine yet) |
+| 68 | `Comments` | text | BIP `ALL_MODEL_INSTANCE_COMMENTS`, `Comments` | optional | – |
+| 69 | `Parameter Snapshot` | text (display units) | see below | optional | STV, Schedule |
+| 70 | `Assembly Code` | Uniformat code | BIP `UNIFORMAT_CODE` / `ASSEMBLY_CODE` (2026), `Assembly Code` | **required** (new in P4.3) | – (not read by an engine yet) |
+
+**`Length` is the one text column** of the exports: the STV MEP importer only reads lengths with
+`'` / `"` marks (a plain `12.5` would be read as 0), so the add-in writes a fixed,
+culture-invariant feet-inch format generated from the internal value: whole feet, inches with 3
+decimals, no fractions (`12' - 6.375"`, `0' - 9.000"`). STV reads it back within 1e-4 ft
+(`tests/revit_addin/test_export_format.py`). The switch to plain decimal feet comes with the
+engine part of P4.5. `Size` is text too, but built from the numeric dimensions in inches.
+
+Numeric columns only take numeric parameters: `Overall Size`, `Loss Method`, `Power Factor`
+and `Load Name` (text or unitless values that older exports wrote into `Length`, `Pressure Drop`,
+`Power`, `Connected Load`) are no longer used there. `Length` also reads `Duct Length`,
+`Computed Length`, `Length 1`, `Duct Length 1` and `Airflow` the air-terminal flows, the same
+parameters STV would otherwise look up in the `Parameter Snapshot`, so the unit-safe main
+columns are filled whenever Revit has the value. In metric projects the summary dialog counts
+the MEP elements where STV would still fall back to the snapshot (dimensions, length or flow
+empty but present in the snapshot).
 
 Connector columns 34–35 are empty when the sum is 0; 36–38 likewise. `Assembly Code` is the last
 column so readers that use column positions keep working; no engine reads it from the MEP export
@@ -226,7 +288,11 @@ the element's location point, curve midpoint or bounding-box center. Empty if no
 ### `Parameter Snapshot`
 
 `name=value` pairs joined by ` | `, sorted by name, from instance and then type parameters whose
-name contains one of the export's keywords (instance value wins; empty values skipped). Keywords:
+name contains one of the export's keywords (instance value wins; empty values skipped).
+**Values are Revit display text in the project's units and UI language** (`Duct Width=4"` or
+`Duct Width=100 mm`); the snapshot is informational and not unit-safe. Engines should read the
+main columns; STV only falls back to a few snapshot values when a main column is empty.
+Keywords:
 
 - Architecture: size, diameter, radius, width, height, length, area, volume, material, weight,
   mass, thickness, depth, mark, level, offset, comment, assembly, type, fire, finish
