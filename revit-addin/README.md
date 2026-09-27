@@ -103,8 +103,8 @@ expanded. To change the folder, edit or delete the file.
 - Target shared parameters (`4D_Build_Code`, `Prefab_*`) must already exist in the model as
   editable text parameters.
 
-Planned fixes: **P4.2** (release pipeline + `install.ps1`), **P4.3** (export contract in
-`docs/model-requirements.md`).
+Release zips per Revit version (P4.2): `.github/workflows/revit-addin-release.yml`, installer
+`install/install.ps1` + `install/INSTALL.md`.
 
 ## CSV export columns
 
@@ -112,7 +112,9 @@ All files are UTF-8, comma-separated, one row per element, with standard CSV quo
 values (`Length`, `Area`, `Volume`, ...) are Revit's display strings (`AsValueString`, i.e. project
 units) taken from the instance and, if empty, the type; columns with `(ft)`, `(SF)`, `(CF)`, `(in)`
 or `(deg)` are computed numbers in those units (invariant culture, up to 3 decimals). File names
-are prefixed with the model file name (`<model>_...csv`). P4.3 builds on these columns.
+are prefixed with the model file name (`<model>_...csv`). The full contract (unit, source
+parameter, required/optional per column, Assembly Codes) is in
+[`docs/model-requirements.md`](../docs/model-requirements.md).
 
 ### `<model>_Structural_Schedule.csv` and `<model>_Architecture_TakeOff.csv` (56 columns, same header)
 
