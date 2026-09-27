@@ -604,7 +604,14 @@ class UsePhase(_Model):
         default=False,
         description=(
             "true = the use phase is not modeled; the STV result then covers construction "
-            "only (reported as a warning)."
+            "only (reported as a warning). Requires `not_modeled_reason`."
+        ),
+    )
+    not_modeled_reason: str | None = Field(
+        default=None,
+        description=(
+            "Why the use phase is not modeled (required when `not_modeled` is true), e.g. "
+            "'no energy model yet'. Reported in the STV results (`use_phase_status`)."
         ),
     )
     grid_kwh: NonNegative | None = Field(default=None, description="Grid electricity (kWh/yr).")
@@ -623,6 +630,11 @@ class UsePhase(_Model):
     @model_validator(mode="after")
     def _complete(self) -> UsePhase:
         if self.not_modeled:
+            if not (self.not_modeled_reason or "").strip():
+                raise ValueError(
+                    "use phase is not modeled but not_modeled_reason is missing: say why "
+                    "(e.g. 'no energy model yet'), or state every use-phase value."
+                )
             return self
         missing = [
             f for f in ("grid_kwh", "onsite_renewable_kwh", "natural_gas_m3")
@@ -644,7 +656,7 @@ class UsePhase(_Model):
 
     def has_values(self) -> bool:
         """True if any value is given (used to warn when not_modeled hides values)."""
-        return bool(self.model_fields_set - {"not_modeled"})
+        return bool(self.model_fields_set - {"not_modeled", "not_modeled_reason"})
 
     def all_zero(self) -> bool:
         nums = [self.grid_kwh, self.onsite_renewable_kwh, self.natural_gas_m3]
@@ -1117,11 +1129,17 @@ def _collect_warnings(config: ProjectConfig, report: ValidationReport) -> None:
             report.warnings.append(
                 "stv.use_phase: values are given but ignored because not_modeled is true."
             )
-    elif up.all_zero():
-        report.warnings.append(
-            "stv.use_phase: all use-phase values are 0. If the use phase is not modeled, "
-            "set not_modeled: true instead."
-        )
+    else:
+        if up.not_modeled_reason:
+            report.warnings.append(
+                "stv.use_phase: not_modeled_reason is set but ignored because not_modeled is "
+                "false."
+            )
+        if up.all_zero():
+            report.warnings.append(
+                "stv.use_phase: all use-phase values are 0. If the use phase is not modeled, "
+                "set not_modeled: true with a not_modeled_reason instead."
+            )
 
     sched = config.schedule
     for w in sched.blocked_windows:

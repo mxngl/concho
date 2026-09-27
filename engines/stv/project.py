@@ -25,6 +25,8 @@ class STVProjectSettings:
     lifetime_years: int
     use_phase: dict[str, Any]
     use_phase_modeled: bool
+    not_modeled_reason: str | None = None
+    use_phase_all_zero: bool = False
     custom_materials: CustomMaterials | None = None
     warnings: list[str] = field(default_factory=list)
     stv_mapping: Path | None = None
@@ -48,7 +50,8 @@ class STVProjectSettings:
                 "covers construction only."
             )
         elif stv.use_phase.all_zero():
-            warnings.append("stv.use_phase: all use-phase values are 0.")
+            warnings.append("stv.use_phase: all use-phase values are 0 (stated as modeled; "
+                            "if it is not modeled, set not_modeled: true with a reason).")
 
         custom = None
         rel = stv.custom_materials_file or config.files.custom_materials
@@ -61,10 +64,23 @@ class STVProjectSettings:
             lifetime_years=stv.lifetime_years,
             use_phase=use_phase_payload(stv.use_phase) if modeled else {},
             use_phase_modeled=modeled,
+            not_modeled_reason=None if modeled else stv.use_phase.not_modeled_reason,
+            use_phase_all_zero=modeled and stv.use_phase.all_zero(),
             custom_materials=custom,
             warnings=warnings,
             stv_mapping=None if mapping is None else Path(config_dir) / mapping,
         )
+
+
+    def use_phase_status(self) -> dict[str, Any]:
+        """P3.8: ``use_phase_status`` of the results for a run with this config (without the
+        ``inputs``, which the engine adds)."""
+        return {
+            "modeled": self.use_phase_modeled,
+            "source": "project_config",
+            "not_modeled_reason": self.not_modeled_reason,
+            "all_zero": self.use_phase_all_zero or not self.use_phase_modeled,
+        }
 
 
 def use_phase_payload(use_phase: UsePhase) -> dict[str, Any]:

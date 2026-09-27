@@ -75,6 +75,7 @@ class STVEngine:
             breakdown=breakdown,
             construction_items=construction_results,
             lifetime_years=self.lifetime_years,
+            use_phase_status=inputs.use_phase_status(),
         )
 
     def _calculate_annual_electricity(self, inputs: STVInputs) -> ImpactVector:

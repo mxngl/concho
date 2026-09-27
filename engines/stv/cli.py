@@ -266,6 +266,9 @@ def _run_architecture_history(
             reference_data=reference_data,
         )
         results.mapping_coverage = build_mapping_coverage([report], mapping, results)
+        results.use_phase_status.update(
+            source="none", not_modeled_reason="--architecture-history-dir runs are "
+            "construction only")
         timestamp = _parse_schedule_timestamp(schedule_path).isoformat()
         history.append(
             _history_entry(
@@ -560,6 +563,14 @@ def main() -> None:
         payload, team=team, template_path=args.template, lifetime_years=lifetime_years,
         reference_data=reference_data,
     )
+    status = results.use_phase_status
+    if settings is not None and not args.no_use_phase:
+        status.update(settings.use_phase_status())
+    elif args.no_use_phase:
+        status.update(modeled=False, source="skipped",
+                      not_modeled_reason="--no-use-phase: construction-only run")
+    elif args.stv_workbook_input:
+        status["source"] = "stv_workbook_input"
     if mapping is not None:
         results.mapping_coverage = build_mapping_coverage(mapped_reports, mapping, results)
 

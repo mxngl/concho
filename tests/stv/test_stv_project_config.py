@@ -249,3 +249,53 @@ def test_cli_invalid_config(monkeypatch, tmp_path, reference, capsys):
     with pytest.raises(SystemExit):
         _cli(monkeypatch, tmp_path, reference, "--config", str(bad))
     assert "invalid project_config" in capsys.readouterr().err
+
+
+# ── P3.8: use_phase_status in the results ───────────────────────────────────
+
+def test_status_from_inputs(reference):
+    engine = STVEngine(reference)
+    empty = engine.calculate(STVInputs.from_dict({"team": TEAM, "construction_items": ITEMS}))
+    assert empty.to_dict()["use_phase_status"] == {
+        **empty.use_phase_status, "modeled": False, "source": "input", "all_zero": True,
+        "not_modeled_reason": "no use-phase inputs given"}
+    # A stated urinal flow rate is an input, even 0 (decision D11).
+    urinal = engine.calculate(STVInputs.from_dict({
+        "team": TEAM, "construction_items": [], "use_phase": {"water_use": {"urinal_gpf": 0}}}))
+    assert urinal.use_phase_status["modeled"] is True
+    grid = engine.calculate(STVInputs.from_dict({
+        "team": TEAM, "construction_items": [],
+        "use_phase": {"electricity_from_grid_kwh": 10.0}}))
+    assert grid.use_phase_status["inputs"]["electricity_from_grid_kwh"] == 10.0
+    assert grid.use_phase_status["all_zero"] is False
+
+
+def test_cli_status_config(monkeypatch, tmp_path, reference_with_river):
+    river = _cli(monkeypatch, tmp_path, reference_with_river, "--config", str(RIVER_CONFIG))
+    status = river["use_phase_status"]
+    assert (status["modeled"], status["source"], status["not_modeled_reason"],
+            status["all_zero"]) == (True, "project_config", None, False)
+    assert status["inputs"]["electricity_from_grid_kwh"] == 100_000
+
+
+def test_cli_status_not_modeled(monkeypatch, tmp_path, reference_with_river):
+    island = _cli(monkeypatch, tmp_path, reference_with_river,
+                  "--config", str(ISLAND_CONFIG), "--team", TEAM)
+    status = island["use_phase_status"]
+    assert (status["modeled"], status["source"]) == (False, "project_config")
+    assert status["not_modeled_reason"].startswith("Island 2026 reference result C")
+
+
+def test_cli_status_all_zero_warns(monkeypatch, tmp_path, reference_with_river, capsys):
+    data = json.loads(RIVER_CONFIG.read_text(encoding="utf-8"))
+    data.pop("$schema")
+    data["files"] = {}
+    up = data["stv"]["use_phase"]
+    up.update(grid_kwh=0, onsite_renewable_kwh=0, natural_gas_m3=0, cogeneration=None)
+    up["water"] = {k: (None if k == "urinal_gpf" else 0) for k in up["water"]}
+    config = tmp_path / "zero.json"
+    config.write_text(json.dumps(data), encoding="utf-8")
+    result = _cli(monkeypatch, tmp_path, reference_with_river, "--config", str(config))
+    assert result["use_phase_status"]["modeled"] is True
+    assert result["use_phase_status"]["all_zero"] is True
+    assert "all use-phase values are 0" in capsys.readouterr().err

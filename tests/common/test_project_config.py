@@ -335,13 +335,30 @@ def test_use_phase_incomplete_fails(base):
 
 
 def test_use_phase_not_modeled_passes_with_warning(base):
-    base["stv"]["use_phase"] = {"not_modeled": True}
+    base["stv"]["use_phase"] = {"not_modeled": True, "not_modeled_reason": "no energy model"}
     report = _ok(base)
     assert any("not_modeled is true" in w for w in report.warnings)
+    assert report.config.stv.use_phase.not_modeled_reason == "no energy model"
+
+
+@pytest.mark.parametrize("reason", [None, "", "   "])
+def test_use_phase_not_modeled_needs_reason(base, reason):
+    """P3.8: not modeled is an explicit statement with a reason."""
+    base["stv"]["use_phase"] = {"not_modeled": True, "not_modeled_reason": reason}
+    assert "not_modeled_reason is missing" in _errors(base)
+    base["stv"]["use_phase"] = {"not_modeled": True}
+    assert "not_modeled_reason is missing" in _errors(base)
+
+
+def test_use_phase_reason_without_not_modeled_warns(base):
+    base["stv"]["use_phase"]["not_modeled_reason"] = "stale"
+    report = _ok(base)
+    assert any("not_modeled_reason is set but ignored" in w for w in report.warnings)
 
 
 def test_use_phase_not_modeled_with_values_warns(base):
     base["stv"]["use_phase"]["not_modeled"] = True
+    base["stv"]["use_phase"]["not_modeled_reason"] = "values kept for later"
     report = _ok(base)
     assert any("ignored because not_modeled" in w for w in report.warnings)
 

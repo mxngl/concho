@@ -40,7 +40,8 @@
     "lifetime_years": 50,
     "course_workbook_env": "COURSE_STV_XLSX",
     "use_phase": {
-      "not_modeled": true
+      "not_modeled": true,
+      "not_modeled_reason": "Island 2026 reference result C (2026-05-15) has no use-phase inputs; kept construction-only so the reference result stays reproducible."
     }
   },
   "schedule": {

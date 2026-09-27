@@ -947,9 +947,22 @@
       "properties": {
         "not_modeled": {
           "default": false,
-          "description": "true = the use phase is not modeled; the STV result then covers construction only (reported as a warning).",
+          "description": "true = the use phase is not modeled; the STV result then covers construction only (reported as a warning). Requires `not_modeled_reason`.",
           "title": "Not Modeled",
           "type": "boolean"
+        },
+        "not_modeled_reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Why the use phase is not modeled (required when `not_modeled` is true), e.g. 'no energy model yet'. Reported in the STV results (`use_phase_status`).",
+          "title": "Not Modeled Reason"
         },
         "grid_kwh": {
           "anyOf": [

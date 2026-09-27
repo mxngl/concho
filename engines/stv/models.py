@@ -128,6 +128,15 @@ class CogenerationInputs:
     cooling_split: float = 0.0
 
 
+def _all_zero(values: Any) -> bool:
+    """True if no number in the (nested) use-phase inputs is non-zero; a stated urinal
+    flow rate (even 0) counts as an input (decision D11)."""
+    if isinstance(values, dict):
+        return all(_all_zero(v) if k != "urinal_gpf" else v is None
+                   for k, v in values.items())
+    return not isinstance(values, (int, float)) or not values
+
+
 def _optional_float(value: Any) -> float | None:
     return None if value is None else float(value)
 
@@ -160,6 +169,22 @@ class STVInputs:
     team: str
     construction_items: list[ConstructionItem]
     use_phase: UsePhaseInputs = field(default_factory=UsePhaseInputs)
+
+    def use_phase_status(self) -> dict[str, Any]:
+        """P3.8: the use-phase status as far as the inputs show it (source ``input``).
+
+        ``modeled`` is true when any input is non-zero or a urinal flow rate is stated;
+        ``concho-stv --config`` replaces it with the config's explicit statement.
+        """
+        inputs = asdict(self.use_phase)
+        all_zero = _all_zero(inputs)
+        return {
+            "modeled": not all_zero,
+            "source": "input",
+            "not_modeled_reason": "no use-phase inputs given" if all_zero else None,
+            "all_zero": all_zero,
+            "inputs": inputs,
+        }
 
     @classmethod
     def from_dict(cls, payload: dict[str, Any]) -> STVInputs:
@@ -356,6 +381,9 @@ class STVResults:
     # P3.6: mapping coverage of the Revit exports (engines/stv/coverage.py); None when the
     # items did not come from a mapped export.
     mapping_coverage: dict[str, Any] | None = None
+    # P3.8: is the use phase modeled, where do its inputs come from (STVInputs.
+    # use_phase_status, replaced by concho-stv --config); None in results from before P3.8.
+    use_phase_status: dict[str, Any] | None = None
 
     def metric_summary(self) -> dict[str, dict[str, float | None]]:
         totals = self.breakdown.life_cycle
@@ -377,6 +405,8 @@ class STVResults:
             "lifetime_years": self.lifetime_years,
             "data_flags": data_flags(self.construction_items, self.breakdown),
         }
+        if self.use_phase_status is not None:
+            payload["use_phase_status"] = self.use_phase_status
         if self.mapping_coverage is not None:
             payload["mapping_coverage"] = self.mapping_coverage
         return payload
@@ -396,6 +426,7 @@ class STVResults:
             ],
             lifetime_years=int(payload.get("lifetime_years", 0)),
             mapping_coverage=payload.get("mapping_coverage"),
+            use_phase_status=payload.get("use_phase_status"),
         )
 
     @classmethod

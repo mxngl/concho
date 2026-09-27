@@ -370,6 +370,34 @@ The architecture bamboo proxies are the larger part: bamboo floors booked as Con
 349,607 kgCO₂e and bamboo walls as Steel Studs and Painted Gypsum (sf) 123,626 kgCO₂e, against
 97,379 kgCO₂e for the glulam columns and beams.
 
+## Use phase (P3.8)
+
+### Required inputs
+
+`stv.use_phase` of `project_config` must state the use phase explicitly (validated by
+`concho config validate` and by `concho-stv --config`):
+
+- either **every value**: `grid_kwh`, `onsite_renewable_kwh`, `natural_gas_m3`,
+  `cogeneration` (`null` = none), and all of `water` (`urinal_gpf: null` = no urinals, decision
+  D11); 0 is allowed but must be written;
+- or `not_modeled: true` **with a `not_modeled_reason`** (error without one).
+
+Warnings: `not_modeled: true`; all values 0 (stated as modeled, but nothing in it);
+`not_modeled_reason` while `not_modeled` is false.
+
+### `use_phase_status` in the results
+
+| Key | Content |
+|---|---|
+| `modeled` | true/false: is the use phase part of this result |
+| `source` | `project_config` (`--config`), `input` (input JSON or none), `stv_workbook_input`, `skipped` (`--no-use-phase`), `none` (`--architecture-history-dir`) |
+| `not_modeled_reason` | the config's reason, or why the run has none; `null` when modeled |
+| `all_zero` | true if every use-phase input is 0 |
+| `inputs` | the annual inputs the engine used (grid, renewables, gas, cogeneration, water) |
+
+Without `--config`, `modeled` is true when any input is non-zero (a stated urinal flow rate
+counts, decision D11).
+
 ## Island 2026 reference result
 
 **The current Island result is 2,517,183.14 kgCO₂e** (28,396,923.44 MJ, 30,026,557.14 kg
