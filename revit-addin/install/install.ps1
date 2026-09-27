@@ -19,6 +19,10 @@
   also after an error, so a double-click shows the result.
 
 .EXAMPLE
+  install.cmd
+  Double-click entry point next to this script; runs it with -ExecutionPolicy Bypass.
+
+.EXAMPLE
   powershell -ExecutionPolicy Bypass -File .\install.ps1
 #>
 param(

@@ -1,7 +1,7 @@
 name: Revit add-in release
 
 # P4.2: builds QTO.dll per Revit version and packages
-#   Concho-QTO-Revit<year>-<version>.zip = QTO.dll + QTO.addin + install.ps1 + INSTALL.md
+#   Concho-QTO-Revit<year>-<version>.zip = QTO.dll + QTO.addin + install.cmd + install.ps1 + INSTALL.md
 # On a pushed tag v*, the zips are attached to a GitHub Release for that tag.
 # workflow_dispatch (for testing) and pull requests that touch the add-in only upload the zips as
 # workflow artifacts (GitHub can only dispatch workflows that exist on the default branch, so the
@@ -61,11 +61,17 @@ jobs:
           Copy-Item "revit-addin/bin/${{ matrix.config }}/QTO.dll" $stage
           Copy-Item "revit-addin/QTO.addin" $stage
           Copy-Item "revit-addin/install/INSTALL.md" $stage
+          # install.cmd: double-click entry point (Windows doesn't run .ps1 files on double-click).
+          Copy-Item "revit-addin/install/install.cmd" $stage
           # Default Revit version of this zip's installer.
           (Get-Content "revit-addin/install/install.ps1" -Raw).Replace('__REVIT_VERSION__', '${{ matrix.year }}') |
             Set-Content (Join-Path $stage "install.ps1") -Encoding utf8
           New-Item -ItemType Directory -Path dist -Force | Out-Null
           Compress-Archive -Path "$stage/*" -DestinationPath "dist/$name.zip"
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $zip = [System.IO.Compression.ZipFile]::OpenRead("dist/$name.zip")
+          "Zip contents:"; $zip.Entries | ForEach-Object { "  $($_.FullName) ($($_.Length) bytes)" }
+          $zip.Dispose()
           Get-ChildItem dist
           "ZIP_NAME=$name" >> $env:GITHUB_ENV
 

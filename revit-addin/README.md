@@ -105,7 +105,7 @@ expanded. To change the folder, edit or delete the file.
   editable text parameters.
 
 Release zips per Revit version (P4.2): `.github/workflows/revit-addin-release.yml`, installer
-`install/install.ps1` + `install/INSTALL.md`.
+`install/install.cmd` (double-click entry point) + `install/install.ps1` + `install/INSTALL.md`.
 
 ## CSV export columns
 
