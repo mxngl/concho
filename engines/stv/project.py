@@ -18,6 +18,9 @@ from engines.common.config import ProjectConfig, UsePhase
 from .custom_materials import CustomMaterials, load_custom_materials
 from .engine import LIFETIME_YEARS
 
+# ConstructionItem.origin of stv.construction_items (P3.8).
+CONFIG_ORIGIN = "project_config"
+
 
 @dataclass
 class STVProjectSettings:
@@ -30,6 +33,8 @@ class STVProjectSettings:
     custom_materials: CustomMaterials | None = None
     warnings: list[str] = field(default_factory=list)
     stv_mapping: Path | None = None
+    # P3.8: stv.construction_items in the STVInputs.from_dict format (origin project_config).
+    construction_items: list[dict[str, Any]] = field(default_factory=list)
 
     @classmethod
     def from_config(
@@ -69,6 +74,11 @@ class STVProjectSettings:
             custom_materials=custom,
             warnings=warnings,
             stv_mapping=None if mapping is None else Path(config_dir) / mapping,
+            construction_items=[
+                {"assembly": i.assembly, "material_type": i.material_type,
+                 "amount": i.amount, "origin": CONFIG_ORIGIN}
+                for i in stv.construction_items
+            ],
         )
 
 

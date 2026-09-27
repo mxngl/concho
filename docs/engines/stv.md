@@ -188,7 +188,8 @@ A1030 → Concrete Slab, all in cy) or for the code plus an explicit product key
 floors wood / concrete, concrete columns and beams; B2010 EIFS, brick on metal stud / on
 concrete, SIP; B3010 EPDM, green roof, asphalt shingle; C1010 metal / wood stud, interior
 curtain wall; C3020 carpet; D20 copper / stainless / HDPE pipes and D30 stainless ducts by
-weight). Left out on purpose: members that need a density (steel, timber, glulam), steel
+weight; D5090 PV panels (Electrical Equipment or Generic Models with a photovoltaic / solar
+panel keyword) by area as Energy / Photovoltaics (sf), P3.8). Left out on purpose: members that need a density (steel, timber, glulam), steel
 ducts (size threshold), windows (pane count and frame are rarely exported), roof structure
 (B1020), and anything without an Assembly Code (e.g. the MEP export). Teams copy it and
 extend it; the coverage report lists what is left.
@@ -384,6 +385,27 @@ The architecture bamboo proxies are the larger part: bamboo floors booked as Con
 
 Warnings: `not_modeled: true`; all values 0 (stated as modeled, but nothing in it);
 `not_modeled_reason` while `not_modeled` is false.
+
+### PV and other items outside the Revit exports
+
+The course books on-site PV twice, and the engine does the same:
+
+- **construction:** the panels are a construction item, Energy / `Photovoltaics (sf)` (panel
+  area), in "Construction and Materials";
+- **use phase:** the PV output goes into "On-site Renewable Electricity" (`onsite_renewable_kwh`),
+  which the course books at **zero impact** (`Use Phase` F20:I20 = 0 × D20) and does **not**
+  subtract from the grid. The team enters the grid draw that remains (`grid_kwh`) itself.
+
+The panels come in through either
+
+- the **mapping table**, when the model has them: the default table maps D5090 Electrical
+  Equipment / Generic Models with `photovoltaic|solar panel|pv panel|pv module` by area; or
+- **`stv.construction_items`** of `project_config`, for items that are not in the Revit
+  exports (as the course types them into "Construction and Materials"): `assembly`,
+  `material_type`, `amount` (in the unit of the material) and a required `note` saying where
+  the amount comes from. `concho-stv --config` checks them against the catalog (custom
+  materials included) and adds them with `origin: "project_config"` on the line item. Other
+  Energy items (EV battery, solar water heating, turbines) work the same way.
 
 ### `use_phase_status` in the results
 

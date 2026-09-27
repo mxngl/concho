@@ -548,6 +548,14 @@ def main() -> None:
     except StvMappingTieError as exc:
         parser.error(str(exc))
 
+    if settings is not None and settings.construction_items:
+        for n, item in enumerate(settings.construction_items):
+            try:
+                reference_data.validate_item(item["assembly"], item["material_type"])
+            except ValueError as exc:
+                parser.error(f"stv.construction_items[{n}] of --config: {exc}")
+        payload["construction_items"] = (list(payload.get("construction_items", []))
+                                         + settings.construction_items)
     if settings is not None and not args.no_use_phase:
         if payload.get("use_phase"):
             print(

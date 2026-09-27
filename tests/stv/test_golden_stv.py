@@ -59,7 +59,7 @@ ISLAND_MAPPING = REPO_ROOT / "engines" / "stv" / "examples" / "island" / "stv_ma
 # Keys added after the stored reference files: P3.6 (estimates), P3.7 (custom materials,
 # proxies), P3.8 (use-phase status).
 ADDED_ITEM_KEYS = ("estimated", "estimated_amount", "custom_material", "custom_material_source",
-                   "proxy", "proxy_amount")
+                   "proxy", "proxy_amount", "origin")
 ADDED_RESULT_KEYS = ("data_flags", "use_phase_status")
 WORKBOOK = "STV_Template/STV_ConceptA_Bambo.xlsx"
 SCHEDULES = "revit_schedules/Current"

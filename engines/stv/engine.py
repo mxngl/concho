@@ -48,6 +48,7 @@ class STVEngine:
                 construction=construction,
                 estimated_amount=item.estimated_amount,
                 proxy_amount=item.proxy_amount,
+                origin=item.origin,
                 custom_material_source=self.reference_data.custom_source(
                     item.assembly, item.material_type),
             )

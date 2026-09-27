@@ -69,9 +69,15 @@ validation rules: [`docs/config.md`](../docs/config.md). Check your copy with
   - `use_phase`: every value is stated. `natural_gas_m3: 0` and `lab_sink_gpm: 0` are
     explicit zeros; `cogeneration: null` means no cogeneration. `urinal_gpf: 0.125` means
     urinals exist; `null` would mean no urinals (toilet factor 1.0), `0` the course
-    behaviour (factor 0.75), see decision D11. A team that has not modeled the use phase yet
-    writes `"use_phase": {"not_modeled": true}` instead.
-  - `custom_materials_file: null`: no custom materials (P3.7).
+    behaviour (factor 0.75), see decision D11. `onsite_renewable_kwh` is the PV output: the
+    course books it at zero impact and does not subtract it from `grid_kwh`, so `grid_kwh` is
+    the grid draw that remains. A team that has not modeled the use phase yet writes
+    `"use_phase": {"not_modeled": true, "not_modeled_reason": "…why…"}` instead (P3.8).
+  - `construction_items`: items that are not in the Revit exports, typed in as in the course
+    sheet "Construction and Materials"; here 3,000 sf of PV panels as Energy /
+    `Photovoltaics (sf)` (P3.8). `note` (required) says where the amount comes from.
+  - `custom_materials_file: null`: no custom materials (P3.7; format in
+    `custom_materials.csv`).
 - **`schedule`**: construction from 2029-03-01 to 2030-06-30, Monday–Friday, 8 h/day, four
   holidays and a winter shutdown as a blocked window. `rooms_per_zone` and `trade_sequence`
   drive the takt planner (the sequence shown is the engine default). All licensed-tool

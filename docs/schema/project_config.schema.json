@@ -737,6 +737,44 @@
       "title": "ReferenceColumn",
       "type": "object"
     },
+    "STVConstructionItem": {
+      "additionalProperties": false,
+      "description": "A construction item that is not in the Revit exports, entered like a row of the course\nsheet 'Construction and Materials' (e.g. PV panels: Energy / 'Photovoltaics (sf)').",
+      "properties": {
+        "assembly": {
+          "description": "Course assembly, e.g. 'Energy' ('Construction and Materials' column B).",
+          "minLength": 1,
+          "title": "Assembly",
+          "type": "string"
+        },
+        "material_type": {
+          "description": "Material/Type of the course LCA catalog (or a custom material) for that assembly, e.g. 'Photovoltaics (sf)' (column C); checked against the catalog when concho-stv runs.",
+          "minLength": 1,
+          "title": "Material Type",
+          "type": "string"
+        },
+        "amount": {
+          "description": "Quantity in the unit of material_type (column D), e.g. panel area in sf.",
+          "minimum": 0,
+          "title": "Amount",
+          "type": "number"
+        },
+        "note": {
+          "description": "Where the amount comes from (required), e.g. 'team input, not course data: PV area from the team workbook'.",
+          "minLength": 1,
+          "title": "Note",
+          "type": "string"
+        }
+      },
+      "required": [
+        "assembly",
+        "material_type",
+        "amount",
+        "note"
+      ],
+      "title": "STVConstructionItem",
+      "type": "object"
+    },
     "STVSection": {
       "additionalProperties": false,
       "description": "Sustainable Target Value (life-cycle carbon, energy, water).",
@@ -762,6 +800,14 @@
         },
         "use_phase": {
           "$ref": "#/$defs/UsePhase"
+        },
+        "construction_items": {
+          "description": "Construction items not in the Revit exports (P3.8), e.g. PV panels as Energy / 'Photovoltaics (sf)', as the course enters them in 'Construction and Materials'. Added once to the STV project result.",
+          "items": {
+            "$ref": "#/$defs/STVConstructionItem"
+          },
+          "title": "Construction Items",
+          "type": "array"
         },
         "custom_materials_file": {
           "anyOf": [

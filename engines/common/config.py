@@ -666,6 +666,27 @@ class UsePhase(_Model):
         return self.cogeneration is None and all(not v for v in nums)
 
 
+class STVConstructionItem(_Model):
+    """A construction item that is not in the Revit exports, entered like a row of the course
+    sheet 'Construction and Materials' (e.g. PV panels: Energy / 'Photovoltaics (sf)')."""
+
+    assembly: NonEmptyStr = Field(
+        description="Course assembly, e.g. 'Energy' ('Construction and Materials' column B)."
+    )
+    material_type: NonEmptyStr = Field(
+        description="Material/Type of the course LCA catalog (or a custom material) for that "
+                    "assembly, e.g. 'Photovoltaics (sf)' (column C); checked against the "
+                    "catalog when concho-stv runs."
+    )
+    amount: NonNegative = Field(
+        description="Quantity in the unit of material_type (column D), e.g. panel area in sf."
+    )
+    note: NonEmptyStr = Field(
+        description="Where the amount comes from (required), e.g. 'team input, not course "
+                    "data: PV area from the team workbook'."
+    )
+
+
 class STVSection(_Model):
     """Sustainable Target Value (life-cycle carbon, energy, water)."""
 
@@ -678,6 +699,14 @@ class STVSection(_Model):
         description="Env var that holds the local path to the course STV workbook.",
     )
     use_phase: UsePhase
+    construction_items: list[STVConstructionItem] = Field(
+        default_factory=list,
+        description=(
+            "Construction items not in the Revit exports (P3.8), e.g. PV panels as "
+            "Energy / 'Photovoltaics (sf)', as the course enters them in 'Construction and "
+            "Materials'. Added once to the STV project result."
+        ),
+    )
     custom_materials_file: RelPath | None = Field(
         default=None,
         description=(

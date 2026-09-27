@@ -299,3 +299,53 @@ def test_cli_status_all_zero_warns(monkeypatch, tmp_path, reference_with_river, 
     assert result["use_phase_status"]["modeled"] is True
     assert result["use_phase_status"]["all_zero"] is True
     assert "all use-phase values are 0" in capsys.readouterr().err
+
+
+# ── P3.8: stv.construction_items (e.g. PV as an Energy item) ─────────────────
+
+def _config_with_items(tmp_path, items) -> Path:
+    data = json.loads(RIVER_CONFIG.read_text(encoding="utf-8"))
+    data.pop("$schema")
+    data["files"] = {}
+    data["stv"]["construction_items"] = items
+    path = tmp_path / "items.json"
+    path.write_text(json.dumps(data), encoding="utf-8")
+    return path
+
+
+def test_config_construction_items(monkeypatch, tmp_path, reference_with_river):
+    reference_with_river.materials[("Energy", "Test PV (sf)")] = (
+        reference_with_river.materials[("Floor", "Test Slab (sf)")])
+    reference_with_river.valid_materials["Energy"] = {"Test PV (sf)"}
+    config = _config_with_items(tmp_path, [{"assembly": "Energy", "material_type": "Test PV (sf)",
+                                            "amount": 500, "note": "invented PV area"}])
+    settings = STVProjectSettings.from_config(load_config(config), tmp_path)
+    assert settings.construction_items == [{"assembly": "Energy", "material_type": "Test PV (sf)",
+                                            "amount": 500.0, "origin": "project_config"}]
+    result = _cli(monkeypatch, tmp_path, reference_with_river, "--config", str(config))
+    pv = result["construction_items"][-1]
+    assert (pv["assembly"], pv["material_type"], pv["amount"], pv["origin"]) == (
+        "Energy", "Test PV (sf)", 500.0, "project_config")
+    assert result["construction_items"][0]["origin"] == "input"
+    assert pv["embodied_total"]["carbon"] == pytest.approx(500 * 2.75)
+
+
+def test_config_construction_items_checked(monkeypatch, tmp_path, reference_with_river, capsys):
+    config = _config_with_items(tmp_path, [{"assembly": "Energy", "material_type": "Nope (sf)",
+                                            "amount": 1, "note": "x"}])
+    with pytest.raises(SystemExit):
+        _cli(monkeypatch, tmp_path, reference_with_river, "--config", str(config))
+    assert "stv.construction_items[0] of --config: Unknown assembly 'Energy'" in (
+        capsys.readouterr().err)
+
+
+@pytest.mark.parametrize("item, message", [
+    ({"assembly": "Energy", "material_type": "PV (sf)", "amount": 1}, "note"),
+    ({"assembly": "Energy", "material_type": "PV (sf)", "amount": -1, "note": "x"}, "amount"),
+    ({"assembly": "", "material_type": "PV (sf)", "amount": 1, "note": "x"}, "assembly"),
+])
+def test_config_construction_items_validation(tmp_path, item, message):
+    from engines.common.config import ConfigError
+
+    with pytest.raises(ConfigError, match=message):
+        load_config(_config_with_items(tmp_path, [item]))

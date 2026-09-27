@@ -115,6 +115,9 @@ class ConstructionItem:
     estimated_amount: float = 0.0
     # P3.7: part of ``amount`` mapped by a proxy rule (mapping note "proxy"); reporting only.
     proxy_amount: float = 0.0
+    # P3.8: "project_config" for stv.construction_items of the config (taken once when
+    # results are combined), else "input".
+    origin: str = "input"
 
 
 @dataclass(slots=True)
@@ -195,6 +198,7 @@ class STVInputs:
                 amount=float(item["amount"]),
                 estimated_amount=float(item.get("estimated_amount", 0.0)),
                 proxy_amount=float(item.get("proxy_amount", 0.0)),
+                origin=item.get("origin", "input"),
             )
             for item in payload.get("construction_items", [])
         ]
@@ -251,6 +255,7 @@ class ConstructionImpactResult:
     construction: ImpactVector
     estimated_amount: float = 0.0  # P3.6, see ConstructionItem
     proxy_amount: float = 0.0  # P3.7, see ConstructionItem
+    origin: str = "input"  # P3.8, see ConstructionItem
     # P3.7: EPD source when the material is a custom material (not course data), else None.
     custom_material_source: str | None = None
 
@@ -279,6 +284,7 @@ class ConstructionImpactResult:
             "custom_material_source": self.custom_material_source,
             "proxy": self.proxy_amount > 0,
             "proxy_amount": self.proxy_amount,
+            "origin": self.origin,
         }
 
     @classmethod
@@ -295,6 +301,7 @@ class ConstructionImpactResult:
             estimated_amount=float(payload.get("estimated_amount", 0.0)),
             proxy_amount=float(payload.get("proxy_amount", 0.0)),
             custom_material_source=payload.get("custom_material_source"),
+            origin=payload.get("origin", "input"),
         )
 
 
