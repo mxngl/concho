@@ -71,7 +71,8 @@ namespace QTO
                     "Duct Length",
                     "Computed Length",
                     "Length 1",
-                    "Duct Length 1"),
+                    "Duct Length 1")
+                    ?? ParameterReader.LocationCurveLengthFeet(elem),
                 Area = ParameterReader.Number(doc, elem, ParameterReader.SquareFeet,
                     new ParamCandidate(
                         "Area",

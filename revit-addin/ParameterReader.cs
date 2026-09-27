@@ -100,6 +100,25 @@ namespace QTO
             return "";
         }
 
+        /// <summary>
+        /// Length of the element's location curve in feet (walls, mullions, beams, railings, MEP
+        /// curves): language-independent last fallback for Length. Null without a location curve.
+        /// </summary>
+        public static double? LocationCurveLengthFeet(Element elem)
+        {
+            try
+            {
+                if (elem.Location is LocationCurve locationCurve && locationCurve.Curve != null)
+                    return UnitUtils.ConvertFromInternalUnits(locationCurve.Curve.Length, UnitTypeId.Feet);
+            }
+            catch (Exception)
+            {
+                // Some curves (e.g. unbound) have no length.
+            }
+
+            return null;
+        }
+
         /// <summary>Assembly Code: built-in parameter (instance, then type), English name as fallback.</summary>
         public static string AssemblyCode(Document doc, Element elem)
         {

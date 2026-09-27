@@ -13,6 +13,7 @@ namespace QTO
         {
             new ParamCandidate(
                 "Thickness",
+                BuiltInParameter.DPART_LAYER_WIDTH,
                 BuiltInParameter.FLOOR_ATTR_THICKNESS_PARAM,
                 BuiltInParameter.CEILING_THICKNESS,
                 BuiltInParameter.ROOF_ATTR_THICKNESS_PARAM
@@ -34,14 +35,23 @@ namespace QTO
         {
             return new BuildingQuantities
             {
+                // Parts: DPART_* computed values (the part's own "Length"/"Area"/... are built-in
+                // parameters, so the English names don't find them in a localized Revit).
                 Length = ParameterReader.Number(doc, elem, ParameterReader.Feet,
-                    new ParamCandidate("Length", BuiltInParameter.CURVE_ELEM_LENGTH),
-                    new ParamCandidate("Cut Length", BuiltInParameter.STRUCTURAL_FRAME_CUT_LENGTH),
-                    "Span"),
+                             new ParamCandidate(
+                                 "Length",
+                                 BuiltInParameter.DPART_LENGTH_COMPUTED,
+                                 BuiltInParameter.CURVE_ELEM_LENGTH
+                             ),
+                             new ParamCandidate("Cut Length", BuiltInParameter.STRUCTURAL_FRAME_CUT_LENGTH),
+                             "Span")
+                         ?? ParameterReader.LocationCurveLengthFeet(elem),
                 Width = ParameterReader.Number(doc, elem, ParameterReader.Feet,
                     new ParamCandidate(
                         "Width",
                         BuiltInParameter.WALL_ATTR_WIDTH_PARAM,
+                        BuiltInParameter.CURTAIN_WALL_PANELS_WIDTH,
+                        BuiltInParameter.STAIRS_RUN_ACTUAL_RUN_WIDTH,
                         BuiltInParameter.DOOR_WIDTH,
                         BuiltInParameter.WINDOW_WIDTH,
                         BuiltInParameter.FAMILY_WIDTH_PARAM
@@ -54,17 +64,27 @@ namespace QTO
                 Height = ParameterReader.Number(doc, elem, ParameterReader.Feet,
                     new ParamCandidate(
                         "Height",
+                        BuiltInParameter.DPART_HEIGHT_COMPUTED,
+                        BuiltInParameter.CURTAIN_WALL_PANELS_HEIGHT,
                         BuiltInParameter.DOOR_HEIGHT,
                         BuiltInParameter.WINDOW_HEIGHT,
                         BuiltInParameter.FAMILY_HEIGHT_PARAM
                     ),
                     ThicknessCandidates[0]),
                 Area = ParameterReader.Number(doc, elem, ParameterReader.SquareFeet,
-                    new ParamCandidate("Area", BuiltInParameter.HOST_AREA_COMPUTED),
+                    new ParamCandidate(
+                        "Area",
+                        BuiltInParameter.DPART_AREA_COMPUTED,
+                        BuiltInParameter.HOST_AREA_COMPUTED
+                    ),
                     "Host Area Computed",
                     "Computed Area"),
                 Volume = ParameterReader.Number(doc, elem, ParameterReader.CubicFeet,
-                    new ParamCandidate("Volume", BuiltInParameter.HOST_VOLUME_COMPUTED),
+                    new ParamCandidate(
+                        "Volume",
+                        BuiltInParameter.DPART_VOLUME_COMPUTED,
+                        BuiltInParameter.HOST_VOLUME_COMPUTED
+                    ),
                     "Host Volume Computed"),
                 Weight = ParameterReader.Number(doc, elem, ParameterReader.Kilograms,
                     "Weight",
