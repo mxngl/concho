@@ -63,3 +63,21 @@ jobs:
 
       - name: Test (incl. golden and equivalence tests)
         run: pytest
+
+  revit-addin:
+    # P4.2: build the Revit add-in for every supported Revit version (build only, no Revit
+    # installed; the Revit API comes from the Nice3point reference packages).
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        revit: ["R25", "R26"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Build (Revit ${{ matrix.revit }})
+        run: dotnet build revit-addin/Concho.QTO.sln -c "Release ${{ matrix.revit }}"
