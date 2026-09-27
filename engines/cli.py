@@ -9,6 +9,13 @@ Subcommands:
   with ``--config``, clusters must be course clusters or ``tvd.custom_clusters`` of that
   config. Exit code 0 when valid (warnings allowed), 1 on any error.
 - ``concho costdb schema``: print the JSON Schema of one cost DB row.
+- ``concho stvmap validate FILE [--template XLSX] [--architecture CSV ...] [--structural
+  CSV ...] [--mep CSV ...]`` (P3.6): validate an STV mapping table (``stv_mapping.csv``).
+  ``stv_assembly`` / ``stv_material_type`` are checked against the course LCA catalog of the
+  course workbook (``--template`` or ``$COURSE_STV_XLSX``; without it: warning, not checked).
+  With Revit exports, every element is matched and ties are reported as errors. Exit code 0
+  when valid (warnings allowed), 1 on any error.
+- ``concho stvmap schema``: print the JSON Schema of one mapping row.
 
 The engine CLIs stay separate for now (``concho-tvd``, ``concho-stv``, ``concho-schedule``).
 """
@@ -16,9 +23,11 @@ The engine CLIs stay separate for now (``concho-tvd``, ``concho-stv``, ``concho-
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 
 from engines.common.config import json_schema_text, validate_config_file
+from engines.stv import mapping as stv_mapping
 from engines.tvd import cost_db
 
 
@@ -52,6 +61,21 @@ def build_parser() -> argparse.ArgumentParser:
                            help="project_config JSON: its tvd.custom_clusters are the only "
                                 "allowed non-course clusters")
     costdb_sub.add_parser("schema", help="print the JSON Schema of one cost DB row")
+
+    stvmap = sub.add_parser("stvmap", help="STV mapping table tools")
+    stvmap_sub = stvmap.add_subparsers(dest="stvmap_command", required=True,
+                                       parser_class=_Parser)
+    svalidate = stvmap_sub.add_parser("validate", help="validate an stv_mapping.csv file")
+    svalidate.add_argument("file", help="path to the stv_mapping.csv file")
+    svalidate.add_argument("--template", metavar="XLSX",
+                           help="course STV workbook for the LCA catalog check "
+                                "(default: $COURSE_STV_XLSX)")
+    for discipline in stv_mapping.DISCIPLINES:
+        svalidate.add_argument(f"--{discipline}", metavar="CSV", nargs="+", action="extend",
+                               default=[],
+                               help=f"Revit {discipline} export(s): report ties on their "
+                                    "elements")
+    stvmap_sub.add_parser("schema", help="print the JSON Schema of one mapping row")
     return parser
 
 
@@ -84,6 +108,26 @@ def _validate_costdb(path: str, config_path: str | None) -> int:
     return _print_report(path, cost_db.validate_cost_db_file(path, custom_clusters=custom))
 
 
+def _validate_stvmap(args) -> int:
+    from engines.stv.reference import TEMPLATE_ENV_VAR, STVReferenceData, resolve_template_path
+
+    catalog = None
+    try:
+        catalog = STVReferenceData.from_workbook(resolve_template_path(args.template))
+    except FileNotFoundError as exc:
+        if args.template or os.environ.get(TEMPLATE_ENV_VAR):
+            print(f"error: {exc}")
+            return 1
+    report = stv_mapping.validate_stv_mapping_file(args.file, catalog=catalog)
+    exports = [(d, path) for d in stv_mapping.DISCIPLINES for path in getattr(args, d)]
+    if report.ok and exports:
+        try:
+            report.errors += stv_mapping.check_exports(report.mapping, exports)
+        except OSError as exc:
+            report.errors.append(f"cannot read export: {exc}")
+    return _print_report(args.file, report)
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     if args.command == "config":
@@ -97,6 +141,12 @@ def main(argv: list[str] | None = None) -> int:
             return _validate_costdb(args.file, args.config)
         if args.costdb_command == "schema":
             sys.stdout.write(cost_db.json_schema_text())
+            return 0
+    if args.command == "stvmap":
+        if args.stvmap_command == "validate":
+            return _validate_stvmap(args)
+        if args.stvmap_command == "schema":
+            sys.stdout.write(stv_mapping.json_schema_text())
             return 0
     return 1  # pragma: no cover (argparse enforces the subcommands)
 

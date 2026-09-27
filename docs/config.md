@@ -245,7 +245,7 @@ Generated from `docs/schema/project_config.schema.json`; do not edit by hand.
 | `agent.extensions.clashbot` | boolean |  | `false` | ClashBot (needs ACC/APS access). |
 | `files` | object |  |  | Input files and the exports directory, relative to this config file. `cost_db` and `macro_schedule` are needed by the engines (error if set but missing, warning if unset); the others are optional (warning if set but missing). |
 | `files.cost_db` | string \| null |  | `null` | TVD cost DB (cost_db.csv format, P3.4; see docs/engines/tvd.md). The TVD engine validates it before the run. |
-| `files.stv_mapping` | string \| null |  | `null` | STV mapping CSV (P3.6). |
+| `files.stv_mapping` | string \| null |  | `null` | STV mapping table (stv_mapping.csv format, P3.6; see docs/engines/stv.md). concho-stv maps the Revit exports with it; unset = the default table template/stv_mapping.csv. |
 | `files.custom_materials` | string \| null |  | `null` | Custom materials CSV (P3.7). |
 | `files.macro_schedule` | string \| null |  | `null` | Macro schedule CSV (P3B.1). |
 | `files.schedule_rules` | string \| null |  | `null` | Schedule rules JSON (P3B.2). |

@@ -2,7 +2,8 @@
 
 ``stv.course_team``, ``stv.lifetime_years`` and ``stv.use_phase`` of the config become the
 engine inputs; ``stv.custom_materials_file`` (or ``files.custom_materials``) is loaded and
-validated only (used in the calculation from P3.7).
+validated only (used in the calculation from P3.7). ``files.stv_mapping`` (P3.6) is the STV
+mapping table for Revit exports (resolved relative to the config file).
 """
 
 from __future__ import annotations
@@ -25,6 +26,7 @@ class STVProjectSettings:
     use_phase_modeled: bool
     custom_materials: CustomMaterials | None = None
     warnings: list[str] = field(default_factory=list)
+    stv_mapping: Path | None = None
 
     @classmethod
     def from_config(
@@ -57,6 +59,7 @@ class STVProjectSettings:
                 "used in the calculation yet (P3.7)."
             )
 
+        mapping = config.files.stv_mapping
         return cls(
             team=stv.course_team.value,
             lifetime_years=stv.lifetime_years,
@@ -64,6 +67,7 @@ class STVProjectSettings:
             use_phase_modeled=modeled,
             custom_materials=custom,
             warnings=warnings,
+            stv_mapping=None if mapping is None else Path(config_dir) / mapping,
         )
 
 

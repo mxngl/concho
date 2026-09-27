@@ -46,6 +46,7 @@ class STVEngine:
                 materials=materials,
                 transport=transport,
                 construction=construction,
+                estimated_amount=item.estimated_amount,
             )
             construction_results.append(construction_result)
             breakdown.embodied_materials = breakdown.embodied_materials + materials
