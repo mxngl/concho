@@ -91,6 +91,35 @@ class STVReferenceData:
         self.valid_materials = valid_materials
         self.teams = teams
         self.fuels = fuels
+        # P3.7: (LCA assembly, material type) -> EPD source of the custom materials added
+        # with add_custom_materials (team data, not course data).
+        self.custom_sources: dict[tuple[str, str], str] = {}
+
+    def add_custom_materials(self, custom) -> None:
+        """Add validated custom materials (``engines.stv.custom_materials.CustomMaterials``,
+        P3.7) so the engine and the mapping table use them like catalog entries.
+
+        Raises ``ValueError`` if a name is already in the catalog (course or custom).
+        """
+        for material in custom.materials:
+            record = material.record
+            list_assembly = {v: k for k, v in ASSEMBLY_ALIASES.items()}.get(
+                record.assembly, record.assembly)
+            if record.material_type in self.materials_by_name:
+                raise ValueError(
+                    f"custom material '{record.material_type}' is already in the catalog; "
+                    "a custom material may not reuse a catalog name."
+                )
+            key = (record.assembly, record.material_type)
+            self.materials[key] = record
+            self.materials_by_name[record.material_type] = [record]
+            self.valid_materials.setdefault(list_assembly, set()).add(record.material_type)
+            self.custom_sources[key] = material.source
+
+    def custom_source(self, assembly: str, material_type: str) -> str | None:
+        """EPD source if (assembly, material type) is a custom material, else None."""
+        return self.custom_sources.get(
+            (ASSEMBLY_ALIASES.get(assembly, assembly), material_type))
 
     @classmethod
     def from_workbook(cls, workbook_path: Path | str | None = None) -> STVReferenceData:

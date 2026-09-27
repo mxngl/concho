@@ -2,8 +2,9 @@
 
 ``stv.course_team``, ``stv.lifetime_years`` and ``stv.use_phase`` of the config become the
 engine inputs; ``stv.custom_materials_file`` (or ``files.custom_materials``) is loaded and
-validated only (used in the calculation from P3.7). ``files.stv_mapping`` (P3.6) is the STV
-mapping table for Revit exports (resolved relative to the config file).
+validated here; ``concho-stv`` checks it again against the course catalog and adds it to the
+reference data (P3.7, ``STVReferenceData.add_custom_materials``). ``files.stv_mapping``
+(P3.6) is the STV mapping table for Revit exports (resolved relative to the config file).
 """
 
 from __future__ import annotations
@@ -53,11 +54,6 @@ class STVProjectSettings:
         rel = stv.custom_materials_file or config.files.custom_materials
         if rel is not None:
             custom = load_custom_materials(Path(config_dir) / rel)
-            warnings += custom.warnings
-            warnings.append(
-                f"custom materials file {rel}: {len(custom.records)} valid material(s), not "
-                "used in the calculation yet (P3.7)."
-            )
 
         mapping = config.files.stv_mapping
         return cls(

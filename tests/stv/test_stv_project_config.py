@@ -195,11 +195,7 @@ def test_custom_materials_from_config(tmp_path, reference_with_river):
 
     settings = STVProjectSettings.from_config(load_config(config_path), tmp_path)
     assert len(settings.custom_materials.records) == 1
-    assert any("not used in the calculation yet (P3.7)" in w for w in settings.warnings)
-    # Not used in the calculation: same result as without the file.
-    without = STVProjectSettings.from_config(load_config(RIVER_CONFIG))
-    assert (_calculate(reference_with_river, settings).to_dict()
-            == _calculate(reference_with_river, without).to_dict())
+    assert settings.custom_materials.path == tmp_path / "custom.csv"
 
 
 # ── CLI ─────────────────────────────────────────────────────────────────────

@@ -56,7 +56,11 @@ ISLAND_CONFIG = REPO_ROOT / "engines" / "common" / "examples" / "island_2026.pro
 RIVER_CONFIG = REPO_ROOT / "tests" / "fixtures" / "configs" / "river_test.project_config.json"
 ISLAND_MAPPING = REPO_ROOT / "engines" / "stv" / "examples" / "island" / "stv_mapping.csv"
 # P3.6 item fields that the stored reference results do not have.
-P36_ITEM_KEYS = ("estimated", "estimated_amount")
+# Keys added after the stored reference files: P3.6 (estimates), P3.7 (custom materials,
+# proxies), P3.8 (use-phase status).
+ADDED_ITEM_KEYS = ("estimated", "estimated_amount", "custom_material", "custom_material_source",
+                   "proxy", "proxy_amount")
+ADDED_RESULT_KEYS = ("data_flags", "use_phase_status")
 WORKBOOK = "STV_Template/STV_ConceptA_Bambo.xlsx"
 SCHEDULES = "revit_schedules/Current"
 
@@ -100,23 +104,27 @@ def _load(path: Path) -> dict:
 def _trade_items(loader, paths: list[Path], mapping: StvMapping) -> list[ConstructionItem]:
     totals: dict[tuple[str, str], float] = defaultdict(float)
     estimated: dict[tuple[str, str], float] = defaultdict(float)
+    proxy: dict[tuple[str, str], float] = defaultdict(float)
     for path in paths:
         for item in loader(path, mapping).construction_items:
             totals[(item.assembly, item.material_type)] += item.amount
             estimated[(item.assembly, item.material_type)] += item.estimated_amount
+            proxy[(item.assembly, item.material_type)] += item.proxy_amount
     return [
         ConstructionItem(assembly=assembly, material_type=material_type, amount=amount,
-                         estimated_amount=estimated[(assembly, material_type)])
+                         estimated_amount=estimated[(assembly, material_type)],
+                         proxy_amount=proxy[(assembly, material_type)])
         for (assembly, material_type), amount in sorted(totals.items())
         if amount > 0
     ]
 
 
-def _without_p36(result: dict) -> dict:
-    """The result without the P3.6 item fields (for the comparison with stored files)."""
-    items = [{k: v for k, v in item.items() if k not in P36_ITEM_KEYS}
+def _without_added(result: dict) -> dict:
+    """The result without the keys added since P3.6 (for the comparison with stored files)."""
+    items = [{k: v for k, v in item.items() if k not in ADDED_ITEM_KEYS}
              for item in result["construction_items"]]
-    return {**result, "construction_items": items}
+    rest = {k: v for k, v in result.items() if k not in ADDED_RESULT_KEYS}
+    return {**rest, "construction_items": items}
 
 
 def _assert_close(actual, expected, path: str = "") -> None:
@@ -159,7 +167,7 @@ def _run_trades(reference_data, ipd_challenge_dir, settings: STVProjectSettings,
             "team": settings.team,
             "construction_items": [
                 {"assembly": i.assembly, "material_type": i.material_type, "amount": i.amount,
-                 "estimated_amount": i.estimated_amount}
+                 "estimated_amount": i.estimated_amount, "proxy_amount": i.proxy_amount}
                 for i in items
             ],
             "use_phase": settings.use_phase if trade == use_phase_trade else {},
@@ -201,13 +209,13 @@ def test_project_totals(project):
 def test_project_matches_reference_file(project, expected_project):
     _assert_close(project["metric_summary"], expected_project["metric_summary"], "metrics")
     _assert_close(project["breakdown"], expected_project["breakdown"], "breakdown")
-    _assert_close(_without_p36(project), expected_project)
+    _assert_close(_without_added(project), expected_project)
 
 
 @pytest.mark.parametrize("trade", list(TRADES))
 def test_trade_matches_reference_file(trade, trade_results, ipd_challenge_dir):
     expected = _load(ipd_challenge_dir / EXPECTED_TRADE.format(trade=trade))
-    _assert_close(_without_p36(trade_results[trade].to_dict()), expected, trade)
+    _assert_close(_without_added(trade_results[trade].to_dict()), expected, trade)
 
 
 def test_ipd_copy_of_project_file_is_identical(autostv_dir, ipd_challenge_dir):

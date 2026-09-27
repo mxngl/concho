@@ -285,6 +285,49 @@ From Python: `engines.stv.custom_materials.validate_custom_materials_file(path,
 catalog=reference_data)` or `load_custom_materials(path, catalog=...)` (raises
 `CustomMaterialsError`).
 
+### How the engine uses them
+
+`concho-stv` validates the file against the course catalog of the workbook it runs on and adds
+the materials to the reference data (`STVReferenceData.add_custom_materials`): the mapping
+table and the input JSON (`construction_items`) can then name them like catalog entries,
+under their assembly. The calculation is the course
+formula (amount × value × `life_units`); nothing else changes.
+
+### Flags: custom materials and proxies (`data_flags`)
+
+Two kinds of results do not rest on the course catalog as it is meant:
+
+- **custom material:** the item's material comes from `custom_materials.csv` (EPD values,
+  not course data);
+- **proxy:** the item was mapped by a mapping rule whose `note` contains the word `proxy`
+  (case-insensitive), i.e. a catalog entry stands in for a material the catalog lacks (Island:
+  bamboo booked as glulam, concrete floor and steel-stud walls).
+
+Every line item of `construction_items` carries `custom_material` (true/false),
+`custom_material_source` (the EPD reference or `null`), `proxy` (true/false) and
+`proxy_amount` (the part of `amount` mapped by proxy rules; items are summed per material, so
+an item can be part proxy). The results JSON gets a `data_flags` block:
+
+| Key | Content |
+|---|---|
+| `custom_material`, `proxy` | total flags: true if any item relies on a custom material / a proxy |
+| `custom_materials.embodied` | kgCO₂e, MJ, kg water, kg CFC-11e that rest on custom materials |
+| `custom_materials.share_of_embodied`, `share_of_life_cycle` | the same as fractions of the embodied and the life-cycle totals |
+| `custom_materials.materials` | each custom material used: assembly, material type, source, amount, embodied impacts |
+| `proxies.embodied`, `share_of_embodied`, `share_of_life_cycle` | the same for proxies (item impacts × `proxy_amount` / `amount`) |
+| `proxies.items` | each item with a proxy part: amount, `proxy_amount`, embodied impacts of the proxy part |
+| `by_assembly.<assembly>` | `custom_material`, `proxy` (flags), `embodied`, `custom_material_embodied`, `proxy_embodied` |
+
+The use phase never rests on custom materials or proxies. `--combine-results` keeps the item
+fields, so the block of a combined result is recomputed from all items. The mapping coverage
+lists each rule with `proxy: true/false`.
+
+Island (all six Current exports, reference config): no custom material; **570,612.51 kgCO₂e
+(22.7 % of embodied carbon) rest on proxies**: bamboo floors as Concrete (sf) 349,607.17,
+bamboo walls as Steel Studs and Painted Gypsum (sf) 123,625.98, bamboo beams as Glulam Beam
+(kg) 72,139.44, bamboo columns as Glulam Column (kg) 25,239.92 (energy 6,025,597 MJ = 21.2 %,
+water 6,832,138 kg = 22.8 %).
+
 ## Island 2026 reference result
 
 **The current Island result is 2,517,183.14 kgCO₂e** (28,396,923.44 MJ, 30,026,557.14 kg

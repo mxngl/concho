@@ -47,6 +47,9 @@ class STVEngine:
                 transport=transport,
                 construction=construction,
                 estimated_amount=item.estimated_amount,
+                proxy_amount=item.proxy_amount,
+                custom_material_source=self.reference_data.custom_source(
+                    item.assembly, item.material_type),
             )
             construction_results.append(construction_result)
             breakdown.embodied_materials = breakdown.embodied_materials + materials

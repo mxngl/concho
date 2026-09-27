@@ -28,8 +28,9 @@ table: `examples/island/stv_mapping.csv`; default table for common Uniformat cod
 
 Project values come from `project_config` (`--config`, P3.2, see `project.py`): course team
 (`stv.course_team`, `--team` overrides it), lifetime and use phase (`not_modeled` → 0, with a
-warning). `custom_materials.py` loads and validates `stv.custom_materials_file`; the materials
-are not used in the calculation before P3.7.
+warning). `custom_materials.py` loads and validates `stv.custom_materials_file`
+(`custom_materials.csv`, P3.7): EPD-based materials used like catalog entries; results that
+rest on them or on proxy mapping rules are flagged in the `data_flags` block.
 
 ## Course workbook (required, local only)
 
@@ -62,7 +63,8 @@ pass `--no-use-phase` to all but one (`--combine-results` sums the use phase and
 more than one input has one). Other inputs:
 `--structural-schedule`, `--mep-schedule`, `--architecture-schedule` (each takes one or more
 CSVs),
-`--architecture-history-dir`, `--central-bim-model`, `--stv-workbook-input`, and
+`--architecture-history-dir`, `--central-bim-model`, `--stv-workbook-input`,
+`--custom-materials custom_materials.csv` (default: from `--config`), and
 `--combine-results a/stv_results.json b/stv_results.json` (no workbook needed).
 Outputs: `stv_results.json` (with a `mapping_coverage` block and per-item `estimated` flags
 when exports were mapped), `history.json`, PNG charts and per-discipline item reports.

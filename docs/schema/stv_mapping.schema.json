@@ -63,7 +63,7 @@
     },
     "note": {
       "default": "",
-      "description": "Free text (why this rule, proxies, ...).",
+      "description": "Free text (why this rule, proxies, ...). A note containing the word 'proxy' marks a proxy rule (P3.7): its quantities are flagged in the results (data_flags).",
       "title": "Note",
       "type": "string"
     }

@@ -113,6 +113,8 @@ class ConstructionItem:
     # P3.6: part of ``amount`` that comes from a fallback estimate of the mapping
     # (engines/stv/conversions.py); reporting only, not used in the calculation.
     estimated_amount: float = 0.0
+    # P3.7: part of ``amount`` mapped by a proxy rule (mapping note "proxy"); reporting only.
+    proxy_amount: float = 0.0
 
 
 @dataclass(slots=True)
@@ -167,6 +169,7 @@ class STVInputs:
                 material_type=item["material_type"],
                 amount=float(item["amount"]),
                 estimated_amount=float(item.get("estimated_amount", 0.0)),
+                proxy_amount=float(item.get("proxy_amount", 0.0)),
             )
             for item in payload.get("construction_items", [])
         ]
@@ -222,6 +225,18 @@ class ConstructionImpactResult:
     transport: ImpactVector
     construction: ImpactVector
     estimated_amount: float = 0.0  # P3.6, see ConstructionItem
+    proxy_amount: float = 0.0  # P3.7, see ConstructionItem
+    # P3.7: EPD source when the material is a custom material (not course data), else None.
+    custom_material_source: str | None = None
+
+    @property
+    def custom_material(self) -> bool:
+        return self.custom_material_source is not None
+
+    @property
+    def proxy_share(self) -> float:
+        """Share of the item (and its impacts) that rests on proxy mapping rules."""
+        return min(self.proxy_amount / self.amount, 1.0) if self.amount else 0.0
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -235,6 +250,10 @@ class ConstructionImpactResult:
             "construction": self.construction.to_dict(),
             "estimated": self.estimated_amount > 0,
             "estimated_amount": self.estimated_amount,
+            "custom_material": self.custom_material,
+            "custom_material_source": self.custom_material_source,
+            "proxy": self.proxy_amount > 0,
+            "proxy_amount": self.proxy_amount,
         }
 
     @classmethod
@@ -249,7 +268,82 @@ class ConstructionImpactResult:
             transport=ImpactVector.from_dict(payload.get("transport", {})),
             construction=ImpactVector.from_dict(payload.get("construction", {})),
             estimated_amount=float(payload.get("estimated_amount", 0.0)),
+            proxy_amount=float(payload.get("proxy_amount", 0.0)),
+            custom_material_source=payload.get("custom_material_source"),
         )
+
+
+def _share(part: ImpactVector, whole: ImpactVector) -> dict[str, float | None]:
+    return {key: (part.get(key) / whole.get(key) if whole.get(key) else None)
+            for key in IMPACT_KEYS}
+
+
+def data_flags(
+    items: list[ConstructionImpactResult], breakdown: ImpactBreakdown
+) -> dict[str, Any]:
+    """P3.7: which results rest on custom materials (EPD values, not course data) or on
+    proxies (mapping rules whose note says "proxy"), per assembly and in total, with the
+    impacts that rest on them (embodied, same units as ``breakdown``)."""
+    custom, proxy = ImpactVector(), ImpactVector()
+    assemblies: dict[str, dict[str, Any]] = {}
+    custom_materials: dict[tuple[str, str], dict[str, Any]] = {}
+    proxy_items: list[dict[str, Any]] = []
+    for item in items:
+        block = assemblies.setdefault(item.assembly, {
+            "embodied": ImpactVector(), "custom_material_embodied": ImpactVector(),
+            "proxy_embodied": ImpactVector(), "custom_material": False, "proxy": False,
+        })
+        block["embodied"] = block["embodied"] + item.embodied_total
+        if item.custom_material:
+            block["custom_material"] = True
+            custom = custom + item.embodied_total
+            block["custom_material_embodied"] = (block["custom_material_embodied"]
+                                                 + item.embodied_total)
+            entry = custom_materials.setdefault((item.assembly, item.material_type), {
+                "assembly": item.assembly, "material_type": item.material_type,
+                "source": item.custom_material_source, "amount": 0.0,
+                "embodied": ImpactVector(),
+            })
+            entry["amount"] += item.amount
+            entry["embodied"] = entry["embodied"] + item.embodied_total
+        if item.proxy_amount > 0:
+            block["proxy"] = True
+            part = item.embodied_total.scale(item.proxy_share)
+            proxy = proxy + part
+            block["proxy_embodied"] = block["proxy_embodied"] + part
+            proxy_items.append({
+                "assembly": item.assembly, "material_type": item.material_type,
+                "amount": item.amount, "proxy_amount": item.proxy_amount,
+                "embodied": part.to_dict(),
+            })
+
+    def summary(part: ImpactVector) -> dict[str, Any]:
+        return {
+            "embodied": part.to_dict(),
+            "share_of_embodied": _share(part, breakdown.embodied),
+            "share_of_life_cycle": _share(part, breakdown.life_cycle),
+        }
+
+    return {
+        "custom_material": any(i.custom_material for i in items),
+        "proxy": any(i.proxy_amount > 0 for i in items),
+        "custom_materials": {
+            **summary(custom),
+            "materials": [{**m, "embodied": m["embodied"].to_dict()}
+                          for m in custom_materials.values()],
+        },
+        "proxies": {**summary(proxy), "items": proxy_items},
+        "by_assembly": {
+            name: {
+                "custom_material": b["custom_material"],
+                "proxy": b["proxy"],
+                "embodied": b["embodied"].to_dict(),
+                "custom_material_embodied": b["custom_material_embodied"].to_dict(),
+                "proxy_embodied": b["proxy_embodied"].to_dict(),
+            }
+            for name, b in assemblies.items()
+        },
+    }
 
 
 @dataclass(slots=True)
@@ -281,6 +375,7 @@ class STVResults:
             "breakdown": self.breakdown.to_dict(),
             "construction_items": [item.to_dict() for item in self.construction_items],
             "lifetime_years": self.lifetime_years,
+            "data_flags": data_flags(self.construction_items, self.breakdown),
         }
         if self.mapping_coverage is not None:
             payload["mapping_coverage"] = self.mapping_coverage

@@ -27,7 +27,7 @@ from engines.common.config import validate_config_file
 
 from .central_bim import load_central_bim_model
 from .coverage import build_mapping_coverage
-from .custom_materials import CustomMaterialsError
+from .custom_materials import CustomMaterialsError, load_custom_materials
 from .engine import LIFETIME_YEARS, STVEngine
 from .mapping import (
     DEFAULT_MAPPING_PATH,
@@ -136,6 +136,7 @@ def _item_dicts(items) -> list[dict[str, object]]:
             "material_type": item.material_type,
             "amount": item.amount,
             "estimated_amount": item.estimated_amount,
+            "proxy_amount": item.proxy_amount,
         }
         for item in items
     ]
@@ -168,6 +169,35 @@ def _load_mapping(
     for warning in mapping.warnings:
         print(f"warning: {path}: {warning}", file=sys.stderr)
     return mapping
+
+
+def _add_custom_materials(
+    parser: argparse.ArgumentParser,
+    path_arg: str | None,
+    settings: STVProjectSettings | None,
+    reference_data: STVReferenceData,
+) -> None:
+    """--custom-materials, else the custom materials of --config: validate them against the
+    course catalog and add them to the reference data (P3.7)."""
+    if path_arg:
+        path = Path(path_arg)
+    elif settings is not None and settings.custom_materials is not None:
+        path = settings.custom_materials.path
+    else:
+        return
+    try:
+        custom = load_custom_materials(path, catalog=reference_data)
+        reference_data.add_custom_materials(custom)
+    except (CustomMaterialsError, ValueError) as exc:
+        parser.error(str(exc))
+    for warning in custom.warnings:
+        print(f"warning: {path}: {warning}", file=sys.stderr)
+    names = ", ".join(r.material_type for r in custom.records) or "none"
+    print(
+        f"note: custom materials from {path} (team data, not course data): {names}; results "
+        "that rest on them are flagged (data_flags).",
+        file=sys.stderr,
+    )
 
 
 def _schedule_report_dict(reports: list[ScheduleReport]) -> dict[str, object]:
@@ -307,6 +337,14 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--custom-materials",
+        help=(
+            "custom_materials.csv (P3.7, docs/engines/stv.md): EPD-based materials used like "
+            "catalog entries (default: stv.custom_materials_file / files.custom_materials of "
+            "--config)."
+        ),
+    )
+    parser.add_argument(
         "--team",
         help="Course team row of the STV workbook (overrides stv.course_team of --config).",
     )
@@ -439,6 +477,7 @@ def main() -> None:
                 "Provide a team with --team or --config when using --architecture-history-dir."
             )
         reference_data = STVReferenceData.from_workbook(args.template)
+        _add_custom_materials(parser, args.custom_materials, settings, reference_data)
         response = _run_architecture_history(
             Path(args.architecture_history_dir),
             team=team,
@@ -467,6 +506,7 @@ def main() -> None:
             payload["team"] = workbook_payload["team"]
 
     reference_data = STVReferenceData.from_workbook(args.template)
+    _add_custom_materials(parser, args.custom_materials, settings, reference_data)
     exports = [
         ("structural", args.structural_schedule or [], load_structural_schedule),
         ("mep", args.mep_schedule or [], load_mep_schedule),
