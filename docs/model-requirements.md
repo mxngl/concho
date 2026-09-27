@@ -227,11 +227,20 @@ category, add-in build before this table), and what covers them in any language:
 | Furniture | 68 of 370 (family `Length`) | 349 | 349 | as above; 21 furniture families have no geometry-based area/volume |
 | Stairs, Runs, Landings | none | none | none | Revit has no computed length/area/volume for them; runs get `Width` from `STAIRS_RUN_ACTUAL_RUN_WIDTH`. Priced by count (`EA`/`FLIGHT`) |
 | Parts (structural, 166) | none | all | all | German test: all empty → `DPART_*_COMPUTED` (fixed) |
-| Structural Columns (134) | none in English; German test: 135 empty | none | all | column length is only in `System Length` (`INSTANCE_LENGTH_PARAM`), now read (P4.5) |
+| Structural Columns (134) | none in the English exports; German test: 135 empty | none | all | column length is only in `System Length` (`INSTANCE_LENGTH_PARAM`); since P4.5 written to `Length` in any language (see below) |
 | Structural Framing (162) | all | none (German: 113 empty) | all | framing has no area in Revit: genuinely none |
 | Structural Foundations (36) | all in English; German test: 37 empty | all | all | `STRUCTURAL_FOUNDATION_LENGTH` / `CONTINUOUS_FOOTING_LENGTH` (label "Length"), now read (P4.5) |
 | MEP Air Terminals (200) | 74 (family parameter) | 126 | all | German test: 126 without Length, 74 without Area: the same gaps as in English, genuinely none |
 | MEP Electrical Fixtures (61) | none | all | all | German test: 61 without Length: genuinely none |
+
+**Structural columns carry `Length`** (P4.5): the column's `System Length` (base to top,
+`INSTANCE_LENGTH_PARAM`). Earlier exports had no column `Length` in any Revit language (the value
+was only in the `Parameter Snapshot`; none of the Island reference exports has it), so this is
+new data, not only a German-UI fix. Whether columns are priced by length or by volume is the
+team's choice in the cost DB: a row with unit `LF` for the column's Assembly Code gets the
+summed `Length`, a row with `CY`/`CF` the `Volume` (see [Quantity rules](engines/tvd.md#quantity-rules)).
+Island is unaffected: its column codes are `A1010` (priced in CY) and `B10` (no cost row), no
+mirror rule takes a length from them, and STV maps columns by volume.
 
 **Genuinely without a quantity** (no built-in parameter exists; same gaps in English and
 German): `Length` for area/volume elements (floors, ceilings, roofs, panels, doors, furniture,
