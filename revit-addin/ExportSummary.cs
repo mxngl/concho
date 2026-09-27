@@ -20,6 +20,14 @@ namespace QTO
         private readonly Dictionary<string, int> _noQuantityByCategory =
             new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
 
+        private readonly Dictionary<string, Dictionary<string, int>> _missingQuantityByCategory =
+            new Dictionary<string, Dictionary<string, int>>
+            {
+                { "Length", new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase) },
+                { "Area", new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase) },
+                { "Volume", new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase) }
+            };
+
         public int ElementCount { get; private set; }
         public int WithAssemblyCode { get; private set; }
 
@@ -50,18 +58,43 @@ namespace QTO
 
         public void AddQuantities(string category, double? length, double? area, double? volume)
         {
+            string key = string.IsNullOrWhiteSpace(category) ? "(no category)" : category;
             if (!length.HasValue)
+            {
                 MissingLength++;
+                Increment(_missingQuantityByCategory["Length"], key);
+            }
             if (!area.HasValue)
+            {
                 MissingArea++;
+                Increment(_missingQuantityByCategory["Area"], key);
+            }
             if (!volume.HasValue)
+            {
                 MissingVolume++;
+                Increment(_missingQuantityByCategory["Volume"], key);
+            }
             if (length.HasValue || area.HasValue || volume.HasValue)
                 return;
 
             WithoutAnyQuantity++;
-            string key = string.IsNullOrWhiteSpace(category) ? "(no category)" : category;
-            _noQuantityByCategory[key] = _noQuantityByCategory.TryGetValue(key, out int count) ? count + 1 : 1;
+            Increment(_noQuantityByCategory, key);
+        }
+
+        private static void Increment(Dictionary<string, int> counts, string key)
+        {
+            counts[key] = counts.TryGetValue(key, out int count) ? count + 1 : 1;
+        }
+
+        /// <summary>"Walls 12, Doors 3, …" for the top categories.</summary>
+        private static string TopCategories(Dictionary<string, int> counts, CultureInfo culture, int top)
+        {
+            string listed = string.Join(", ", counts
+                .OrderByDescending(kvp => kvp.Value)
+                .ThenBy(kvp => kvp.Key, StringComparer.OrdinalIgnoreCase)
+                .Take(top)
+                .Select(kvp => string.Format(culture, "{0} {1:N0}", kvp.Key, kvp.Value)));
+            return counts.Count > top ? listed + ", \u2026" : listed;
         }
 
         public string BuildText(string exportName, string csvPath)
@@ -116,28 +149,29 @@ namespace QTO
 
         private void AppendQuantityText(StringBuilder text, CultureInfo culture)
         {
-            text.AppendLine(string.Format(
-                culture,
-                "Quantity not found (left empty): Length {0:N0}, Area {1:N0}, Volume {2:N0} elements",
-                MissingLength,
-                MissingArea,
-                MissingVolume
-            ));
+            text.AppendLine();
+            text.AppendLine("Quantity not found (left empty), top categories:");
+            foreach (KeyValuePair<string, Dictionary<string, int>> entry in _missingQuantityByCategory)
+            {
+                int total = entry.Value.Values.Sum();
+                text.AppendLine(total == 0
+                    ? string.Format(culture, "  {0}: none", entry.Key)
+                    : string.Format(
+                        culture,
+                        "  {0}: {1:N0} ({2})",
+                        entry.Key,
+                        total,
+                        TopCategories(entry.Value, culture, 5)
+                    ));
+            }
 
             if (WithoutAnyQuantity > 0)
             {
-                string categories = string.Join(", ", _noQuantityByCategory
-                    .OrderByDescending(kvp => kvp.Value)
-                    .ThenBy(kvp => kvp.Key, StringComparer.OrdinalIgnoreCase)
-                    .Take(5)
-                    .Select(kvp => string.Format(culture, "{0} {1:N0}", kvp.Key, kvp.Value)));
-                string more = _noQuantityByCategory.Count > 5 ? ", \u2026" : "";
                 text.AppendLine(string.Format(
                     culture,
-                    "Without any of Length/Area/Volume: {0:N0} elements ({1}{2})",
+                    "  none of the three: {0:N0} ({1})",
                     WithoutAnyQuantity,
-                    categories,
-                    more
+                    TopCategories(_noQuantityByCategory, culture, 5)
                 ));
             }
 
