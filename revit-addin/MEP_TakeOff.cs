@@ -119,7 +119,7 @@ namespace QTO
             bool metric = ParameterReader.IsMetric(doc, SpecTypeId.Length);
             StringBuilder csv = new StringBuilder();
             csv.AppendLine(
-                "ElementId,Category,Family,Type,Level,Mark,System Name,System Type,Service Type,Classification,Size,Diameter,Width,Height,Length,Area,Volume,Material,Weight,Unit Weight,Insulation Thickness,Lining Thickness,Airflow,Flow,Pressure Drop,Cooling Capacity,Heating Capacity,Power,Voltage,Current,Apparent Load,Connected Load,Connector Count,Connector Flow,Connector Demand,Connector Max Diameter (in),Connector Max Width (in),Connector Max Height (in),Location Type,Position X (ft),Position Y (ft),Position Z (ft),Start X (ft),Start Y (ft),Start Z (ft),End X (ft),End Y (ft),End Z (ft),Rotation (deg),Bounding Box Min X (ft),Bounding Box Min Y (ft),Bounding Box Min Z (ft),Bounding Box Max X (ft),Bounding Box Max Y (ft),Bounding Box Max Z (ft),Bounding Box Center X (ft),Bounding Box Center Y (ft),Bounding Box Center Z (ft),Room Id,Room Number,Room Name,Room Level,Room Area (SF),Room Volume (CF),Room Location X (ft),Room Location Y (ft),Room Location Z (ft),Comments,Parameter Snapshot,Assembly Code"
+                "ElementId,Category,Family,Type,Level,Mark,System Name,System Type,Service Type,Classification,Size,Diameter,Width,Height,Length,Area,Volume,Material,Weight,Unit Weight,Insulation Thickness,Lining Thickness,Airflow,Flow,Pressure Drop,Cooling Capacity,Heating Capacity,Power,Voltage,Current,Apparent Load,Connected Load,Connector Count,Connector Flow,Connector Demand,Connector Max Diameter (in),Connector Max Width (in),Connector Max Height (in),Location Type,Position X (ft),Position Y (ft),Position Z (ft),Start X (ft),Start Y (ft),Start Z (ft),End X (ft),End Y (ft),End Z (ft),Rotation (deg),Bounding Box Min X (ft),Bounding Box Min Y (ft),Bounding Box Min Z (ft),Bounding Box Max X (ft),Bounding Box Max Y (ft),Bounding Box Max Z (ft),Bounding Box Center X (ft),Bounding Box Center Y (ft),Bounding Box Center Z (ft),Room Id,Room Number,Room Name,Room Level,Room Area (SF),Room Volume (CF),Room Location X (ft),Room Location Y (ft),Room Location Z (ft),Comments,Parameter Snapshot,Assembly Code,Category (local)"
             );
 
             foreach (Element elem in elementsToExport)
@@ -129,7 +129,8 @@ namespace QTO
                 RoomAssignmentData roomData = RoomAssignmentData.FromElement(doc, elem);
 
                 string elementId = elem.Id.Value.ToString();
-                string category = elem.Category?.Name ?? "";
+                string category = Categories.English(elem.Category);
+                string categoryLocal = Categories.Local(elem.Category);
                 string family = GetFamilyName(elem);
                 string typeName = GetTypeName(doc, elem);
                 string level = GetLevelName(doc, elem);
@@ -249,7 +250,8 @@ namespace QTO
                     EscapeCsv(roomData.RoomLocationZFeet),
                     EscapeCsv(comments),
                     EscapeCsv(parameterSnapshot),
-                    EscapeCsv(assemblyCode)
+                    EscapeCsv(assemblyCode),
+                    EscapeCsv(categoryLocal)
                 ));
             }
 
