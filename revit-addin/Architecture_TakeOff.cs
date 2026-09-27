@@ -53,9 +53,13 @@ namespace QTO
                     return Result.Succeeded;
                 }
 
-                string csvPath = ExportPathHelper.GetScheduleFilePath(doc, "Architecture_TakeOff");
+                string? exportFolder = ExportPathHelper.GetExportFolder();
+                if (exportFolder == null)
+                    return Result.Cancelled;
+
+                string csvPath = ExportPathHelper.GetScheduleFilePath(doc, exportFolder, "Architecture_TakeOff");
                 ExportElementsToCsv(doc, architecturalElements, csvPath);
-                string roomBoundaryPath = ExportPathHelper.GetScheduleFilePath(doc, "Room_Boundaries");
+                string roomBoundaryPath = ExportPathHelper.GetScheduleFilePath(doc, exportFolder, "Room_Boundaries");
                 int roomCount = RoomBoundaryExporter.ExportRoomsToCsv(doc, roomBoundaryPath);
 
                 TaskDialog.Show(

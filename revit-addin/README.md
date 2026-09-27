@@ -7,19 +7,19 @@ Originally developed by Ashmitha Jaysi Sivakumar in
 [ashjs2003/IPD_Challenge](https://github.com/ashjs2003/IPD_Challenge) (commit `989a6b7`);
 migrated in P1.4.
 
-The C# code is copied unchanged from `IPD_Challenge/QTO` at that commit. The only edits are in
-`QTO.addin` (local-path comment removed, `<Assembly>` set to the relative `QTO.dll`) and in
-`Concho.QTO.sln` (renamed from `IPD Challenge.sln`, project path `QTO\QTO.csproj` → `QTO.csproj`).
+The C# code was copied unchanged from `IPD_Challenge/QTO` at that commit (P1.4). P4.1 made the
+build portable (Revit API from NuGet, one build per Revit version) and replaced the output-folder
+search with a config file + folder dialog.
 
 ## Files
 
 | File | Purpose |
 |---|---|
-| `Concho.QTO.sln`, `QTO.csproj` | Solution and SDK-style project (`net8.0`, x64, compiles `*.cs` in this folder) |
+| `Concho.QTO.sln`, `QTO.csproj` | Solution and SDK-style project (`net8.0-windows`, x64, compiles `*.cs` in this folder); configurations `Debug/Release R25` and `Debug/Release R26` |
 | `QTO.addin` | Revit manifest; registers the external commands below |
 | `Structural_TakeOff.cs`, `Architecture_TakeOff.cs`, `MEP_TakeOff.cs` | Quantity takeoff commands (CSV export) |
 | `SpatialElementData.cs`, `RoomSpatialData.cs` | Spatial data shared by the takeoffs: element location/bounding box, room assignment, room boundary export |
-| `ExportPathHelper.cs` | Finds the `revit_schedules/` output folder and builds the CSV file name |
+| `ExportPathHelper.cs` | Reads the export folder from `concho_addin.json` next to the DLL (folder dialog if missing) and builds the CSV file name |
 | `Push_TaskName_To_Revit.cs` | Push 4D Build Code command |
 | `Push_Manufacton_Parameters_To_Revit.cs`, `Push_Kit_To_Revit.cs`, `Push_Assembly_To_Revit.cs`, `CsvParameterPushHelper.cs` | Prefab parameter push commands and their shared CSV/parameter helper |
 
@@ -49,19 +49,49 @@ TakeOff writes the room boundary CSV (`RoomBoundaryExporter`).
 All push commands match elements by `element_id` (Revit ElementId), only write existing, editable
 text parameters, skip elements with conflicting values in the CSV, and show a summary dialog.
 
+## Build
+
+Requires only the .NET 8 SDK; Revit does **not** need to be installed. The Revit API comes from
+the [Nice3point.Revit.Api](https://github.com/Nice3point/RevitApi) reference packages
+(`Nice3point.Revit.Api.RevitAPI` / `RevitAPIUI`, pinned per Revit year in `QTO.csproj`), which are
+compile-time only and not copied to the output.
+
+```
+dotnet build Concho.QTO.sln -c "Release R25"   # Revit 2025 -> bin/Release R25/QTO.dll
+dotnet build Concho.QTO.sln -c "Release R26"   # Revit 2026 -> bin/Release R26/QTO.dll
+```
+
+Both target `net8.0-windows` (Revit 2025 and 2026 run on .NET 8). `EnableWindowsTargeting` is set,
+so the build also runs on Linux/macOS for checks. The same `QTO.addin` works for both versions.
+
+**Revit 2024 and older (`net48`) are not built yet.** Open question: it depends on which Revit
+version the 2027 teams get (roadmap D8/D2). Adding it means a `net48` target with the
+`2024.*` reference packages and checking the code for .NET Framework gaps (e.g. `TryAdd`, the
+`OpenFolderDialog` used for the export folder, which needs .NET 8 WPF).
+
+## Installation
+
+Copy `QTO.addin` and the `QTO.dll` built for your Revit version into the same folder, e.g.
+`%AppData%\Autodesk\Revit\Addins\2026\` (Revit resolves the relative `<Assembly>` path against
+the `.addin` file's folder).
+
+## Export folder (`concho_addin.json`)
+
+The takeoff commands write to the folder set in `concho_addin.json` next to `QTO.dll`:
+
+```json
+{
+  "export_folder": "%USERPROFILE%\\Documents\\Concho\\exports"
+}
+```
+
+If the file is missing, has no `export_folder`, or the folder doesn't exist, a folder dialog opens
+on the first export and the choice is saved to that file. Cancelling the dialog cancels the export.
+A relative path is resolved against the DLL's folder; environment variables (`%USERPROFILE%`) are
+expanded. To change the folder, edit or delete the file.
+
 ## Current limitations
 
-- **Revit 2026 only.** `QTO.csproj` references `RevitAPI.dll`/`RevitAPIUI.dll` via a hardcoded
-  `HintPath` under `C:\Program Files\Autodesk\Revit 2026\`.
-- **Must be built locally** with the .NET 8 SDK on a machine with Revit 2026 installed
-  (`dotnet build Concho.QTO.sln`). No prebuilt DLL, no CI build: the Revit API isn't available on
-  CI runners.
-- **Installation is manual:** copy `QTO.addin` and the built `QTO.dll` into the same folder,
-  e.g. `%AppData%\Autodesk\Revit\Addins\2026\` (Revit resolves the relative `<Assembly>` path
-  against the `.addin` file's folder).
-- **Output folder:** the takeoffs search upward from the DLL's folder for a directory containing
-  `revit_schedules/` and write there (falling back to `revit_schedules/` next to the DLL, created
-  if missing). There is no dialog or config to choose it.
 - **Push commands expect the old repo layout:** they search upward from the DLL for
   `src/Planning_engine/` (IPD_Challenge layout) and read files under `Fuzor_Mapper/outputs/` and
   `Prefab_BIM_Mapper/outputs/`. That layout doesn't exist in this repo; the schedule engines move
@@ -69,8 +99,7 @@ text parameters, skip elements with conflicting values in the CSV, and show a su
 - Target shared parameters (`4D_Build_Code`, `Prefab_*`) must already exist in the model as
   editable text parameters.
 
-Planned fixes: **P4.1** (portable build via Revit API NuGet package, multi-targeting, output folder
-from config/dialog), **P4.2** (release pipeline + `install.ps1`), **P4.3** (export contract in
+Planned fixes: **P4.2** (release pipeline + `install.ps1`), **P4.3** (export contract in
 `docs/model-requirements.md` + summary dialog with Assembly Code coverage).
 
 ## CSV export columns

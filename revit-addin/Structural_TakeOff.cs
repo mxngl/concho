@@ -51,7 +51,11 @@ namespace QTO
                     return Result.Succeeded;
                 }
 
-                string csvPath = ExportPathHelper.GetScheduleFilePath(doc, "Structural_Schedule");
+                string? exportFolder = ExportPathHelper.GetExportFolder();
+                if (exportFolder == null)
+                    return Result.Cancelled;
+
+                string csvPath = ExportPathHelper.GetScheduleFilePath(doc, exportFolder, "Structural_Schedule");
 
                 ExportElementsToCsv(doc, structuralElements, csvPath);
 

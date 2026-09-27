@@ -58,7 +58,11 @@ namespace QTO
                     return Result.Succeeded;
                 }
 
-                string csvPath = ExportPathHelper.GetScheduleFilePath(doc, "MEP_TakeOff");
+                string? exportFolder = ExportPathHelper.GetExportFolder();
+                if (exportFolder == null)
+                    return Result.Cancelled;
+
+                string csvPath = ExportPathHelper.GetScheduleFilePath(doc, exportFolder, "MEP_TakeOff");
                 ExportElementsToCsv(doc, mepElements, csvPath);
 
                 TaskDialog.Show(
