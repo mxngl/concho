@@ -18,9 +18,12 @@ Known divergence from the workbook: the course applies the 0.75 toilet factor wh
 urinal cell is non-blank (even at 0); the engine applies it only when `urinal_gpf > 0`.
 
 Course logic lives in `engine.py`, `reference.py` and `models.py`. The Revit importers
-(`revit_architecture.py`, `revit_structural.py`, `revit_mep.py`, `central_bim.py`) contain the
-**Island-specific** Revit → (assembly, material type) mapping (not course data; to be replaced
-by a mapping table in P3.6). The Island example input is `examples/concept_a_bambo.json`
+(`revit_architecture.py`, `revit_structural.py`, `revit_mep.py`, `central_bim.py`) map rows
+with the **STV mapping table** (P3.6, `mapping.py`, named conversions in `conversions.py`):
+team data, not course data. Format, matching order and validation:
+[`docs/engines/stv.md`](../../docs/engines/stv.md#mapping-table-stv_mappingcsv-p36). Island
+table: `examples/island/stv_mapping.csv`; default table for common Uniformat codes:
+`template/stv_mapping.csv`. The Island example input is `examples/concept_a_bambo.json`
 (construction items only; team and use phase come from the config).
 
 Project values come from `project_config` (`--config`, P3.2, see `project.py`): course team
@@ -50,15 +53,31 @@ concho-stv --config engines/common/examples/island_2026.project_config.json \
 # same as: python -m engines.stv.cli ...
 ```
 
-`--output-dir` is required; nothing is written inside the package. `--config` sets the team,
+`--output-dir` is required; nothing is written inside the package. Revit exports are mapped
+with `--stv-mapping`, else `files.stv_mapping` of `--config`, else `template/stv_mapping.csv`
+(warning); `concho stvmap validate` checks a table. `--config` sets the team,
 lifetime and use phase; without it, give `--team` (or `team` in the input JSON). With
 `--config`, the use phase is added to the run; for per-trade runs that are combined later,
 pass `--no-use-phase` to all but one (`--combine-results` sums the use phase and warns when
 more than one input has one). Other inputs:
-`--structural-schedule`, `--mep-schedule`, `--architecture-schedule`,
+`--structural-schedule`, `--mep-schedule`, `--architecture-schedule` (each takes one or more
+CSVs),
 `--architecture-history-dir`, `--central-bim-model`, `--stv-workbook-input`, and
 `--combine-results a/stv_results.json b/stv_results.json` (no workbook needed).
-Outputs: `stv_results.json`, `history.json`, PNG charts and per-importer item reports.
+Outputs: `stv_results.json` (with per-item `estimated` flags), `history.json`, PNG charts and
+per-discipline item reports.
+
+Island "Current" in one call (all six exports; same 2,517,183.14 kgCO₂e as the per-trade runs):
+
+```bash
+S=.fixtures/IPD_Challenge/revit_schedules/Current
+concho-stv --config engines/common/examples/island_2026.project_config.json --output-dir out/island \
+    --architecture-schedule $S/04_Island_ARCH_Concept2_Architecture_TakeOff.csv \
+        $S/STR_Wall_Bamboo_Concept2_amd03_Architecture_TakeOff.csv \
+    --mep-schedule $S/01_Island_MEP_Concept2_MEP_TakeOff.csv $S/04_Island_ARCH_Concept2_MEP_TakeOff.csv \
+    --structural-schedule $S/04_Island_ARCH_Concept2_Structural_Schedule.csv \
+        $S/STR_Wall_Bamboo_Concept2_amd03_Structural_Schedule.csv
+```
 
 ## Tests
 

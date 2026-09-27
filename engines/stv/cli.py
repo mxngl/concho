@@ -7,6 +7,10 @@ Without ``--config`` the team comes from ``--team`` or the input JSON, as before
 The config use phase is added to single runs. ``--combine-results`` sums the use phase of
 all inputs, so per-trade runs that are combined later should use ``--no-use-phase`` (all
 but one). ``--architecture-history-dir`` runs stay construction-only, as before.
+
+Revit exports are mapped with the STV mapping table (P3.6): ``--stv-mapping``, else
+``files.stv_mapping`` of ``--config``, else the default table ``template/stv_mapping.csv``
+(with a warning). The export flags take one or more files.
 """
 
 from __future__ import annotations
@@ -23,6 +27,14 @@ from engines.common.config import validate_config_file
 from .central_bim import load_central_bim_model
 from .custom_materials import CustomMaterialsError
 from .engine import LIFETIME_YEARS, STVEngine
+from .mapping import (
+    DEFAULT_MAPPING_PATH,
+    ScheduleReport,
+    StvMapping,
+    StvMappingError,
+    StvMappingTieError,
+    load_stv_mapping,
+)
 from .models import STVInputs, STVResults
 from .project import STVProjectSettings
 from .reference import TEMPLATE_ENV_VAR, STVReferenceData, resolve_template_path
@@ -106,12 +118,67 @@ def _run_stv(
     team: str,
     template_path: str,
     lifetime_years: int = LIFETIME_YEARS,
+    reference_data: STVReferenceData | None = None,
 ) -> STVResults:
     payload["team"] = team
     inputs = STVInputs.from_dict(payload)
-    reference_data = STVReferenceData.from_workbook(template_path)
+    reference_data = reference_data or STVReferenceData.from_workbook(template_path)
     engine = STVEngine(reference_data, lifetime_years=lifetime_years)
     return engine.calculate(inputs)
+
+
+def _item_dicts(items) -> list[dict[str, object]]:
+    return [
+        {
+            "assembly": item.assembly,
+            "material_type": item.material_type,
+            "amount": item.amount,
+            "estimated_amount": item.estimated_amount,
+        }
+        for item in items
+    ]
+
+
+def _load_mapping(
+    parser: argparse.ArgumentParser,
+    mapping_arg: str | None,
+    settings: STVProjectSettings | None,
+    reference_data: STVReferenceData,
+) -> StvMapping:
+    """--stv-mapping, else files.stv_mapping of --config, else the default table."""
+    if mapping_arg:
+        path = Path(mapping_arg)
+    elif settings is not None and settings.stv_mapping is not None:
+        path = settings.stv_mapping
+    else:
+        path = DEFAULT_MAPPING_PATH
+        print(
+            f"warning: no STV mapping given (--stv-mapping or files.stv_mapping of "
+            f"--config); using the default table {path}.",
+            file=sys.stderr,
+        )
+    if not path.is_file():
+        parser.error(f"STV mapping not found: {path}")
+    try:
+        mapping = load_stv_mapping(path, catalog=reference_data)
+    except StvMappingError as exc:
+        parser.error(str(exc))
+    for warning in mapping.warnings:
+        print(f"warning: {path}: {warning}", file=sys.stderr)
+    return mapping
+
+
+def _schedule_report_dict(reports: list[ScheduleReport]) -> dict[str, object]:
+    """Per-discipline item report (several exports of one discipline are listed together)."""
+    return {
+        "discipline": reports[0].discipline,
+        "sources": [r.source for r in reports],
+        "mapping": reports[0].mapping_source,
+        "mapped_rows": sum(r.mapped_rows for r in reports),
+        "skipped_rows": [row for r in reports for row in r.skipped_rows],
+        "construction_items": [item for r in reports for item in r.to_dict()[
+            "construction_items"]],
+    }
 
 
 def _load_settings(
@@ -143,6 +210,8 @@ def _run_architecture_history(
     team: str,
     output_dir: Path,
     template_path: str,
+    mapping: StvMapping,
+    reference_data: STVReferenceData,
     lifetime_years: int = LIFETIME_YEARS,
 ) -> dict[str, object]:
     schedule_paths = sorted(
@@ -158,19 +227,11 @@ def _run_architecture_history(
     latest_schedule_path = None
 
     for schedule_path in schedule_paths:
-        report = load_architecture_schedule(schedule_path)
-        payload = {
-            "construction_items": [
-                {
-                    "assembly": item.assembly,
-                    "material_type": item.material_type,
-                    "amount": item.amount,
-                }
-                for item in report.construction_items
-            ]
-        }
+        report = load_architecture_schedule(schedule_path, mapping)
+        payload = {"construction_items": _item_dicts(report.construction_items)}
         results = _run_stv(
-            payload, team=team, template_path=template_path, lifetime_years=lifetime_years
+            payload, team=team, template_path=template_path, lifetime_years=lifetime_years,
+            reference_data=reference_data,
         )
         timestamp = _parse_schedule_timestamp(schedule_path).isoformat()
         history.append(
@@ -248,15 +309,28 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--structural-schedule",
-        help="Path to a Revit structural schedule CSV to convert into embodied STV inputs.",
+        nargs="+",
+        action="extend",
+        help="Revit structural schedule CSV(s) to convert into embodied STV inputs.",
     )
     parser.add_argument(
         "--mep-schedule",
-        help="Path to a Revit MEP takeoff CSV to convert into embodied STV inputs.",
+        nargs="+",
+        action="extend",
+        help="Revit MEP takeoff CSV(s) to convert into embodied STV inputs.",
     )
     parser.add_argument(
         "--architecture-schedule",
-        help="Path to a Revit architecture takeoff CSV to convert into embodied STV inputs.",
+        nargs="+",
+        action="extend",
+        help="Revit architecture takeoff CSV(s) to convert into embodied STV inputs.",
+    )
+    parser.add_argument(
+        "--stv-mapping",
+        help=(
+            "STV mapping table (stv_mapping.csv, docs/engines/stv.md) for the Revit exports "
+            "(default: files.stv_mapping of --config, else template/stv_mapping.csv)."
+        ),
     )
     parser.add_argument(
         "--architecture-history-dir",
@@ -361,11 +435,14 @@ def main() -> None:
             parser.error(
                 "Provide a team with --team or --config when using --architecture-history-dir."
             )
+        reference_data = STVReferenceData.from_workbook(args.template)
         response = _run_architecture_history(
             Path(args.architecture_history_dir),
             team=team,
             output_dir=output_dir,
             template_path=args.template,
+            mapping=_load_mapping(parser, args.stv_mapping, settings, reference_data),
+            reference_data=reference_data,
             lifetime_years=lifetime_years,
         )
         print(json.dumps(response, indent=2))
@@ -386,77 +463,44 @@ def main() -> None:
         if "team" not in payload and workbook_payload.get("team"):
             payload["team"] = workbook_payload["team"]
 
-    if args.central_bim_model:
-        report = load_central_bim_model(args.central_bim_model)
-        existing_items = list(payload.get("construction_items", []))
-        central_items = [
-            {
-                "assembly": item.assembly,
-                "material_type": item.material_type,
-                "amount": item.amount,
-            }
-            for item in report.construction_items
-        ]
-        payload["construction_items"] = existing_items + central_items
-        central_report_path = output_dir / "central_bim_model_stv_items.json"
-        central_report_path.write_text(
-            json.dumps(report.to_dict(), indent=2),
-            encoding="utf-8",
-        )
+    reference_data = STVReferenceData.from_workbook(args.template)
+    exports = [
+        ("structural", args.structural_schedule or [], load_structural_schedule),
+        ("mep", args.mep_schedule or [], load_mep_schedule),
+        ("architecture", args.architecture_schedule or [], load_architecture_schedule),
+    ]
+    mapping = None
+    if args.central_bim_model or any(paths for _, paths, _ in exports):
+        mapping = _load_mapping(parser, args.stv_mapping, settings, reference_data)
+    mapped_reports: list[ScheduleReport] = []
+    report_files: dict[str, str] = {}
 
-    if args.structural_schedule:
-        report = load_structural_schedule(args.structural_schedule)
-        existing_items = list(payload.get("construction_items", []))
-        schedule_items = [
-            {
-                "assembly": item.assembly,
-                "material_type": item.material_type,
-                "amount": item.amount,
-            }
-            for item in report.construction_items
-        ]
-        payload["construction_items"] = existing_items + schedule_items
-        structural_report_path = output_dir / "structural_schedule_items.json"
-        structural_report_path.write_text(
-            json.dumps(report.to_dict(), indent=2),
-            encoding="utf-8",
-        )
+    try:
+        if args.central_bim_model:
+            central = load_central_bim_model(args.central_bim_model, mapping)
+            mapped_reports.append(central.report)
+            payload["construction_items"] = list(payload.get("construction_items", [])) + (
+                _item_dicts(central.construction_items)
+            )
+            central_report_path = output_dir / "central_bim_model_stv_items.json"
+            central_report_path.write_text(json.dumps(central.to_dict(), indent=2),
+                                           encoding="utf-8")
+            report_files["central_bim_model_stv_items"] = str(central_report_path)
 
-    if args.mep_schedule:
-        report = load_mep_schedule(args.mep_schedule)
-        existing_items = list(payload.get("construction_items", []))
-        mep_items = [
-            {
-                "assembly": item.assembly,
-                "material_type": item.material_type,
-                "amount": item.amount,
-            }
-            for item in report.construction_items
-        ]
-        payload["construction_items"] = existing_items + mep_items
-        mep_report_path = output_dir / "mep_schedule_items.json"
-        mep_report_path.write_text(
-            json.dumps(report.to_dict(), indent=2),
-            encoding="utf-8",
-        )
-
-    if args.architecture_schedule:
-        report = load_architecture_schedule(args.architecture_schedule)
-        existing_items = list(payload.get("construction_items", []))
-        architecture_items = [
-            {
-                "assembly": item.assembly,
-                "material_type": item.material_type,
-                "amount": item.amount,
-            }
-            for item in report.construction_items
-        ]
-        payload["construction_items"] = existing_items + architecture_items
-        architecture_report_path = output_dir / "architecture_schedule_items.json"
-        architecture_report_path.write_text(
-            json.dumps(report.to_dict(), indent=2),
-            encoding="utf-8",
-        )
+        for discipline, paths, loader in exports:
+            if not paths:
+                continue
+            reports = [loader(path, mapping) for path in paths]
+            mapped_reports += reports
+            payload["construction_items"] = list(payload.get("construction_items", [])) + [
+                item for report in reports for item in _item_dicts(report.construction_items)
+            ]
+            report_path = output_dir / f"{discipline}_schedule_items.json"
+            report_path.write_text(json.dumps(_schedule_report_dict(reports), indent=2),
+                                   encoding="utf-8")
+            report_files[f"{discipline}_schedule_items"] = str(report_path)
+    except StvMappingTieError as exc:
+        parser.error(str(exc))
 
     if settings is not None and not args.no_use_phase:
         if payload.get("use_phase"):
@@ -470,7 +514,8 @@ def main() -> None:
     if not team:
         parser.error("Provide a team with --team, --config or in the input JSON.")
     results = _run_stv(
-        payload, team=team, template_path=args.template, lifetime_years=lifetime_years
+        payload, team=team, template_path=args.template, lifetime_years=lifetime_years,
+        reference_data=reference_data,
     )
 
     results_path.write_text(
@@ -490,18 +535,9 @@ def main() -> None:
         "charts": {key: str(path) for key, path in image_paths.items()},
         "history_json": str(history_path),
     }
-    if args.structural_schedule:
-        response["structural_schedule_items"] = str(output_dir / "structural_schedule_items.json")
-    if args.mep_schedule:
-        response["mep_schedule_items"] = str(output_dir / "mep_schedule_items.json")
-    if args.architecture_schedule:
-        response["architecture_schedule_items"] = str(
-            output_dir / "architecture_schedule_items.json"
-        )
-    if args.central_bim_model:
-        response["central_bim_model_stv_items"] = str(
-            output_dir / "central_bim_model_stv_items.json"
-        )
+    response.update(report_files)
+    if mapping is not None:
+        response["stv_mapping"] = mapping.source
     if args.stv_workbook_input:
         response["stv_workbook_input"] = str(args.stv_workbook_input)
         response["stv_workbook_construction_item_count"] = len(

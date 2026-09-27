@@ -20,8 +20,11 @@ Since P3.2 the team, lifetime and use phase come from the Island example config
 second, invented config (course team "River", modeled use phase) must change exactly the
 targets and the use phase.
 
-The line items now also carry ``estimated`` / ``estimated_amount`` (P3.6), which the
-stored reference files do not have; they are left out of the file comparison.
+Since P3.6 the Revit rows are mapped with the Island mapping table
+(``engines/stv/examples/island/stv_mapping.csv``) instead of the hardcoded importers; the
+results are identical. The line items now also carry ``estimated`` / ``estimated_amount``
+(P3.6), which the stored reference files do not have; they are left out of the file
+comparison and checked separately.
 
 Skipped unless the fixtures are present (``python scripts/fetch_fixtures.py``).
 """
@@ -36,6 +39,7 @@ import pytest
 
 from engines.common.config import load_config
 from engines.stv import STVEngine, STVInputs
+from engines.stv.mapping import StvMapping, load_stv_mapping
 from engines.stv.models import ConstructionItem, STVResults
 from engines.stv.project import STVProjectSettings
 from engines.stv.reference import STVReferenceData
@@ -48,6 +52,7 @@ TEAM = "Island"
 REPO_ROOT = Path(__file__).resolve().parents[2]
 ISLAND_CONFIG = REPO_ROOT / "engines" / "common" / "examples" / "island_2026.project_config.json"
 RIVER_CONFIG = REPO_ROOT / "tests" / "fixtures" / "configs" / "river_test.project_config.json"
+ISLAND_MAPPING = REPO_ROOT / "engines" / "stv" / "examples" / "island" / "stv_mapping.csv"
 # P3.6 item fields that the stored reference results do not have.
 P36_ITEM_KEYS = ("estimated", "estimated_amount")
 WORKBOOK = "STV_Template/STV_ConceptA_Bambo.xlsx"
@@ -90,13 +95,16 @@ def _load(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def _trade_items(loader, paths: list[Path]) -> list[ConstructionItem]:
+def _trade_items(loader, paths: list[Path], mapping: StvMapping) -> list[ConstructionItem]:
     totals: dict[tuple[str, str], float] = defaultdict(float)
+    estimated: dict[tuple[str, str], float] = defaultdict(float)
     for path in paths:
-        for item in loader(path).construction_items:
+        for item in loader(path, mapping).construction_items:
             totals[(item.assembly, item.material_type)] += item.amount
+            estimated[(item.assembly, item.material_type)] += item.estimated_amount
     return [
-        ConstructionItem(assembly=assembly, material_type=material_type, amount=amount)
+        ConstructionItem(assembly=assembly, material_type=material_type, amount=amount,
+                         estimated_amount=estimated[(assembly, material_type)])
         for (assembly, material_type), amount in sorted(totals.items())
         if amount > 0
     ]
@@ -130,17 +138,26 @@ def reference_data(ipd_challenge_dir) -> STVReferenceData:
     return STVReferenceData.from_workbook(ipd_challenge_dir / WORKBOOK)
 
 
+@pytest.fixture(scope="module")
+def island_mapping(reference_data) -> StvMapping:
+    # Validated against the catalog of the reference workbook.
+    return load_stv_mapping(ISLAND_MAPPING, catalog=reference_data)
+
+
 def _run_trades(reference_data, ipd_challenge_dir, settings: STVProjectSettings,
-                use_phase_trade: str | None = None) -> dict[str, STVResults]:
+                use_phase_trade: str | None = None, *,
+                mapping: StvMapping) -> dict[str, STVResults]:
     """One result per trade; the use phase (if any) goes into ``use_phase_trade`` only."""
     engine = STVEngine(reference_data, lifetime_years=settings.lifetime_years)
     results = {}
     for trade, (loader, files) in TRADES.items():
-        items = _trade_items(loader, [ipd_challenge_dir / SCHEDULES / f for f in files])
+        items = _trade_items(loader, [ipd_challenge_dir / SCHEDULES / f for f in files],
+                             mapping)
         payload = {
             "team": settings.team,
             "construction_items": [
-                {"assembly": i.assembly, "material_type": i.material_type, "amount": i.amount}
+                {"assembly": i.assembly, "material_type": i.material_type, "amount": i.amount,
+                 "estimated_amount": i.estimated_amount}
                 for i in items
             ],
             "use_phase": settings.use_phase if trade == use_phase_trade else {},
@@ -150,10 +167,11 @@ def _run_trades(reference_data, ipd_challenge_dir, settings: STVProjectSettings,
 
 
 @pytest.fixture(scope="module")
-def trade_results(reference_data, ipd_challenge_dir) -> dict[str, STVResults]:
+def trade_results(reference_data, ipd_challenge_dir, island_mapping) -> dict[str, STVResults]:
     settings = STVProjectSettings.from_config(load_config(ISLAND_CONFIG))
     assert (settings.team, settings.lifetime_years, settings.use_phase) == (TEAM, 50, {})
-    return _run_trades(reference_data, ipd_challenge_dir, settings, "architecture")
+    return _run_trades(reference_data, ipd_challenge_dir, settings, "architecture",
+                       mapping=island_mapping)
 
 
 @pytest.fixture(scope="module")
@@ -196,9 +214,11 @@ def test_ipd_copy_of_project_file_is_identical(autostv_dir, ipd_challenge_dir):
     assert ipd.read_bytes() == (autostv_dir / EXPECTED_PROJECT).read_bytes()
 
 
-def test_river_config_changes_targets_and_use_phase(reference_data, ipd_challenge_dir, project):
+def test_river_config_changes_targets_and_use_phase(reference_data, ipd_challenge_dir, project,
+                                                    island_mapping):
     settings = STVProjectSettings.from_config(load_config(RIVER_CONFIG))
-    trades = _run_trades(reference_data, ipd_challenge_dir, settings, "architecture")
+    trades = _run_trades(reference_data, ipd_challenge_dir, settings, "architecture",
+                         mapping=island_mapping)
     river = STVResults.combine(list(trades.values()), team=settings.team).to_dict()
     team = reference_data.get_team("River")
 
@@ -219,3 +239,4 @@ def test_river_config_changes_targets_and_use_phase(reference_data, ipd_challeng
     assert river["breakdown"]["use_heating"]["energy"] == pytest.approx(37 * 500 * 50, rel=REL)
     assert river["breakdown"]["use_water"]["water"] > 0
     assert project["breakdown"]["use_phase"]["carbon"] == 0.0
+

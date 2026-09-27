@@ -34,15 +34,17 @@ Formulas (`engine.py`):
   I (MJ/kg), as in the course (P3.10; before: F and G, one column off).
 
 Course logic lives in `engine.py`, `reference.py` and `models.py`. The Revit importers
-(`revit_architecture.py`, `revit_structural.py`, `revit_mep.py`, `central_bim.py`) hold the
-**Island-specific** mapping of Revit rows to (assembly, material type) plus unit conversions.
-This is team logic, not course data, and is replaced by a mapping table in P3.6.
+(`revit_architecture.py`, `revit_structural.py`, `revit_mep.py`, `central_bim.py`) map Revit
+rows to (assembly, material type) with the **STV mapping table** (P3.6, below): team data,
+not course data. Until P3.6 the Island mapping was hardcoded in the importers; it is now the
+Island mapping file `engines/stv/examples/island/stv_mapping.csv`.
 
 ## Mapping table: `stv_mapping.csv` (P3.6)
 
-One table per project maps the Revit exports to course LCA catalog entries. It is
-validated against the course LCA catalog of the workbook given with `--template` /
-`$COURSE_STV_XLSX`.
+`concho-stv` maps the Revit exports with one table per project: `--stv-mapping`, else
+`files.stv_mapping` of `project_config`, else the default table `template/stv_mapping.csv`
+(with a warning). The table is **validated before the run** (errors stop the run) against
+the course LCA catalog of the workbook given with `--template` / `$COURSE_STV_XLSX`.
 
 > The table names catalog entries (assembly, material type) but holds **no LCA values**;
 > the catalog is read from the course workbook at runtime, never committed.
@@ -268,8 +270,9 @@ rule 4).
   (material "Structural Bamboo (CLB)") is modelled with the Revit families
   `Glulam-Western Species` and `Timber-Column`, so the importer books it as
   **Glulam Beam (kg)** / **Glulam Column (kg)** at 19.43 kg/cf (`GLULAM_KG_PER_CF`). In C
-  that is 81,954 kg of beams and 33,932 kg of columns. Undocumented in the original; an
-  explicit custom material follows in P3.7.
+  that is 81,954 kg of beams and 33,932 kg of columns. Undocumented in the original; since
+  P3.6 explicit proxy rules in the Island mapping file (note "proxy, see P3.7"); an explicit
+  custom material follows in P3.7.
 - **Use phase = 0.** A and C contain no use-phase inputs (no kWh, gas, water or PV), while
   the target covers construction + 50 years of operation. So C is embodied only and its
   % of target is not comparable with the target's scope. Only B has use-phase inputs (P3.8).
@@ -279,7 +282,7 @@ rule 4).
   The Revit add-in exports parts and skips a floor/ceiling that has parts, so whether parts
   should be counted is open (P3.9). MEP skips 170 rows (air terminals, electrical and
   plumbing fixtures).
-- **MEP mapping uses literal Revit family names** (`revit_mep.py`).
+- **MEP mapping uses literal Revit family names** (since P3.6 in the Island mapping file).
 - **Possible double counting of floors.** Three floor elements (IDs 1241457, 1789623,
   1789655; about 10,000 sf) appear in both the Current architecture and structural exports and
   both importers map floors. Not verified further; the golden test keeps the behaviour as is.
