@@ -6,8 +6,8 @@
     <Assembly>QTO.dll</Assembly>
     <FullClassName>QTO.Structural_TakeOff</FullClassName>
     <ClientId>7A8794B0-05F5-4A8F-9B74-7338E8E83B11</ClientId>
-    <VendorId>QTO</VendorId>
-    <VendorDescription>QTO Structural Export</VendorDescription>
+    <VendorId>Concho</VendorId>
+    <VendorDescription>Concho – Maximilian Nagel &amp; Ashmitha Jaysi Sivakumar, Stanford AEC Global Teamwork</VendorDescription>
   </AddIn>
   <AddIn Type="Command">
     <Text>MEP TakeOff</Text>
@@ -15,8 +15,8 @@
     <Assembly>QTO.dll</Assembly>
     <FullClassName>QTO.MEP_TakeOff</FullClassName>
     <ClientId>2A8D899B-02E1-453B-8C81-3E473F73A812</ClientId>
-    <VendorId>QTO</VendorId>
-    <VendorDescription>QTO MEP Export</VendorDescription>
+    <VendorId>Concho</VendorId>
+    <VendorDescription>Concho – Maximilian Nagel &amp; Ashmitha Jaysi Sivakumar, Stanford AEC Global Teamwork</VendorDescription>
   </AddIn>
   <AddIn Type="Command">
     <Text>Architecture TakeOff</Text>
@@ -24,25 +24,25 @@
     <Assembly>QTO.dll</Assembly>
     <FullClassName>QTO.Architecture_TakeOff</FullClassName>
     <ClientId>91C6F6B7-8D8B-43D5-8A49-1FA88A51A2D4</ClientId>
-    <VendorId>QTO</VendorId>
-    <VendorDescription>QTO Architecture Export</VendorDescription>
+    <VendorId>Concho</VendorId>
+    <VendorDescription>Concho – Maximilian Nagel &amp; Ashmitha Jaysi Sivakumar, Stanford AEC Global Teamwork</VendorDescription>
   </AddIn>
   <AddIn Type="Command">
     <Text>Push 4D Build Code</Text>
-    <Description>Pushes build_code from src\Planning_engine\Fuzor_Mapper\outputs\Revit_4D_Build_Code_Map.csv into the 4D_Build_Code parameter.</Description>
+    <Description>Pushes build_code per element_id from Revit_4D_Build_Code_Map.csv (schedule engine output) into the 4D_Build_Code parameter.</Description>
     <Assembly>QTO.dll</Assembly>
     <FullClassName>QTO.Push_TaskName_To_Revit</FullClassName>
     <ClientId>13C7B638-24A3-4CDE-9C31-5B1D0A9C95E1</ClientId>
-    <VendorId>QTO</VendorId>
-    <VendorDescription>QTO 4D Build Code Push</VendorDescription>
+    <VendorId>Concho</VendorId>
+    <VendorDescription>Concho – Maximilian Nagel &amp; Ashmitha Jaysi Sivakumar, Stanford AEC Global Teamwork</VendorDescription>
   </AddIn>
   <AddIn Type="Command">
     <Text>Push Manufacton Parameters</Text>
-    <Description>Pushes assembly_id, catalog_id, kit_id, production order ID, and item name from src\Planning_engine\Prefab_BIM_Mapper\outputs into the Prefab_Assembly_ID, Prefab_Catalog_ID, Prefab_Kit_ID, Prefab_order_ID, and Prefab_Item_Name parameters.</Description>
+    <Description>Pushes assembly_id, catalog_id (Revit_Assembly_Id_Map.csv) and kit_id, order_id, item_name (Revit_Kit_Parameter_Map.csv) per element_id into the Prefab_Assembly_ID, Prefab_Catalog_ID, Prefab_Kit_ID, Prefab_order_ID and Prefab_Item_Name parameters.</Description>
     <Assembly>QTO.dll</Assembly>
     <FullClassName>QTO.Push_Manufacton_Parameters_To_Revit</FullClassName>
     <ClientId>29F2E1BC-1F65-4A3C-8D3A-7D2B05DB4F1D</ClientId>
-    <VendorId>QTO</VendorId>
-    <VendorDescription>QTO Manufacton Parameter Push</VendorDescription>
+    <VendorId>Concho</VendorId>
+    <VendorDescription>Concho – Maximilian Nagel &amp; Ashmitha Jaysi Sivakumar, Stanford AEC Global Teamwork</VendorDescription>
   </AddIn>
 </RevitAddIns>

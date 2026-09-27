@@ -7,19 +7,21 @@ Originally developed by Ashmitha Jaysi Sivakumar in
 [ashjs2003/IPD_Challenge](https://github.com/ashjs2003/IPD_Challenge) (commit `989a6b7`);
 migrated in P1.4.
 
-The C# code is copied unchanged from `IPD_Challenge/QTO` at that commit. The only edits are in
-`QTO.addin` (local-path comment removed, `<Assembly>` set to the relative `QTO.dll`) and in
-`Concho.QTO.sln` (renamed from `IPD Challenge.sln`, project path `QTO\QTO.csproj` → `QTO.csproj`).
+The C# code was copied unchanged from `IPD_Challenge/QTO` at that commit (P1.4). P4.1 made the
+build portable (Revit API from NuGet, one build per Revit version) and replaced the output-folder
+search with a config file + folder dialog.
 
 ## Files
 
 | File | Purpose |
 |---|---|
-| `Concho.QTO.sln`, `QTO.csproj` | Solution and SDK-style project (`net8.0`, x64, compiles `*.cs` in this folder) |
+| `Concho.QTO.sln`, `QTO.csproj` | Solution and SDK-style project (`net8.0-windows`, x64, compiles `*.cs` in this folder); configurations `Debug/Release R25` and `Debug/Release R26` |
 | `QTO.addin` | Revit manifest; registers the external commands below |
 | `Structural_TakeOff.cs`, `Architecture_TakeOff.cs`, `MEP_TakeOff.cs` | Quantity takeoff commands (CSV export) |
 | `SpatialElementData.cs`, `RoomSpatialData.cs` | Spatial data shared by the takeoffs: element location/bounding box, room assignment, room boundary export |
-| `ExportPathHelper.cs` | Finds the `revit_schedules/` output folder and builds the CSV file name |
+| `ExportSummary.cs` | Summary dialog after each takeoff: element count, % with Assembly Code, missing codes by category, quantities not found, MEP metric warnings |
+| `ParameterReader.cs`, `BuildingQuantities.cs`, `MepQuantities.cs` | Unit-safe, language-independent parameter reading (built-in parameter first, English name as fallback; conversion from internal units) |
+| `ExportPathHelper.cs` | Reads the export folder from `concho_addin.json` next to the DLL (folder dialog if missing) and builds the CSV file name |
 | `Push_TaskName_To_Revit.cs` | Push 4D Build Code command |
 | `Push_Manufacton_Parameters_To_Revit.cs`, `Push_Kit_To_Revit.cs`, `Push_Assembly_To_Revit.cs`, `CsvParameterPushHelper.cs` | Prefab parameter push commands and their shared CSV/parameter helper |
 
@@ -42,6 +44,9 @@ Also in the source, but **not registered in `QTO.addin`** (so not visible in Rev
 | `QTO.Push_Kit_To_Revit` | Push Kit: writes `kit_id` from `Revit_Kit_Parameter_Map.csv` into `Prefab_Kit_ID` (subset of Push Manufacton Parameters). |
 | `QTO.Push_Assembly_To_Revit` | Push Assembly: writes `assembly_id` from `Revit_Assembly_Id_Map.csv` into `Prefab_Assembly_ID` (subset of Push Manufacton Parameters). |
 
+After each takeoff a summary dialog shows the element count, the share of elements with an
+`Assembly Code`, and the elements without one grouped by category (top 10 + "…and N more").
+
 The **spatial data export** is not a separate command: every takeoff adds location, bounding box
 and room columns per element (`SpatialElementData`, `RoomAssignmentData`), and Architecture
 TakeOff writes the room boundary CSV (`RoomBoundaryExporter`).
@@ -49,19 +54,49 @@ TakeOff writes the room boundary CSV (`RoomBoundaryExporter`).
 All push commands match elements by `element_id` (Revit ElementId), only write existing, editable
 text parameters, skip elements with conflicting values in the CSV, and show a summary dialog.
 
+## Build
+
+Requires only the .NET 8 SDK; Revit does **not** need to be installed. The Revit API comes from
+the [Nice3point.Revit.Api](https://github.com/Nice3point/RevitApi) reference packages
+(`Nice3point.Revit.Api.RevitAPI` / `RevitAPIUI`, pinned per Revit year in `QTO.csproj`), which are
+compile-time only and not copied to the output.
+
+```
+dotnet build Concho.QTO.sln -c "Release R25"   # Revit 2025 -> bin/Release R25/QTO.dll
+dotnet build Concho.QTO.sln -c "Release R26"   # Revit 2026 -> bin/Release R26/QTO.dll
+```
+
+Both target `net8.0-windows` (Revit 2025 and 2026 run on .NET 8). `EnableWindowsTargeting` is set,
+so the build also runs on Linux/macOS for checks. The same `QTO.addin` works for both versions.
+
+**Revit 2024 and older (`net48`) are not built yet.** Open question: it depends on which Revit
+version the 2027 teams get (roadmap D8/D2). Adding it means a `net48` target with the
+`2024.*` reference packages and checking the code for .NET Framework gaps (e.g. `TryAdd`, the
+`OpenFolderDialog` used for the export folder, which needs .NET 8 WPF).
+
+## Installation
+
+Copy `QTO.addin` and the `QTO.dll` built for your Revit version into the same folder, e.g.
+`%AppData%\Autodesk\Revit\Addins\2026\` (Revit resolves the relative `<Assembly>` path against
+the `.addin` file's folder).
+
+## Export folder (`concho_addin.json`)
+
+The takeoff commands write to the folder set in `concho_addin.json` next to `QTO.dll`:
+
+```json
+{
+  "export_folder": "%USERPROFILE%\\Documents\\Concho\\exports"
+}
+```
+
+If the file is missing, has no `export_folder`, or the folder doesn't exist, a folder dialog opens
+on the first export and the choice is saved to that file. Cancelling the dialog cancels the export.
+A relative path is resolved against the DLL's folder; environment variables (`%USERPROFILE%`) are
+expanded. To change the folder, edit or delete the file.
+
 ## Current limitations
 
-- **Revit 2026 only.** `QTO.csproj` references `RevitAPI.dll`/`RevitAPIUI.dll` via a hardcoded
-  `HintPath` under `C:\Program Files\Autodesk\Revit 2026\`.
-- **Must be built locally** with the .NET 8 SDK on a machine with Revit 2026 installed
-  (`dotnet build Concho.QTO.sln`). No prebuilt DLL, no CI build: the Revit API isn't available on
-  CI runners.
-- **Installation is manual:** copy `QTO.addin` and the built `QTO.dll` into the same folder,
-  e.g. `%AppData%\Autodesk\Revit\Addins\2026\` (Revit resolves the relative `<Assembly>` path
-  against the `.addin` file's folder).
-- **Output folder:** the takeoffs search upward from the DLL's folder for a directory containing
-  `revit_schedules/` and write there (falling back to `revit_schedules/` next to the DLL, created
-  if missing). There is no dialog or config to choose it.
 - **Push commands expect the old repo layout:** they search upward from the DLL for
   `src/Planning_engine/` (IPD_Challenge layout) and read files under `Fuzor_Mapper/outputs/` and
   `Prefab_BIM_Mapper/outputs/`. That layout doesn't exist in this repo; the schedule engines move
@@ -69,28 +104,37 @@ text parameters, skip elements with conflicting values in the CSV, and show a su
 - Target shared parameters (`4D_Build_Code`, `Prefab_*`) must already exist in the model as
   editable text parameters.
 
-Planned fixes: **P4.1** (portable build via Revit API NuGet package, multi-targeting, output folder
-from config/dialog), **P4.2** (release pipeline + `install.ps1`), **P4.3** (export contract in
-`docs/model-requirements.md` + summary dialog with Assembly Code coverage).
+Release zips per Revit version (P4.2): `.github/workflows/revit-addin-release.yml`, installer
+`install/install.cmd` (double-click entry point) + `install/install.ps1` + `install/INSTALL.md`.
 
 ## CSV export columns
 
-All files are UTF-8, comma-separated, one row per element, with standard CSV quoting. Parameter
-values (`Length`, `Area`, `Volume`, ...) are Revit's display strings (`AsValueString`, i.e. project
-units) taken from the instance and, if empty, the type; columns with `(ft)`, `(SF)`, `(CF)`, `(in)`
-or `(deg)` are computed numbers in those units (invariant culture, up to 3 decimals). File names
-are prefixed with the model file name (`<model>_...csv`). P4.3 builds on these columns.
+All files are UTF-8, comma-separated, one row per element, with standard CSV quoting.
+Quantities (`Length`, `Area`, `Volume`, dimensions, weights, flows, ...) are converted from Revit's
+internal units into fixed units (ft, SF, CF, MEP dimensions in inches, kg, m³/s, ...) and written
+as plain invariant decimals, so the CSV is the same for imperial and metric projects (P4.5;
+`ParameterReader.cs`, `BuildingQuantities.cs`, `MepQuantities.cs`). Exception: MEP `Length` is a
+fixed feet-inch text (`12' - 6.375"`) that the STV importer can parse. Parameters are looked up
+by built-in parameter first (any Revit language), then by English name, on the instance and then
+the type; `Parameter Snapshot` stays display text in project units. Columns with `(ft)`, `(SF)`,
+`(CF)`, `(in)` or `(deg)` in the name are computed numbers in those units. File names
+are prefixed with the model file name (`<model>_...csv`). The full contract (unit, source
+parameter, required/optional per column, Assembly Codes) is in
+[`docs/model-requirements.md`](../docs/model-requirements.md).
 
-### `<model>_Structural_Schedule.csv` and `<model>_Architecture_TakeOff.csv` (56 columns, same header)
+### `<model>_Structural_Schedule.csv` and `<model>_Architecture_TakeOff.csv` (58 columns, same header)
 
 `ElementId`, `Category`, `Family`, `Type`, `Original Category`, `Original Family`, `Original Type`,
 `Level`, `Mark`, `Assembly Code`, `Assembly Description`, `Length`, `Width`, `Depth`, `Height`,
 `Area`, `Volume`, `Weight`, `Unit Weight`, `Material`, `Type Comments`, `Base Level`, `Top Level`,
-`Base Offset`, `Top Offset`, *spatial columns*, *room columns*, `Comments`, `Parameter Snapshot`
+`Base Offset`, `Top Offset`, *spatial columns*, *room columns*, `Comments`, `Parameter Snapshot`,
+`Part Source Id`, `Category (local)`
 
-`Original Category/Family/Type` are filled for Revit parts only (the element the part was cut from).
+`Original Category/Family/Type` and `Part Source Id` are filled for Revit parts only (the element the
+part was cut from; a part's `Assembly Code` is taken from that element). `Category` is the English
+category name in any Revit language (`Categories.cs`); `Category (local)` is the name Revit shows.
 
-### `<model>_MEP_TakeOff.csv` (69 columns)
+### `<model>_MEP_TakeOff.csv` (71 columns)
 
 `ElementId`, `Category`, `Family`, `Type`, `Level`, `Mark`, `System Name`, `System Type`,
 `Service Type`, `Classification`, `Size`, `Diameter`, `Width`, `Height`, `Length`, `Area`,
@@ -98,9 +142,11 @@ are prefixed with the model file name (`<model>_...csv`). P4.3 builds on these c
 `Airflow`, `Flow`, `Pressure Drop`, `Cooling Capacity`, `Heating Capacity`, `Power`, `Voltage`,
 `Current`, `Apparent Load`, `Connected Load`, `Connector Count`, `Connector Flow`,
 `Connector Demand`, `Connector Max Diameter (in)`, `Connector Max Width (in)`,
-`Connector Max Height (in)`, *spatial columns*, *room columns*, `Comments`, `Parameter Snapshot`
+`Connector Max Height (in)`, *spatial columns*, *room columns*, `Comments`, `Parameter Snapshot`,
+`Assembly Code`, `Category (local)`
 
-Note: the MEP export has **no `Assembly Code` column** (the structural and architecture exports do).
+`Assembly Code` (P4.3) and `Category (local)` (P4.5) were appended at the end, so readers that
+use column positions keep working (the STV importer reads by column name).
 
 ### Shared column groups
 
