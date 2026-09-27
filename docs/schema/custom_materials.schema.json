@@ -1,0 +1,179 @@
+{
+  "$id": "https://github.com/mxngl/concho/docs/schema/custom_materials.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "One row of ``custom_materials.csv``. Team data (EPD values), not course data.",
+  "properties": {
+    "assembly": {
+      "description": "Course assembly ('LCA Data' B / 'Lists'): Foundation, Interior Wall, Exterior Wall, Floor, Roof, Window, Columns, Beams, MEP, Energy, Misc (Column / Beam are accepted for Columns / Beams).",
+      "pattern": "^(Beams|Columns|Energy|Exterior Wall|Floor|Foundation|Interior Wall|MEP|Misc|Roof|Window)$",
+      "title": "Assembly",
+      "type": "string"
+    },
+    "material_type": {
+      "description": "New material name ending with its unit in brackets, like the course names ('LCA Data' C), e.g. 'Bamboo Beam (kg)'. Must not be a course catalog name.",
+      "pattern": "^.*\\S.*\\([^()]+\\)\\s*$",
+      "title": "Material Type",
+      "type": "string"
+    },
+    "embodied_gwp_kgco2e": {
+      "description": "Embodied GWP (kgCO2e) per unit of material_type ('LCA Data' D). Must equal materials + transport + construction.",
+      "title": "Embodied Gwp Kgco2E",
+      "type": "number"
+    },
+    "embodied_energy_mj": {
+      "description": "Embodied energy (MJ) per unit of material_type ('LCA Data' E). Must equal materials + transport + construction.",
+      "minimum": 0,
+      "title": "Embodied Energy Mj",
+      "type": "number"
+    },
+    "embodied_water_kg": {
+      "description": "Embodied water (kg) per unit of material_type ('LCA Data' F). Must equal materials + transport + construction.",
+      "minimum": 0,
+      "title": "Embodied Water Kg",
+      "type": "number"
+    },
+    "embodied_odp_kgcfc11e": {
+      "description": "Embodied ODP (kgCFC11e) per unit of material_type ('LCA Data' G). Must equal materials + transport + construction.",
+      "minimum": 0,
+      "title": "Embodied Odp Kgcfc11E",
+      "type": "number"
+    },
+    "materials_gwp_kgco2e": {
+      "description": "Materials GWP (kgCO2e) per unit of material_type ('LCA Data' H).",
+      "title": "Materials Gwp Kgco2E",
+      "type": "number"
+    },
+    "materials_energy_mj": {
+      "description": "Materials energy (MJ) per unit of material_type ('LCA Data' I).",
+      "minimum": 0,
+      "title": "Materials Energy Mj",
+      "type": "number"
+    },
+    "materials_water_kg": {
+      "description": "Materials water (kg) per unit of material_type ('LCA Data' J).",
+      "minimum": 0,
+      "title": "Materials Water Kg",
+      "type": "number"
+    },
+    "materials_odp_kgcfc11e": {
+      "description": "Materials ODP (kgCFC11e) per unit of material_type ('LCA Data' K).",
+      "minimum": 0,
+      "title": "Materials Odp Kgcfc11E",
+      "type": "number"
+    },
+    "transport_gwp_kgco2e": {
+      "description": "Transport GWP (kgCO2e) per unit of material_type ('LCA Data' L).",
+      "title": "Transport Gwp Kgco2E",
+      "type": "number"
+    },
+    "transport_energy_mj": {
+      "description": "Transport energy (MJ) per unit of material_type ('LCA Data' M).",
+      "minimum": 0,
+      "title": "Transport Energy Mj",
+      "type": "number"
+    },
+    "transport_water_kg": {
+      "description": "Transport water (kg) per unit of material_type ('LCA Data' N).",
+      "minimum": 0,
+      "title": "Transport Water Kg",
+      "type": "number"
+    },
+    "transport_odp_kgcfc11e": {
+      "description": "Transport ODP (kgCFC11e) per unit of material_type ('LCA Data' O).",
+      "minimum": 0,
+      "title": "Transport Odp Kgcfc11E",
+      "type": "number"
+    },
+    "construction_gwp_kgco2e": {
+      "description": "Construction GWP (kgCO2e) per unit of material_type ('LCA Data' P).",
+      "title": "Construction Gwp Kgco2E",
+      "type": "number"
+    },
+    "construction_energy_mj": {
+      "description": "Construction energy (MJ) per unit of material_type ('LCA Data' Q).",
+      "minimum": 0,
+      "title": "Construction Energy Mj",
+      "type": "number"
+    },
+    "construction_water_kg": {
+      "description": "Construction water (kg) per unit of material_type ('LCA Data' R).",
+      "minimum": 0,
+      "title": "Construction Water Kg",
+      "type": "number"
+    },
+    "construction_odp_kgcfc11e": {
+      "description": "Construction ODP (kgCFC11e) per unit of material_type ('LCA Data' S).",
+      "minimum": 0,
+      "title": "Construction Odp Kgcfc11E",
+      "type": "number"
+    },
+    "life_units": {
+      "description": "Course 'Life Units No.' ('LCA Data' T): unit multiplier over the building life (1 = no replacement).",
+      "exclusiveMinimum": 0,
+      "title": "Life Units",
+      "type": "number"
+    },
+    "source": {
+      "description": "EPD reference: document, registration number, page, declared unit and how the values were converted to the unit of material_type.",
+      "minLength": 1,
+      "title": "Source",
+      "type": "string"
+    },
+    "is_course_data": {
+      "const": false,
+      "description": "Always false: custom materials are team data.",
+      "title": "Is Course Data",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "assembly",
+    "material_type",
+    "embodied_gwp_kgco2e",
+    "embodied_energy_mj",
+    "embodied_water_kg",
+    "embodied_odp_kgcfc11e",
+    "materials_gwp_kgco2e",
+    "materials_energy_mj",
+    "materials_water_kg",
+    "materials_odp_kgcfc11e",
+    "transport_gwp_kgco2e",
+    "transport_energy_mj",
+    "transport_water_kg",
+    "transport_odp_kgcfc11e",
+    "construction_gwp_kgco2e",
+    "construction_energy_mj",
+    "construction_water_kg",
+    "construction_odp_kgcfc11e",
+    "life_units",
+    "source",
+    "is_course_data"
+  ],
+  "title": "custom_materials.csv row",
+  "type": "object",
+  "x-csv-columns": [
+    "assembly",
+    "material_type",
+    "embodied_gwp_kgco2e",
+    "embodied_energy_mj",
+    "embodied_water_kg",
+    "embodied_odp_kgcfc11e",
+    "materials_gwp_kgco2e",
+    "materials_energy_mj",
+    "materials_water_kg",
+    "materials_odp_kgcfc11e",
+    "transport_gwp_kgco2e",
+    "transport_energy_mj",
+    "transport_water_kg",
+    "transport_odp_kgcfc11e",
+    "construction_gwp_kgco2e",
+    "construction_energy_mj",
+    "construction_water_kg",
+    "construction_odp_kgcfc11e",
+    "life_units",
+    "source",
+    "is_course_data"
+  ],
+  "x-csv-notes": "One CSV row per material, header row with these column names (order free). Lines starting with '#' are comments. Columns mirror a course 'LCA Data' row (B-T) plus source and is_course_data. Values per unit of material_type. material_type must not be a course catalog name. See docs/engines/stv.md."
+}

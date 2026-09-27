@@ -1,12 +1,18 @@
 """Export the project_config JSON Schema and the generated field reference (P3.1).
 
 Writes
-- ``docs/schema/project_config.schema.json`` (from ``engines.common.config``) and
-- the field reference in ``docs/config.md`` between the ``BEGIN/END GENERATED`` markers.
+- ``docs/schema/project_config.schema.json`` (from ``engines.common.config``),
+- the field reference in ``docs/config.md`` between the ``BEGIN/END GENERATED`` markers, and
+- ``docs/schema/cost_db.schema.json`` (P3.4: one ``cost_db.csv`` row, from
+  ``engines.tvd.cost_db``), and
+- ``docs/schema/stv_mapping.schema.json`` (P3.6: one ``stv_mapping.csv`` row, from
+  ``engines.stv.mapping``), and
+- ``docs/schema/custom_materials.schema.json`` (P3.7: one ``custom_materials.csv`` row, from
+  ``engines.stv.custom_materials``).
 
 Usage:
-    python scripts/export_config_schema.py          # regenerate both
-    python scripts/export_config_schema.py --check  # exit 1 if either is out of date (CI)
+    python scripts/export_config_schema.py          # regenerate all
+    python scripts/export_config_schema.py --check  # exit 1 if any is out of date (CI)
 """
 
 from __future__ import annotations
@@ -22,8 +28,14 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from engines.common.config import json_schema, json_schema_text  # noqa: E402
+from engines.stv import custom_materials  # noqa: E402
+from engines.stv import mapping as stv_mapping  # noqa: E402
+from engines.tvd import cost_db  # noqa: E402
 
 SCHEMA_PATH = REPO_ROOT / "docs" / "schema" / "project_config.schema.json"
+COST_DB_SCHEMA_PATH = REPO_ROOT / "docs" / "schema" / "cost_db.schema.json"
+STV_MAPPING_SCHEMA_PATH = REPO_ROOT / "docs" / "schema" / "stv_mapping.schema.json"
+CUSTOM_MATERIALS_SCHEMA_PATH = REPO_ROOT / "docs" / "schema" / "custom_materials.schema.json"
 DOC_PATH = REPO_ROOT / "docs" / "config.md"
 BEGIN = "<!-- BEGIN GENERATED: field reference (python scripts/export_config_schema.py) -->"
 END = "<!-- END GENERATED -->"
@@ -149,21 +161,38 @@ def main(argv: list[str] | None = None) -> int:
     doc_current = DOC_PATH.read_text(encoding="utf-8")
     doc_text = render_doc(doc_current)
     schema_current = SCHEMA_PATH.read_text(encoding="utf-8") if SCHEMA_PATH.exists() else ""
+    cost_text = cost_db.json_schema_text()
+    cost_current = (COST_DB_SCHEMA_PATH.read_text(encoding="utf-8")
+                    if COST_DB_SCHEMA_PATH.exists() else "")
+    stv_text = stv_mapping.json_schema_text()
+    stv_current = (STV_MAPPING_SCHEMA_PATH.read_text(encoding="utf-8")
+                   if STV_MAPPING_SCHEMA_PATH.exists() else "")
+    cm_text = custom_materials.json_schema_text()
+    cm_current = (CUSTOM_MATERIALS_SCHEMA_PATH.read_text(encoding="utf-8")
+                  if CUSTOM_MATERIALS_SCHEMA_PATH.exists() else "")
 
     stale = [p for p, new, old in ((SCHEMA_PATH, schema_text, schema_current),
-                                   (DOC_PATH, doc_text, doc_current)) if new != old]
+                                   (DOC_PATH, doc_text, doc_current),
+                                   (COST_DB_SCHEMA_PATH, cost_text, cost_current),
+                                   (STV_MAPPING_SCHEMA_PATH, stv_text, stv_current),
+                                   (CUSTOM_MATERIALS_SCHEMA_PATH, cm_text, cm_current))
+             if new != old]
     if args.check:
         for p in stale:
             print(f"out of date: {p.relative_to(REPO_ROOT)}")
         if stale:
             print("Run: python scripts/export_config_schema.py", file=sys.stderr)
             return 1
-        print("project_config schema and field reference are up to date.")
+        print("project_config schema, field reference, cost_db, stv_mapping and "
+              "custom_materials schemas are up to date.")
         return 0
 
     SCHEMA_PATH.parent.mkdir(parents=True, exist_ok=True)
     SCHEMA_PATH.write_text(schema_text, encoding="utf-8")
     DOC_PATH.write_text(doc_text, encoding="utf-8")
+    COST_DB_SCHEMA_PATH.write_text(cost_text, encoding="utf-8")
+    STV_MAPPING_SCHEMA_PATH.write_text(stv_text, encoding="utf-8")
+    CUSTOM_MATERIALS_SCHEMA_PATH.write_text(cm_text, encoding="utf-8")
     for p in stale:
         print(f"updated: {p.relative_to(REPO_ROOT)}")
     return 0

@@ -51,14 +51,15 @@ namespace QTO
                     return Result.Succeeded;
                 }
 
-                string csvPath = ExportPathHelper.GetScheduleFilePath(doc, "Structural_Schedule");
+                string? exportFolder = ExportPathHelper.GetExportFolder();
+                if (exportFolder == null)
+                    return Result.Cancelled;
 
-                ExportElementsToCsv(doc, structuralElements, csvPath);
+                string csvPath = ExportPathHelper.GetScheduleFilePath(doc, exportFolder, "Structural_Schedule");
 
-                TaskDialog.Show(
-                    "Revit Export",
-                    $"Exported {structuralElements.Count} structural elements to:\n{csvPath}"
-                );
+                ExportSummary summary = ExportElementsToCsv(doc, structuralElements, csvPath);
+
+                summary.Show("Structural", csvPath);
 
                 return Result.Succeeded;
             }
@@ -151,13 +152,7 @@ namespace QTO
 
         private bool IsRelevantStructuralPart(Element elem, Document doc)
         {
-            string originalCategory = GetOriginalPartValue(
-                elem,
-                doc,
-                "Original Category",
-                "Original Category Id",
-                "Part Original Category"
-            );
+            string originalCategory = GetOriginalCategory(elem, doc);
 
             if (string.IsNullOrWhiteSpace(originalCategory))
                 return true;
@@ -169,13 +164,14 @@ namespace QTO
                 || normalized.Contains("rebar");
         }
 
-        private void ExportElementsToCsv(Document doc, IList<Element> elementsToExport, string filePath)
+        private ExportSummary ExportElementsToCsv(Document doc, IList<Element> elementsToExport, string filePath)
         {
+            ExportSummary summary = new ExportSummary();
             StringBuilder csv = new StringBuilder();
 
             // Header row
             csv.AppendLine(
-                "ElementId,Category,Family,Type,Original Category,Original Family,Original Type,Level,Mark,Assembly Code,Assembly Description,Length,Width,Depth,Height,Area,Volume,Weight,Unit Weight,Material,Type Comments,Base Level,Top Level,Base Offset,Top Offset,Location Type,Position X (ft),Position Y (ft),Position Z (ft),Start X (ft),Start Y (ft),Start Z (ft),End X (ft),End Y (ft),End Z (ft),Rotation (deg),Bounding Box Min X (ft),Bounding Box Min Y (ft),Bounding Box Min Z (ft),Bounding Box Max X (ft),Bounding Box Max Y (ft),Bounding Box Max Z (ft),Bounding Box Center X (ft),Bounding Box Center Y (ft),Bounding Box Center Z (ft),Room Id,Room Number,Room Name,Room Level,Room Area (SF),Room Volume (CF),Room Location X (ft),Room Location Y (ft),Room Location Z (ft),Comments,Parameter Snapshot"
+                "ElementId,Category,Family,Type,Original Category,Original Family,Original Type,Level,Mark,Assembly Code,Assembly Description,Length,Width,Depth,Height,Area,Volume,Weight,Unit Weight,Material,Type Comments,Base Level,Top Level,Base Offset,Top Offset,Location Type,Position X (ft),Position Y (ft),Position Z (ft),Start X (ft),Start Y (ft),Start Z (ft),End X (ft),End Y (ft),End Z (ft),Rotation (deg),Bounding Box Min X (ft),Bounding Box Min Y (ft),Bounding Box Min Z (ft),Bounding Box Max X (ft),Bounding Box Max Y (ft),Bounding Box Max Z (ft),Bounding Box Center X (ft),Bounding Box Center Y (ft),Bounding Box Center Z (ft),Room Id,Room Number,Room Name,Room Level,Room Area (SF),Room Volume (CF),Room Location X (ft),Room Location Y (ft),Room Location Z (ft),Comments,Parameter Snapshot,Part Source Id,Category (local)"
             );
 
             foreach (Element elem in elementsToExport)
@@ -183,77 +179,42 @@ namespace QTO
                 SpatialElementData spatialData = SpatialElementData.FromElement(elem);
                 RoomAssignmentData roomData = RoomAssignmentData.FromElement(doc, elem);
                 string elementId = elem.Id.Value.ToString();
-                string category = elem.Category?.Name ?? "";
+                string category = Categories.English(elem.Category);
+                string categoryLocal = Categories.Local(elem.Category);
+                // Parts: Assembly Code of the source element; its id goes to "Part Source Id" (P4.5).
+                Element? partSource = IsPartElement(elem) ? PartSource.SourceElement(doc, elem) : null;
+                string partSourceId = partSource?.Id.Value.ToString() ?? "";
                 string family = GetFamilyName(elem);
                 string typeName = GetTypeName(doc, elem);
-                string originalCategory = GetOriginalPartValue(elem, doc, "Original Category", "Original Category Id");
+                string originalCategory = GetOriginalCategory(elem, doc);
                 string originalFamily = GetOriginalPartValue(elem, doc, "Original Family", "Original Family Name");
                 string originalType = GetOriginalPartValue(elem, doc, "Original Type", "Original Type Name");
                 string level = GetLevelName(doc, elem);
-                string mark = GetParameterValue(elem.LookupParameter("Mark"), doc);
-                string assemblyCode = GetAssemblyCode(elem, doc);
-                string assemblyDescription = GetParameterValue(elem.LookupParameter("Assembly Description"), doc);
-                string length = GetFirstAvailableParameterValue(
-                    doc,
-                    elem,
-                    "Length",
-                    "Cut Length",
-                    "Span"
-                );
-                string width = GetFirstAvailableParameterValue(
-                    doc,
-                    elem,
-                    "Width",
-                    "Actual Width"
-                );
-                string depth = GetFirstAvailableParameterValue(
-                    doc,
-                    elem,
-                    "Depth",
-                    "Thickness",
-                    "Structural Depth"
-                );
-                string height = GetFirstAvailableParameterValue(
-                    doc,
-                    elem,
-                    "Height",
-                    "Thickness"
-                );
-                string area = GetFirstAvailableParameterValue(
-                    doc,
-                    elem,
-                    "Area",
-                    "Host Area Computed",
-                    "Computed Area"
-                );
-                string volume = GetFirstAvailableParameterValue(
-                    doc,
-                    elem,
-                    "Volume",
-                    "Host Volume Computed"
-                );
-                string weight = GetFirstAvailableParameterValue(
-                    doc,
-                    elem,
-                    "Weight",
-                    "Calculated Weight",
-                    "Mass"
-                );
-                string unitWeight = GetFirstAvailableParameterValue(
-                    doc,
-                    elem,
-                    "Material: Unit weight",
-                    "Unit Weight",
-                    "Weight per Unit Length",
-                    "Mass per Unit Length"
-                );
+                string mark = ParameterReader.Text(doc, elem, new ParamCandidate("Mark", BuiltInParameter.ALL_MODEL_MARK));
+                string assemblyCode = partSource != null
+                    ? ParameterReader.AssemblyCode(doc, partSource)
+                    : "";
+                if (string.IsNullOrWhiteSpace(assemblyCode))
+                    assemblyCode = ParameterReader.AssemblyCode(doc, elem);
+                string assemblyDescription = ParameterReader.AssemblyDescription(doc, elem);
+                BuildingQuantities quantities = BuildingQuantities.Read(doc, elem);
+                summary.Add(category, assemblyCode);
+                summary.AddQuantities(category, quantities.Length, quantities.Area, quantities.Volume);
+                string length = ParameterReader.Format(quantities.Length);
+                string width = ParameterReader.Format(quantities.Width);
+                string depth = ParameterReader.Format(quantities.Depth);
+                string height = ParameterReader.Format(quantities.Height);
+                string area = ParameterReader.Format(quantities.Area);
+                string volume = ParameterReader.Format(quantities.Volume);
+                string weight = ParameterReader.Format(quantities.Weight);
+                string unitWeight = ParameterReader.Format(quantities.UnitWeight);
                 string material = GetMaterialSummary(doc, elem);
                 string typeComments = GetTypeParameterValue(doc, elem, "Type Comments");
                 string baseLevel = GetParameterValue(elem.LookupParameter("Base Level"), doc);
                 string topLevel = GetParameterValue(elem.LookupParameter("Top Level"), doc);
-                string baseOffset = GetParameterValue(elem.LookupParameter("Base Offset"), doc);
-                string topOffset = GetParameterValue(elem.LookupParameter("Top Offset"), doc);
-                string comments = GetParameterValue(elem.LookupParameter("Comments"), doc);
+                string baseOffset = ParameterReader.Format(quantities.BaseOffset);
+                string topOffset = ParameterReader.Format(quantities.TopOffset);
+                string comments = ParameterReader.Text(doc, elem, new ParamCandidate("Comments", BuiltInParameter.ALL_MODEL_INSTANCE_COMMENTS));
                 string parameterSnapshot = BuildParameterSnapshot(doc, elem);
 
                 csv.AppendLine(string.Join(",",
@@ -312,11 +273,14 @@ namespace QTO
                     EscapeCsv(roomData.RoomLocationYFeet),
                     EscapeCsv(roomData.RoomLocationZFeet),
                     EscapeCsv(comments),
-                    EscapeCsv(parameterSnapshot)
+                    EscapeCsv(parameterSnapshot),
+                    EscapeCsv(partSourceId),
+                    EscapeCsv(categoryLocal)
                 ));
             }
 
             File.WriteAllText(filePath, csv.ToString(), Encoding.UTF8);
+            return summary;
         }
 
         private string BuildParameterSnapshot(Document doc, Element elem)
@@ -388,6 +352,22 @@ namespace QTO
             return "";
         }
 
+        /// <summary>
+        /// English category of the element a part was divided from (language-independent, P4.5);
+        /// the "Original Category" parameter text only if the source can't be resolved.
+        /// </summary>
+        private string GetOriginalCategory(Element elem, Document doc)
+        {
+            if (!IsPartElement(elem))
+                return "";
+
+            Element? source = PartSource.SourceElement(doc, elem);
+            if (source != null)
+                return Categories.English(source.Category);
+
+            return GetOriginalPartValue(elem, doc, "Original Category", "Original Category Id", "Part Original Category");
+        }
+
         private string GetOriginalPartValue(Element elem, Document doc, params string[] parameterNames)
         {
             if (!IsPartElement(elem))
@@ -418,28 +398,6 @@ namespace QTO
             }
 
             return "";
-        }
-
-        private string GetAssemblyCode(Element elem, Document doc)
-        {
-            Parameter parameter = elem.LookupParameter("Assembly Code");
-            string value = GetParameterValue(parameter, doc);
-
-            if (!string.IsNullOrWhiteSpace(value))
-                return value;
-
-            ElementId typeId = elem.GetTypeId();
-            if (typeId == ElementId.InvalidElementId)
-                return "";
-
-            Element typeElem = doc.GetElement(typeId);
-            if (typeElem == null)
-                return "";
-
-            Parameter typeParameter = typeElem.LookupParameter("Assembly Code");
-            value = GetParameterValue(typeParameter, doc);
-
-            return string.IsNullOrWhiteSpace(value) ? "" : value;
         }
 
         private string GetFirstAvailableParameterValue(Document doc, Element elem, params string[] parameterNames)

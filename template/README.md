@@ -2,7 +2,36 @@
 
 The per-team data repo template (project config, cost DB, STV mapping, custom materials, macro schedule, exports, pipeline workflow). Ships without any course or RSMeans data.
 
-Filled by: Phase 5 (P5.1, P5.2). Already here: `project_config.example.json` (P3.1).
+Filled by: Phase 5 (P5.1, P5.2). Already here: `project_config.example.json` (P3.1),
+`cost_db.csv` and `examples/cost_db.example.csv` (P3.4), `stv_mapping.csv` (P3.6),
+`custom_materials.csv` (P3.7).
+
+## `cost_db.csv`
+
+The TVD cost DB, shipped **empty** (header only): no RSMeans or course data. Fill in one row
+per cost line item (format and rules: [`docs/engines/tvd.md`](../docs/engines/tvd.md)), set
+`files.cost_db` in the config and check it with `concho costdb validate cost_db.csv --config
+project_config.json`. `examples/cost_db.example.csv` shows five invented rows with comments
+(takeoff, mirror, counted codes, lump sum, percent of subtotal). A team with an old AutoTVD
+`cost_data.csv` converts it with `python scripts/migrate_cost_data.py`.
+
+## `stv_mapping.csv`
+
+The default STV mapping table (P3.6): Revit export rows → course LCA catalog entries for
+common Uniformat codes, a small reviewed set (names only, no LCA values; not course data).
+`concho-stv` uses it when the project sets no `files.stv_mapping`. Copy it, extend it with
+your categories and keywords (format: [`docs/engines/stv.md`](../docs/engines/stv.md)) and
+check it with `concho stvmap validate stv_mapping.csv` (with `$COURSE_STV_XLSX` set for the
+catalog check). The `mapping_coverage` block of the results lists what is still unmapped.
+
+## `custom_materials.csv`
+
+STV custom materials (P3.7), shipped **empty** (header only). One row per material that is not
+in the course LCA catalog, with its values from an EPD per unit of the material (columns of a
+course `LCA Data` row plus `source` and `is_course_data: false`; format:
+[`docs/engines/stv.md`](../docs/engines/stv.md#custom-materials-custom_materialscsv-p37)).
+Set `files.custom_materials` in the config and check it with `concho custmat validate
+custom_materials.csv` (with `$COURSE_STV_XLSX` set, so names are checked against the catalog).
 
 ## `project_config.example.json`
 
@@ -21,22 +50,34 @@ validation rules: [`docs/config.md`](../docs/config.md). Check your copy with
   A team with a fixed total writes `"total_target": …` instead of `budget` + `target`.
   - `cluster_split` with `method: derive_from_references` mirrors the course "TVD Targets" /
     "TVD Owners" sheets: four reference columns (shares per cluster A–H, each column sums
-    to 1.0), owner ratings per cluster and the 10 % reallocation. The alternative is
+    to 1.0), owner value items per cluster rated 0–10 by two owners (`null` = blank), the
+    10 % reallocation and a team adjustment (+1 % Shell, −1 % Building Sitework; sums to 0).
+    `target_shares: null` means the targets are L + M; typed-in shares (course column N)
+    would replace them. The alternative is
     `method: explicit` with `basis: amount` (currency per cluster) or `basis: pct`
     (fractions summing to 1.0).
   - `custom_clusters`: "Owner Allowance" is team data (`is_course_data: false`) and
     `carved_out`: its 250,000 comes out of the total, clusters A–H share the rest. With
     `on_top` it would be added to the total instead (reported as a warning).
   - `target_sum_tolerance`: 0.001 = cluster targets may differ from the total by 0.1 %.
+  - `target_sum_override` (not set here): a reason string that accepts cluster targets
+    outside the tolerance; the TVD engine then reports status `override` instead of
+    failing.
 - **`stv`**: `course_team` picks the team row of the course STV workbook (Pacific, Atlantic,
   Ridge, Island, River, Central, Express). The workbook path comes from the env var named in
   `course_workbook_env`, never from this file.
   - `use_phase`: every value is stated. `natural_gas_m3: 0` and `lab_sink_gpm: 0` are
     explicit zeros; `cogeneration: null` means no cogeneration. `urinal_gpf: 0.125` means
     urinals exist; `null` would mean no urinals (toilet factor 1.0), `0` the course
-    behaviour (factor 0.75), see decision D11. A team that has not modeled the use phase yet
-    writes `"use_phase": {"not_modeled": true}` instead.
-  - `custom_materials_file: null`: no custom materials (P3.7).
+    behaviour (factor 0.75), see decision D11. `onsite_renewable_kwh` is the PV output: the
+    course books it at zero impact and does not subtract it from `grid_kwh`, so `grid_kwh` is
+    the grid draw that remains. A team that has not modeled the use phase yet writes
+    `"use_phase": {"not_modeled": true, "not_modeled_reason": "…why…"}` instead (P3.8).
+  - `construction_items`: items that are not in the Revit exports, typed in as in the course
+    sheet "Construction and Materials"; here 3,000 sf of PV panels as Energy /
+    `Photovoltaics (sf)` (P3.8). `note` (required) says where the amount comes from.
+  - `custom_materials_file: null`: no custom materials (P3.7; format in
+    `custom_materials.csv`).
 - **`schedule`**: construction from 2029-03-01 to 2030-06-30, Monday–Friday, 8 h/day, four
   holidays and a winter shutdown as a blocked window. `rooms_per_zone` and `trade_sequence`
   drive the takt planner (the sequence shown is the engine default). All licensed-tool
@@ -46,3 +87,4 @@ validation rules: [`docs/config.md`](../docs/config.md). Check your copy with
 - **`files`**: all `null` until the team has its files (formats: cost DB P3.4, STV mapping
   P3.6, custom materials P3.7, macro schedule P3B.1, schedule rules P3B.2). Validation warns
   that `cost_db` and `macro_schedule` are unset. Paths are relative to the config file.
+  With `stv_mapping: null`, `concho-stv` uses the default table `template/stv_mapping.csv`.

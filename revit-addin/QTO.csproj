@@ -1,28 +1,71 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
+  <!--
+    One build per Revit version, selected by the configuration:
+      Debug R25 / Release R25  -> Revit 2025
+      Debug R26 / Release R26  -> Revit 2026 (also the plain Debug / Release default)
+    Output: bin\<Configuration>\QTO.dll
+    The Revit API comes from the Nice3point reference packages (compile-time only, not copied to
+    the output), so the add-in builds without Revit installed.
+  -->
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
+    <Configurations>Debug R25;Debug R26;Release R25;Release R26</Configurations>
+    <Platforms>AnyCPU</Platforms>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="$(Configuration.EndsWith('R25'))">
+    <RevitVersion>2025</RevitVersion>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(RevitVersion)' == ''">
+    <RevitVersion>2026</RevitVersion>
+  </PropertyGroup>
+
+  <!-- Pinned reference package versions (latest of each Revit year at the time of P4.1). -->
+  <PropertyGroup>
+    <RevitApiPackageVersion Condition="'$(RevitVersion)' == '2025'">2025.4.60</RevitApiPackageVersion>
+    <RevitApiPackageVersion Condition="'$(RevitVersion)' == '2026'">2026.4.10</RevitApiPackageVersion>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="$(Configuration.StartsWith('Release'))">
+    <Optimize>true</Optimize>
+    <DebugType>portable</DebugType>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <!-- Allows building the Windows target on Linux/macOS (CI, local checks). -->
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <PlatformTarget>x64</PlatformTarget>
     <AssemblyName>QTO</AssemblyName>
     <RootNamespace>QTO</RootNamespace>
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <DefineConstants>$(DefineConstants);REVIT$(RevitVersion)</DefineConstants>
+  </PropertyGroup>
+
+  <!-- Assembly metadata (P4.5). Release builds for a tag v<x.y.z>[-<suffix>] pass VersionPrefix and
+       VersionSuffix from the tag (.github/workflows/revit-addin-release.yml). -->
+  <PropertyGroup>
+    <VersionPrefix>0.4.5</VersionPrefix>
+    <Company>Concho – Maximilian Nagel &amp; Ashmitha Jaysi Sivakumar, Stanford AEC Global Teamwork</Company>
+    <Product>Concho QTO Revit add-in</Product>
+    <Copyright>© 2026 Maximilian Nagel &amp; Ashmitha Jaysi Sivakumar</Copyright>
+    <AssemblyTitle>Concho QTO Revit add-in (Revit $(RevitVersion))</AssemblyTitle>
   </PropertyGroup>
 
   <ItemGroup>
     <Compile Include="*.cs" />
+  </ItemGroup>
 
-    <Reference Include="RevitAPI">
-      <HintPath>C:\Program Files\Autodesk\Revit 2026\RevitAPI.dll</HintPath>
-      <Private>false</Private>
-    </Reference>
-
-    <Reference Include="RevitAPIUI">
-      <HintPath>C:\Program Files\Autodesk\Revit 2026\RevitAPIUI.dll</HintPath>
-      <Private>false</Private>
-    </Reference>
+  <ItemGroup>
+    <!-- WPF (Microsoft.Win32.OpenFolderDialog) for choosing the export folder; Revit ships it. -->
+    <FrameworkReference Include="Microsoft.WindowsDesktop.App.WPF" />
+    <PackageReference Include="Nice3point.Revit.Api.RevitAPI" Version="$(RevitApiPackageVersion)" PrivateAssets="all" ExcludeAssets="runtime" />
+    <PackageReference Include="Nice3point.Revit.Api.RevitAPIUI" Version="$(RevitApiPackageVersion)" PrivateAssets="all" ExcludeAssets="runtime" />
   </ItemGroup>
 
 </Project>
-

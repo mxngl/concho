@@ -1,0 +1,79 @@
+# STV mapping table: Island 2026 (P3.6). TEAM DATA, NOT COURSE DATA.
+# Revit export rows -> course LCA catalog entries (names only, no LCA values).
+# Reproduces the Island importers before P3.6 (revit_architecture.py, revit_structural.py,
+# revit_mep.py @ concho 17da703); format and matching order: docs/engines/stv.md.
+# Explicitly unmapped as before (no rule): MEP "34274" electrical fixtures and
+# "Utility Switchboard" electrical equipment; structural and architecture "Parts" (P3.9).
+discipline,assembly_code,category,keyword,priority,stv_assembly,stv_material_type,quantity_field,conversion,note
+architecture,,Curtain Panels,,100,Exterior Wall,Curtain Wall Double Pane (sf),area,,
+architecture,,Curtain Wall Mullions,,100,Exterior Wall,Curtain Wall Double Pane (sf),area,,mullion Area is booked as curtain wall area (as before P3.6)
+architecture,,Doors,,100,Interior Wall,Timber Studs and Painted Gypsum (sf),area,door_area(thickness_in=1.75),all doors as timber-stud wall area (as before P3.6); Island door thickness 1.75 in for the volume fallback
+architecture,,Floors,wood|timber|glulam|clt|lumber,100,Floor,Wood System (sf),area,,
+architecture,,Floors,structural bamboo,110,Floor,Concrete (sf),area,,"proxy (bamboo, P3.7: no usable EPD yet, see docs/engines/stv.md): structural bamboo floors (Bamboo - 6"") are booked as concrete floor (default rule before P3.6)"
+architecture,,Floors,,100,Floor,Concrete (sf),area,,default for floors
+architecture,,Roofs,green,10,Roof,Green Roof (sf),area,,
+architecture,,Roofs,epdm|membrane,20,Roof,EPDM Membrane (sf),area,,
+architecture,,Roofs,wood|timber|lumber,30,Roof,Wood Structure (sf),area,,
+architecture,,Roofs,,100,Roof,EPDM Membrane (sf),area,,default for roofs
+architecture,B2000,Walls,storefront|curtain|glazing|glass,10,Exterior Wall,Curtain Wall Double Pane (sf),area,,exterior wall by code (B20)
+architecture,B2000,Walls,brick,20,Exterior Wall,Brick on Metal Stud (sf),area,,exterior wall by code (B20)
+architecture,B2000,Walls,concrete,30,Exterior Wall,Concrete Cladding (sf),area,,exterior wall by code (B20)
+architecture,B2000,Walls,,100,Exterior Wall,EIFS on Metal Stud (sf),area,,"exterior wall by code (B20), default"
+architecture,,Walls,exterior|storefront|curtain & storefront|curtain|glazing|glass,10,Exterior Wall,Curtain Wall Double Pane (sf),area,,exterior wall by name
+architecture,,Walls,exterior|storefront|curtain & brick,20,Exterior Wall,Brick on Metal Stud (sf),area,,exterior wall by name
+architecture,,Walls,exterior|storefront|curtain & concrete,30,Exterior Wall,Concrete Cladding (sf),area,,exterior wall by name
+architecture,,Walls,exterior|storefront|curtain,40,Exterior Wall,EIFS on Metal Stud (sf),area,,"exterior wall by name, default"
+architecture,,Walls,concrete,50,Interior Wall,Concrete and Painted Gypsum (sf),area,,
+architecture,,Walls,wood|timber|lumber,60,Interior Wall,Timber Studs and Painted Gypsum (sf),area,,
+architecture,,Walls,structural bamboo,70,Interior Wall,Steel Studs and Painted Gypsum (sf),area,,"proxy (bamboo, P3.7: no usable EPD yet, see docs/engines/stv.md): structural bamboo walls (Bamboo- 8"") are booked as steel-stud partitions (default rule before P3.6)"
+architecture,,Walls,,100,Interior Wall,Steel Studs and Painted Gypsum (sf),area,,default for walls
+structural,,Structural Columns,concrete,10,Columns,Reinforced Concrete Column (cy),volume,cf_to_cy,
+structural,,Structural Columns,structural bamboo,15,Columns,Glulam Column (kg),volume,density_kg_per_cf=19.43,"proxy (bamboo, P3.7: no usable EPD yet, see docs/engines/stv.md): bamboo is not in the course catalog; Island bamboo columns (Timber-Column family) are booked as glulam at the glulam density 19.43 kg/cf"
+structural,,Structural Columns,glulam|timber,20,Columns,Glulam Column (kg),volume,density_kg_per_cf=19.43,glulam density 19.43 kg/cf (team value)
+structural,,Structural Framing,concrete,10,Beams,Reinforced Concrete Beam (cy),volume,cf_to_cy,
+structural,,Structural Framing,structural bamboo,15,Beams,Glulam Beam (kg),volume,density_kg_per_cf=19.43,"proxy (bamboo, P3.7: no usable EPD yet, see docs/engines/stv.md): bamboo is not in the course catalog; Island bamboo beams (Glulam-Western Species family) are booked as glulam at the glulam density 19.43 kg/cf"
+structural,,Structural Framing,glulam,20,Beams,Glulam Beam (kg),volume,density_kg_per_cf=19.43,glulam density 19.43 kg/cf (team value)
+structural,,Structural Framing,wood|softwood|lumber,30,Beams,Wood Beam (kg),volume,density_kg_per_cf=12.72,softwood lumber density 12.72 kg/cf (team value)
+structural,,Structural Foundations,slab,10,Foundation,Concrete Slab (cy),volume,cf_to_cy,
+structural,,Structural Foundations,footing,20,Foundation,Strip Foundation (cy),volume,cf_to_cy,
+structural,,Structural Foundations,concrete,30,Foundation,Concrete Slab (cy),volume,cf_to_cy,other concrete foundations
+structural,,Floors,wood|timber|glulam|lumber|clt|plywood,10,Floor,Wood System (sf),area,,
+structural,,Floors,concrete|slab|deck,20,Floor,Concrete (sf),area,,structural floors without these keywords stay unmapped (as before P3.6)
+mep,,Air Terminals,supply diffuser,10,MEP,Air Handling Unit (m^3/s),airflow,,terminal airflow booked as AHU capacity (as before P3.6)
+mep,,Air Terminals,exhaust grill,10,MEP,Air Handling Unit (m^3/s),airflow,,terminal airflow booked as AHU capacity (as before P3.6)
+mep,,Air Terminals,return diffuser,10,MEP,Air Handling Unit (m^3/s),airflow,,terminal airflow booked as AHU capacity (as before P3.6)
+mep,,Air Terminals,price-40ff- filter frame stamped residential grille-return hosted,10,MEP,Air Filters (m^3/s),airflow,,
+mep,,Mechanical Equipment,outdoor ahu - horizontal,10,MEP,Air Handling Unit (m^3/s),airflow,,
+mep,,Duct Fittings,rectangular elbow - mitered,10,MEP,Stainless Steel Duct (kg),weight,duct_weight_estimate(surface_factor=1.3;density_kg_per_m3=8000;gauge_m=0.0005/0.0006/0.0008;gauge_limits_m=0.3/0.6),"Weight, else sheet-metal estimate: fitting surface factor 1.3, stainless 8000 kg/m3, gauge 0.5/0.6/0.8 mm up to 0.3/0.6 m (team values)"
+mep,,Duct Fittings,rectangular tee,10,MEP,Stainless Steel Duct (kg),weight,duct_weight_estimate(surface_factor=1.6;density_kg_per_m3=8000;gauge_m=0.0005/0.0006/0.0008;gauge_limits_m=0.3/0.6),"Weight, else sheet-metal estimate: fitting surface factor 1.6, stainless 8000 kg/m3, gauge 0.5/0.6/0.8 mm up to 0.3/0.6 m (team values)"
+mep,,Duct Fittings,rectangular cross,10,MEP,Stainless Steel Duct (kg),weight,duct_weight_estimate(surface_factor=1.8;density_kg_per_m3=8000;gauge_m=0.0005/0.0006/0.0008;gauge_limits_m=0.3/0.6),"Weight, else sheet-metal estimate: fitting surface factor 1.8, stainless 8000 kg/m3, gauge 0.5/0.6/0.8 mm up to 0.3/0.6 m (team values)"
+mep,,Duct Fittings,rectangular transition - angle,10,MEP,Stainless Steel Duct (kg),weight,duct_weight_estimate(surface_factor=1.2;density_kg_per_m3=8000;gauge_m=0.0005/0.0006/0.0008;gauge_limits_m=0.3/0.6),"Weight, else sheet-metal estimate: fitting surface factor 1.2, stainless 8000 kg/m3, gauge 0.5/0.6/0.8 mm up to 0.3/0.6 m (team values)"
+mep,,Duct Fittings,rectangular to round transition - angle,10,MEP,Stainless Steel Duct (kg),weight,duct_weight_estimate(surface_factor=1.25;density_kg_per_m3=8000;gauge_m=0.0005/0.0006/0.0008;gauge_limits_m=0.3/0.6),"Weight, else sheet-metal estimate: fitting surface factor 1.25, stainless 8000 kg/m3, gauge 0.5/0.6/0.8 mm up to 0.3/0.6 m (team values)"
+mep,,Ducts,stainless,20,MEP,Stainless Steel Duct (kg),weight,,
+mep,,Ducts,diameter_in<=15,30,MEP,"Steel Duct 12""D (ft)",length,duct_equivalent_length,nominal diameter up to 15 in
+mep,,Ducts,diameter_in>15,30,MEP,"Steel Duct 18""D (ft)",length,duct_equivalent_length,nominal diameter over 15 in
+mep,,Ducts,,100,MEP,"Steel Duct 12""D (ft)",length,duct_equivalent_length,diameter unknown: 12 in (as before P3.6)
+mep,,Flex Ducts,stainless,20,MEP,Stainless Steel Duct (kg),weight,,
+mep,,Flex Ducts,diameter_in<=15,30,MEP,"Steel Duct 12""D (ft)",length,duct_equivalent_length,nominal diameter up to 15 in
+mep,,Flex Ducts,diameter_in>15,30,MEP,"Steel Duct 18""D (ft)",length,duct_equivalent_length,nominal diameter over 15 in
+mep,,Flex Ducts,,100,MEP,"Steel Duct 12""D (ft)",length,duct_equivalent_length,diameter unknown: 12 in (as before P3.6)
+mep,,Duct Fittings,stainless,20,MEP,Stainless Steel Duct (kg),weight,,
+mep,,Duct Fittings,diameter_in<=15,30,MEP,"Steel Duct 12""D (ft)",length,duct_equivalent_length,nominal diameter up to 15 in
+mep,,Duct Fittings,diameter_in>15,30,MEP,"Steel Duct 18""D (ft)",length,duct_equivalent_length,nominal diameter over 15 in
+mep,,Duct Fittings,,100,MEP,"Steel Duct 12""D (ft)",length,duct_equivalent_length,diameter unknown: 12 in (as before P3.6)
+mep,,Air Terminals,stainless,20,MEP,Stainless Steel Duct (kg),weight,,
+mep,,Air Terminals,diameter_in<=15,30,MEP,"Steel Duct 12""D (ft)",length,duct_equivalent_length,nominal diameter up to 15 in
+mep,,Air Terminals,diameter_in>15,30,MEP,"Steel Duct 18""D (ft)",length,duct_equivalent_length,nominal diameter over 15 in
+mep,,Air Terminals,,100,MEP,"Steel Duct 12""D (ft)",length,duct_equivalent_length,diameter unknown: 12 in (as before P3.6)
+mep,,Pipes,copper,10,MEP,Copper Pipe (kg),weight,,
+mep,,Pipes,stainless|steel,20,MEP,Stainless Steel Pipe (kg),weight,,
+mep,,Pipes,hdpe|polyethylene,30,MEP,HDPE Pipe (kg),weight,,
+mep,,Pipe Fittings,copper,10,MEP,Copper Pipe (kg),weight,,
+mep,,Pipe Fittings,stainless|steel,20,MEP,Stainless Steel Pipe (kg),weight,,
+mep,,Pipe Fittings,hdpe|polyethylene,30,MEP,HDPE Pipe (kg),weight,,
+mep,,Pipe Accessories,copper,10,MEP,Copper Pipe (kg),weight,,
+mep,,Pipe Accessories,stainless|steel,20,MEP,Stainless Steel Pipe (kg),weight,,
+mep,,Pipe Accessories,hdpe|polyethylene,30,MEP,HDPE Pipe (kg),weight,,
+mep,,Flex Pipes,copper,10,MEP,Copper Pipe (kg),weight,,
+mep,,Flex Pipes,stainless|steel,20,MEP,Stainless Steel Pipe (kg),weight,,
+mep,,Flex Pipes,hdpe|polyethylene,30,MEP,HDPE Pipe (kg),weight,,

@@ -6,14 +6,20 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "QTO", "QTO.csproj", "{3A798
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
-		Debug|Any CPU = Debug|Any CPU
-		Release|Any CPU = Release|Any CPU
+		Debug R25|Any CPU = Debug R25|Any CPU
+		Debug R26|Any CPU = Debug R26|Any CPU
+		Release R25|Any CPU = Release R25|Any CPU
+		Release R26|Any CPU = Release R26|Any CPU
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
-		{3A798C92-DA22-B784-11D5-249F2DEA19E6}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{3A798C92-DA22-B784-11D5-249F2DEA19E6}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{3A798C92-DA22-B784-11D5-249F2DEA19E6}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{3A798C92-DA22-B784-11D5-249F2DEA19E6}.Release|Any CPU.Build.0 = Release|Any CPU
+		{3A798C92-DA22-B784-11D5-249F2DEA19E6}.Debug R25|Any CPU.ActiveCfg = Debug R25|Any CPU
+		{3A798C92-DA22-B784-11D5-249F2DEA19E6}.Debug R25|Any CPU.Build.0 = Debug R25|Any CPU
+		{3A798C92-DA22-B784-11D5-249F2DEA19E6}.Debug R26|Any CPU.ActiveCfg = Debug R26|Any CPU
+		{3A798C92-DA22-B784-11D5-249F2DEA19E6}.Debug R26|Any CPU.Build.0 = Debug R26|Any CPU
+		{3A798C92-DA22-B784-11D5-249F2DEA19E6}.Release R25|Any CPU.ActiveCfg = Release R25|Any CPU
+		{3A798C92-DA22-B784-11D5-249F2DEA19E6}.Release R25|Any CPU.Build.0 = Release R25|Any CPU
+		{3A798C92-DA22-B784-11D5-249F2DEA19E6}.Release R26|Any CPU.ActiveCfg = Release R26|Any CPU
+		{3A798C92-DA22-B784-11D5-249F2DEA19E6}.Release R26|Any CPU.Build.0 = Release R26|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

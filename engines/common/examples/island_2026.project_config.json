@@ -40,7 +40,8 @@
     "lifetime_years": 50,
     "course_workbook_env": "COURSE_STV_XLSX",
     "use_phase": {
-      "not_modeled": true
+      "not_modeled": true,
+      "not_modeled_reason": "Island 2026 reference result C (2026-05-15) has no use-phase inputs; kept construction-only so the reference result stays reproducible. With use phase: island_2026_use_phase.project_config.json (P3.8)."
     }
   },
   "schedule": {
@@ -51,6 +52,11 @@
       "holidays": []
     },
     "blocked_windows": [
+      {
+        "name": "Hurricane season 2029 (Jun-Oct, peak Aug-Oct)",
+        "start": "2029-06-01",
+        "end": "2029-10-31"
+      },
       {
         "name": "Hurricane season 2030 (Jun-Oct, peak Aug-Oct)",
         "start": "2030-06-01",
@@ -87,7 +93,7 @@
   },
   "files": {
     "cost_db": null,
-    "stv_mapping": null,
+    "stv_mapping": "../../stv/examples/island/stv_mapping.csv",
     "custom_materials": null,
     "macro_schedule": null,
     "schedule_rules": "../../schedule/examples/island/micro_schedule_rules.json",

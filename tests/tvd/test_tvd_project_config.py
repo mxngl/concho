@@ -14,7 +14,7 @@ from dashboards.tvd.legacy_render import generate_html
 from engines.common.config import CourseCluster, load_config
 from engines.tvd.cli import main
 from engines.tvd.clusters import course_cluster, display_name
-from engines.tvd.cost_db import load_cost_data
+from engines.tvd.cost_db import cost_db_from_dicts
 from engines.tvd.engine import run_files
 from engines.tvd.targets import ProjectTargets
 
@@ -56,10 +56,12 @@ def test_cluster_names(label, cluster, name):
 
 
 def test_cost_db_normalises_cluster_names():
-    rows = [{"Cluster Name": "Special Contruction", "Assembly Code": "F1010"},
-            {"Cluster Name": "Crane Rental", "Assembly Code": "Z9"}]
-    assert [r["cluster"] for r in load_cost_data(rows)] == ["Special Construction",
-                                                             "Crane Rental"]
+    base = {"description": "x", "unit": "LS", "unit_cost": "1", "quantity_rule": "fixed"}
+    rows = [{**base, "cluster": "Special Contruction", "assembly_code": "F1010"},
+            {**base, "cluster": "Crane Rental", "assembly_code": "Z9000"}]
+    db = cost_db_from_dicts(rows, custom_clusters=["Crane Rental"])
+    assert [line.display_cluster for line in db.lines] == ["Special Construction",
+                                                           "Crane Rental"]
 
 
 # ── targets from config ─────────────────────────────────────────────────────
@@ -86,14 +88,18 @@ def test_river_targets_pct_split_with_carved_out(river_config):
 def test_targets_outside_tolerance_fail(island_config):
     bad = island_config.model_copy(deep=True)
     bad.tvd.target_sum_tolerance = 0.0001  # 5,852 > 1,670
-    with pytest.raises(ValueError, match="above the total target"):
+    with pytest.raises(ValueError, match=r"gap \+5,852.00 \(\+0.0350 %\)"):
         ProjectTargets.from_config(bad).check()
 
 
-def test_derive_from_references_not_implemented():
+def test_derive_from_references_targets():
     template = load_config(TEMPLATE_CONFIG)
-    with pytest.raises(NotImplementedError, match="P3.5"):
-        ProjectTargets.from_config(template)
+    targets = ProjectTargets.from_config(template)
+    base = 18_500_000 - 250_000  # target minus the carved-out Owner Allowance
+    assert sum(v for n, v in targets.cluster_targets.items()
+               if n != "Owner Allowance") == pytest.approx(base)
+    assert targets.derivation.course.final_source == "L+M"
+    assert targets.check() == []
 
 
 # ── second config changes exactly the project-dependent outputs ─────────────

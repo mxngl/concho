@@ -1,0 +1,123 @@
+{
+  "$schema": "../../../docs/schema/project_config.schema.json",
+  "project": {
+    "name": "Island 2026 university building",
+    "team_name": "Island Team 2026",
+    "location": "San Juan, Puerto Rico",
+    "currency": "USD",
+    "units": "imperial",
+    "gross_sf": 30000,
+    "completion_date": "2030-09-30"
+  },
+  "tvd": {
+    "total_target": 16700000,
+    "cluster_split": {
+      "method": "explicit",
+      "basis": "amount",
+      "values": {
+        "A": 1781276,
+        "B": 3826446,
+        "C": 2005842,
+        "D": 4041448,
+        "E": 1319286,
+        "F": 1001839,
+        "G": 1435258,
+        "H": 1294457
+      }
+    },
+    "custom_clusters": [
+      {
+        "name": "Equipment Rental",
+        "target": 400000,
+        "mode": "on_top",
+        "is_course_data": false
+      }
+    ],
+    "target_sum_tolerance": 0.001
+  },
+  "stv": {
+    "course_team": "Island",
+    "lifetime_years": 50,
+    "course_workbook_env": "COURSE_STV_XLSX",
+    "use_phase": {
+      "not_modeled": false,
+      "grid_kwh": 0,
+      "onsite_renewable_kwh": 216992,
+      "natural_gas_m3": 0,
+      "cogeneration": null,
+      "water": {
+        "toilet_gpf": 1.0,
+        "urinal_gpf": null,
+        "wc_sink_gpm": 0.2,
+        "lab_sink_gpm": 0.3,
+        "kitchen_sink_gpm": 0,
+        "shower_gpm": 0,
+        "landscaping_gal": 0,
+        "rainwater_gal": 396183
+      }
+    },
+    "construction_items": [
+      {
+        "assembly": "Energy",
+        "material_type": "Photovoltaics (sf)",
+        "amount": 5000,
+        "note": "team input, not course data: PV panel area from the team workbook STV_LAMARCASINA_BAMBOO.xlsx. Open question for Max/Ash: 5,000 sf gives roughly 150,000 kWh/yr, the slide's 216,992 kWh/yr needs about 7,000-7,500 sf (docs/engines/stv.md)."
+      }
+    ]
+  },
+  "schedule": {
+    "start_date": "2029-10-01",
+    "calendar": {
+      "hours_per_day": 8,
+      "workdays": ["Mon", "Tue", "Wed", "Thu", "Fri"],
+      "holidays": []
+    },
+    "blocked_windows": [
+      {
+        "name": "Hurricane season 2029 (Jun-Oct, peak Aug-Oct)",
+        "start": "2029-06-01",
+        "end": "2029-10-31"
+      },
+      {
+        "name": "Hurricane season 2030 (Jun-Oct, peak Aug-Oct)",
+        "start": "2030-06-01",
+        "end": "2030-10-31"
+      }
+    ],
+    "target_completion": "2030-09-30",
+    "rooms_per_zone": 2,
+    "trade_sequence": ["Interior Walls", "MEP", "Ceiling", "Doors", "Interior Finishes"],
+    "adapters": {
+      "alice": true,
+      "fuzor": true,
+      "manufacton": true
+    }
+  },
+  "agent": {
+    "default_language": "en",
+    "models": {
+      "router": "gpt-4o",
+      "subagent": "gpt-4o-mini",
+      "tts": null
+    },
+    "discord": {
+      "guild": "DISCORD_GUILD_ID",
+      "channels": {
+        "ask": "DISCORD_CHANNEL_ID_ASK",
+        "debug": "DISCORD_CHANNEL_ID_DEBUG"
+      }
+    },
+    "extensions": {
+      "transcripts": false,
+      "clashbot": false
+    }
+  },
+  "files": {
+    "cost_db": null,
+    "stv_mapping": "../../stv/examples/island/stv_mapping.csv",
+    "custom_materials": null,
+    "macro_schedule": null,
+    "schedule_rules": "../../schedule/examples/island/micro_schedule_rules.json",
+    "exports": "exports"
+  }
+}

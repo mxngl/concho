@@ -260,8 +260,51 @@ def test_reference_column_shares_sum_to_one(base):
 
 
 def test_owner_ratings_cover_all_clusters(base):
-    del base["tvd"]["cluster_split"]["owner_ratings"]["D"]
-    assert "owner_ratings must rate all clusters A-H; missing: D" in _errors(base)
+    del base["tvd"]["cluster_split"]["owner_ratings"]["items"]["D"]
+    assert "items must list all clusters A-H; missing: D" in _errors(base)
+
+
+def test_owner_ratings_by_known_owners_in_range(base):
+    items = base["tvd"]["cluster_split"]["owner_ratings"]["items"]
+    items["A"][0]["ratings"]["Owner 3"] = 5
+    assert "items.A 'Foundation durability': ratings by unknown owner(s) ['Owner 3']" in (
+        _errors(base))
+    del items["A"][0]["ratings"]["Owner 3"]
+    items["B"][0]["ratings"]["Owner 1"] = 11
+    assert "less than or equal to 10" in _errors(base)
+
+
+def test_owner_ratings_all_blank_or_zero(base):
+    split = base["tvd"]["cluster_split"]
+    for items in split["owner_ratings"]["items"].values():
+        for it in items:
+            it["ratings"] = {o: 0 for o in it["ratings"]}
+    assert "owner_ratings has no rating above 0" in _errors(base)
+    split["reallocation_pct"] = 0
+    _ok(base)
+
+
+def test_unrated_cluster_warns(base):
+    base["tvd"]["cluster_split"]["owner_ratings"]["items"]["E"] = []
+    report = _validate(base)
+    assert report.ok
+    assert any("no owner rating for cluster(s) E" in w for w in report.warnings)
+
+
+def test_team_adjustment_sums_to_zero(base):
+    base["tvd"]["cluster_split"]["team_adjustment"] = {"B": 0.02, "G": -0.01}
+    assert "team_adjustment must sum to 0" in _errors(base)
+    base["tvd"]["cluster_split"]["team_adjustment"] = {"A": -0.2, "B": 0.2}
+    assert "team_adjustment makes target shares negative: A (" in _errors(base)
+
+
+def test_target_shares_sum_to_one(base):
+    shares = {"A": 0.1, "B": 0.25, "C": 0.15, "D": 0.25, "E": 0.05, "F": 0.03, "G": 0.07,
+              "H": 0.1}
+    base["tvd"]["cluster_split"]["target_shares"] = shares
+    _ok(base)
+    shares["H"] = 0.2
+    assert "target_shares must sum to 1.0" in _errors(base)
 
 
 def test_cogeneration_splits_sum_to_one(base):
@@ -292,13 +335,30 @@ def test_use_phase_incomplete_fails(base):
 
 
 def test_use_phase_not_modeled_passes_with_warning(base):
-    base["stv"]["use_phase"] = {"not_modeled": True}
+    base["stv"]["use_phase"] = {"not_modeled": True, "not_modeled_reason": "no energy model"}
     report = _ok(base)
     assert any("not_modeled is true" in w for w in report.warnings)
+    assert report.config.stv.use_phase.not_modeled_reason == "no energy model"
+
+
+@pytest.mark.parametrize("reason", [None, "", "   "])
+def test_use_phase_not_modeled_needs_reason(base, reason):
+    """P3.8: not modeled is an explicit statement with a reason."""
+    base["stv"]["use_phase"] = {"not_modeled": True, "not_modeled_reason": reason}
+    assert "not_modeled_reason is missing" in _errors(base)
+    base["stv"]["use_phase"] = {"not_modeled": True}
+    assert "not_modeled_reason is missing" in _errors(base)
+
+
+def test_use_phase_reason_without_not_modeled_warns(base):
+    base["stv"]["use_phase"]["not_modeled_reason"] = "stale"
+    report = _ok(base)
+    assert any("not_modeled_reason is set but ignored" in w for w in report.warnings)
 
 
 def test_use_phase_not_modeled_with_values_warns(base):
     base["stv"]["use_phase"]["not_modeled"] = True
+    base["stv"]["use_phase"]["not_modeled_reason"] = "values kept for later"
     report = _ok(base)
     assert any("ignored because not_modeled" in w for w in report.warnings)
 

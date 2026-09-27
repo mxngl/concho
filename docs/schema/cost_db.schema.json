@@ -1,0 +1,143 @@
+{
+  "$id": "https://github.com/mxngl/concho/blob/main/docs/schema/cost_db.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "One cost line item (one row of ``cost_db.csv``). Team data, not course data.",
+  "properties": {
+    "cluster": {
+      "description": "Course cluster letter or name (A-H, e.g. 'Shell') or a custom cluster from tvd.custom_clusters.",
+      "minLength": 1,
+      "title": "Cluster",
+      "type": "string"
+    },
+    "assembly_code": {
+      "description": "Uniformat code (engines/common/uniformat.csv, level 3, or the 4-digit form of a level-2 code such as B2000), or a sub-code 'B2010.CW'.",
+      "pattern": "^[A-Z][0-9]{4}(\\.[A-Za-z0-9_-]+)?$",
+      "title": "Assembly Code",
+      "type": "string"
+    },
+    "group": {
+      "default": "",
+      "description": "Group label (free text).",
+      "title": "Group",
+      "type": "string"
+    },
+    "description": {
+      "default": "",
+      "description": "Line item description; required unless the row is a placeholder (unit, unit_cost and description all empty).",
+      "title": "Description",
+      "type": "string"
+    },
+    "unit": {
+      "default": "",
+      "description": "Unit: SF, GSF, MSF, LF, EA, FLIGHT, CY, CF, SY, STORY, LS, TON, LB, GAL, HR, DAY, WEEK, MONTH, %.",
+      "title": "Unit",
+      "type": "string"
+    },
+    "unit_cost": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Cost per unit (plain decimal); empty = unpriced.",
+      "title": "Unit Cost"
+    },
+    "quantity_rule": {
+      "description": "takeoff | fixed | per_gsf | pct_of_subtotal | mirror:<AC> | count_codes:<AC,...>",
+      "pattern": "^(takeoff|fixed|per_gsf|pct_of_subtotal|mirror:[A-Z][0-9]{4}(\\.[A-Za-z0-9_-]+)?|count_codes:[A-Z][0-9]{4}(\\.[A-Za-z0-9_-]+)?(,[A-Z][0-9]{4}(\\.[A-Za-z0-9_-]+)?)*)$",
+      "title": "Quantity Rule",
+      "type": "string"
+    },
+    "quantity_value": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "fixed: the quantity; per_gsf: factor per GSF (empty = 1); pct_of_subtotal: percent (0-100]; empty for the other rules.",
+      "title": "Quantity Value"
+    },
+    "qty_reliability": {
+      "anyOf": [
+        {
+          "maximum": 3,
+          "minimum": 1,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Quantity reliability 1 = high, 2 = medium, 3 = low (course scale); empty = not rated.",
+      "title": "Qty Reliability"
+    },
+    "cost_reliability": {
+      "anyOf": [
+        {
+          "maximum": 3,
+          "minimum": 1,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Unit cost reliability 1 = high, 2 = medium, 3 = low (course scale); empty = not rated.",
+      "title": "Cost Reliability"
+    },
+    "source": {
+      "default": "",
+      "description": "Where the unit cost comes from (free text).",
+      "title": "Source",
+      "type": "string"
+    },
+    "split_keywords": {
+      "default": "",
+      "description": "Sub-code rows only: keywords ('|'-separated) that route takeoff elements of the base code to this sub-code, or '*' for the rest.",
+      "title": "Split Keywords",
+      "type": "string"
+    },
+    "qty_label": {
+      "default": "",
+      "description": "Optional label for the quantity source (qty_src); empty = the engine's generic label.",
+      "title": "Qty Label",
+      "type": "string"
+    }
+  },
+  "required": [
+    "cluster",
+    "assembly_code",
+    "quantity_rule"
+  ],
+  "title": "cost_db.csv row",
+  "type": "object",
+  "x-csv-columns": [
+    "cluster",
+    "assembly_code",
+    "group",
+    "description",
+    "unit",
+    "unit_cost",
+    "quantity_rule",
+    "quantity_value",
+    "qty_reliability",
+    "cost_reliability",
+    "source",
+    "split_keywords",
+    "qty_label"
+  ],
+  "x-csv-notes": "One CSV row per line item. Empty cells = null / empty string. Numbers are plain decimals (pattern ^[0-9]+(\\.[0-9]+)?$). Lines starting with '#' are comments. See docs/engines/tvd.md."
+}

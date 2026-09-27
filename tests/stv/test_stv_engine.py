@@ -110,6 +110,21 @@ def test_toilet_factor_applies_only_with_urinal(reference):
     assert water.water == pytest.approx(gallons * GAL_TO_WATER_KG * 50)
 
 
+@pytest.mark.parametrize("urinal, factor", [
+    (None, 1.0),  # null / key missing = no urinals (course: blank cell)
+    (0.0, 0.75),  # explicit 0 = course behaviour (non-blank cell), decision D11
+    (0.5, 0.75),
+])
+def test_toilet_factor_urinal_null_vs_zero(reference, urinal, factor):
+    water_use = {"toilet_gpf": 1.6}
+    if urinal is not None:
+        water_use["urinal_gpf"] = urinal
+    for payload in (water_use, {**water_use, "urinal_gpf": urinal}):
+        water = _run(reference, use_phase={"water_use": payload}).breakdown.use_water
+        gallons = 900 * 3 * 250 * factor * 1.6 + 900 * 3 * 250 * 0.25 * (urinal or 0.0)
+        assert water.water == pytest.approx(gallons * GAL_TO_WATER_KG * 50)
+
+
 def test_rainwater_reduces_water(reference):
     water_use = {"landscaping_gal": 10_000.0, "rainwater_collection_gal": 4_000.0}
     water = _run(reference, use_phase={"water_use": water_use}).breakdown.use_water
@@ -118,11 +133,30 @@ def test_rainwater_reduces_water(reference):
     assert water.carbon == pytest.approx(10_000.0 * 0.000317 * 3.79 * 50)
 
 
-def test_rainwater_is_capped_at_total_water(reference):
+def test_rainwater_is_capped_at_landscaping_water(reference):
     water_use = {"landscaping_gal": 1_000.0, "rainwater_collection_gal": 50_000.0}
     water = _run(reference, use_phase={"water_use": water_use}).breakdown.use_water
     assert water.water == pytest.approx(0.0)
     assert water.carbon == pytest.approx(1_000.0 * 0.000317 * 3.79 * 50)
+
+
+def test_rainwater_cap_is_toilet_urinal_landscaping(reference):
+    """P3.10 item 2, course formula: the credit is capped at toilet + urinal + landscaping
+    water; sink and shower water stays."""
+    water_use = {
+        "toilet_gpf": 1.0,
+        "urinal_gpf": 0.5,
+        "wc_sink_gpm": 2.0,
+        "shower_gpm": 1.5,
+        "landscaping_gal": 1_000.0,
+        "rainwater_collection_gal": 10_000_000.0,
+    }
+    water = _run(reference, use_phase={"water_use": water_use}).breakdown.use_water
+    sinks_showers = 900 * 0.5 * 3 * 250 * 2.0 + 900 * 0.01 * 10 * 250 * 1.5
+    assert water.water == pytest.approx(sinks_showers * GAL_TO_WATER_KG * 50)
+    capped = 900 * 3 * 250 * 0.75 * 1.0 + 900 * 3 * 250 * 0.25 * 0.5 + 1_000.0
+    total = capped + sinks_showers
+    assert water.carbon == pytest.approx(total * 0.000317 * 3.79 * 50)
 
 
 def test_cogeneration_uses_fuel_record(reference):

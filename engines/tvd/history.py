@@ -1,4 +1,10 @@
-"""History snapshots: named run snapshots stored as JSON files in a history folder."""
+"""History snapshots: named run snapshots stored as JSON files in a history folder.
+
+P3.5 (course sheet ``TVD Tracking``): a snapshot can carry an ``event`` label (e.g. "Winter
+presentation") and a free-text ``note``; both keys are only written when set, so snapshots
+without them (and all older snapshots) keep their format and still load.
+:func:`tracking_table` builds the ``tracking`` block of the results JSON from the snapshots.
+"""
 
 import copy
 import json
@@ -8,21 +14,28 @@ from datetime import datetime
 
 
 def save_snapshot(history_dir: str, label: str, results: list[dict], summary: list[dict],
-                  unmapped_count: int) -> str:
-    """Save a named run snapshot to ``history_dir`` as a dated JSON file."""
+                  unmapped_count: int, *, event: str | None = None,
+                  note: str | None = None) -> str:
+    """Save a named run snapshot to ``history_dir`` as a dated JSON file (with the tracking
+    ``event`` and ``note`` if given)."""
     os.makedirs(history_dir, exist_ok=True)
     date_str = datetime.now().strftime("%Y-%m-%d")
     ts_str   = datetime.now().strftime("%Y%m%d_%H%M%S")
     safe     = re.sub(r"[^a-z0-9]+", "_", label.lower()).strip("_")
     path     = os.path.join(history_dir, f"{ts_str}_{safe}.json")
     with open(path, "w", encoding="utf-8") as f:
-        json.dump({
+        snapshot = {
             "label":         label,
             "date":          date_str,
             "results":       results,
             "summary":       summary,
             "unmapped_count": unmapped_count,
-        }, f, indent=2)
+        }
+        if event:
+            snapshot["event"] = event
+        if note:
+            snapshot["note"] = note
+        json.dump(snapshot, f, indent=2)
     return path
 
 
@@ -43,6 +56,44 @@ def load_history(history_dir: str) -> list[dict]:
         except (json.JSONDecodeError, KeyError):
             print(f"   Warning: skipping unreadable history snapshot: {fname}")
     return versions
+
+
+def _grand_total(summary: list[dict]) -> float:
+    return next((r["total"] for r in summary if r.get("cluster") == "GRAND TOTAL"), 0.0)
+
+
+def tracking_row(date: str, label: str, estimate: float, target: float, *,
+                 event: str | None = None, note: str | None = None,
+                 current: bool = False) -> dict:
+    """One ``TVD Tracking`` row: date, event, estimate and delta = target - estimate."""
+    return {
+        "date": date,
+        "label": label,
+        "event": event or None,
+        "note": note or None,
+        "estimate": round(estimate, 2),
+        "delta": round(target - estimate, 2),
+        "current": current,
+    }
+
+
+def tracking_table(history: list[dict], target: float, current: dict | None = None) -> dict:
+    """The ``tracking`` block of the results JSON (course sheet ``TVD Tracking``).
+
+    One row per history snapshot (oldest first; estimate = its GRAND TOTAL, delta = the
+    current total target - estimate, as the course's ``=$D$5-D``), then ``current`` (a row
+    from :func:`tracking_row` for this run) unless it is ``None`` because the run was saved
+    as the last snapshot (that row is then marked ``current``)."""
+    rows = [
+        tracking_row(v.get("date", ""), v.get("label", ""), _grand_total(v["summary"]), target,
+                     event=v.get("event"), note=v.get("note"))
+        for v in history
+    ]
+    if current is not None:
+        rows.append(current)
+    elif rows:
+        rows[-1]["current"] = True
+    return {"target": round(target, 2), "rows": rows}
 
 
 def make_demo_snapshot(history_dir: str, results: list[dict], unmapped_count: int) -> None:

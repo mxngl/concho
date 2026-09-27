@@ -46,6 +46,11 @@ class STVEngine:
                 materials=materials,
                 transport=transport,
                 construction=construction,
+                estimated_amount=item.estimated_amount,
+                proxy_amount=item.proxy_amount,
+                origin=item.origin,
+                custom_material_source=self.reference_data.custom_source(
+                    item.assembly, item.material_type),
             )
             construction_results.append(construction_result)
             breakdown.embodied_materials = breakdown.embodied_materials + materials
@@ -71,6 +76,7 @@ class STVEngine:
             breakdown=breakdown,
             construction_items=construction_results,
             lifetime_years=self.lifetime_years,
+            use_phase_status=inputs.use_phase_status(),
         )
 
     def _calculate_annual_electricity(self, inputs: STVInputs) -> ImpactVector:
@@ -133,18 +139,22 @@ class STVEngine:
 
     def _calculate_annual_water(self, inputs: STVInputs) -> ImpactVector:
         water = inputs.use_phase.water_use
+        toilet = self._water_fixture_vector(
+            uses_per_person=3 * 250,
+            occupants=900,
+            rate=water.toilet_gpf,
+            # Course: 0.75 whenever the urinal cell is non-blank, even 0 (decision D11).
+            occupancy_factor=1.0 if water.urinal_gpf is None else 0.75,
+        )
+        urinal = self._water_fixture_vector(
+            uses_per_person=3 * 250 * 0.25,
+            occupants=900,
+            rate=water.urinal_gpf or 0.0,
+        )
+        landscaping = self._water_landscape_vector(water.landscaping_gal)
         total = (
-            self._water_fixture_vector(
-                uses_per_person=3 * 250,
-                occupants=900,
-                rate=water.toilet_gpf,
-                occupancy_factor=0.75 if water.urinal_gpf > 0 else 1.0,
-            )
-            + self._water_fixture_vector(
-                uses_per_person=3 * 250 * 0.25,
-                occupants=900,
-                rate=water.urinal_gpf,
-            )
+            toilet
+            + urinal
             + self._water_fixture_vector(
                 uses_per_person=0.5 * 3 * 250,
                 occupants=900,
@@ -165,15 +175,17 @@ class STVEngine:
                 occupants=900,
                 rate=water.shower_gpm,
             )
-            + self._water_landscape_vector(water.landscaping_gal)
+            + landscaping
         )
 
+        # Course (Use Phase H40 = -MIN(D40 * ..., H32 + H33 + H38)): rainwater only offsets
+        # toilet, urinal and landscaping water, not sinks or showers (P3.10, decision D12).
         rainwater = ImpactVector(
             carbon=0.0,
             energy=0.0,
             water=-min(
                 water.rainwater_collection_gal * (1 + 0.00113 * 1000) * 3.79,
-                total.water,
+                toilet.water + urinal.water + landscaping.water,
             ),
             ozone=0.0,
         )

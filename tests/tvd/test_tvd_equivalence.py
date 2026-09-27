@@ -5,12 +5,17 @@ fixture root (``CONCHO_FIXTURES_DIR`` or ``.fixtures/``, see ``tests/conftest.py
 ``scripts/fetch_fixtures.py``); skipped if neither exists. Nothing from that checkout is
 copied into this repo: ``cost_data.csv`` is RSMeans-derived.
 
-Both implementations run in CI mode on ``AUTOTVD_DIR/qto/*.csv`` +
-``AUTOTVD_DIR/cost_data.csv`` inside ``tmp_path``; the new engine reads the project values
-from the Island example config (``engines/common/examples/island_2026.project_config.json``).
-Compared: the results JSON (all fields except run timestamps, run label, input paths and
-the project/team names added in P3.2), the history snapshot (except its date) and the
-dashboard HTML (with timestamps and data source masked).
+Both implementations run in CI mode on ``AUTOTVD_DIR/qto/*.csv`` inside ``tmp_path``; the
+original reads ``AUTOTVD_DIR/cost_data.csv``, the new engine (P3.4) the same file converted
+to ``cost_db.csv`` by ``scripts/migrate_cost_data.py`` into ``tmp_path`` (never committed:
+RSMeans-derived). The new engine reads the project values from the Island example config
+(``engines/common/examples/island_2026.project_config.json``).
+Compared: the results JSON (all fields except run timestamps, run label, input paths, the
+project/team names added in P3.2, the ``target_consistency`` block added in P3.3, the
+``cost_db_validation`` block added in P3.4 and the ``target_derivation``, ``reliability`` and
+``tracking`` blocks added in P3.5; each new block has its own Island test below), the
+history snapshot (except its date) and the dashboard HTML (with timestamps and data source
+masked).
 
 Intended differences since P3.2, normalised/masked here:
 
@@ -32,6 +37,7 @@ import sys
 from pathlib import Path
 
 import pytest
+from migrate_cost_data import migrate
 
 SNAPSHOT_LABEL = "Equivalence check"
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -90,6 +96,16 @@ def _canonical(obj):
 
 def _strip_meta(payload: dict) -> dict:
     payload = json.loads(json.dumps(payload))
+    # P3.5: new block, not in the original; tested in test_island_target_derivation.
+    payload.pop("target_derivation", None)
+    # P3.5: new blocks, not in the original; tested in test_island_reliability and
+    # test_island_tracking.
+    payload.pop("reliability", None)
+    payload.pop("tracking", None)
+    # P3.3: new block, not in the original; tested in test_island_target_consistency.
+    payload.pop("target_consistency", None)
+    # P3.4: new block, not in the original; tested in test_island_cost_db_validation.
+    payload.pop("cost_db_validation", None)
     for key in ("generated_at", "date", "label", "data_source", "project_name", "team_name"):
         payload["meta"].pop(key, None)
     return payload
@@ -113,7 +129,12 @@ def outputs(tmp_path_factory, autotvd_dir) -> dict[str, Path]:
     shutil.copy(base / "tvd_analysis.py", orig / "tvd_analysis.py")
     _run([sys.executable, "tvd_analysis.py", "--ci", "--snapshot", SNAPSHOT_LABEL, *flags], orig)
 
+    # P3.4: the new engine reads the converted cost DB (tmp only, never committed).
     new = tmp_path_factory.mktemp("new")
+    cost_db = new / "cost_db.csv"
+    migration, db = migrate(inputs["cost"], cost_db, custom_clusters=["Equipment Rental"])
+    assert db is not None and db.ok, migration.errors + (db.errors if db else [])
+    flags[flags.index("--cost") + 1] = str(cost_db)
     _run([sys.executable, "-m", "engines.tvd", "--ci", "--snapshot", SNAPSHOT_LABEL, *flags,
           "--config", str(ISLAND_CONFIG), "--out", str(new)], new)
     return {"orig": orig, "new": new}
@@ -168,3 +189,88 @@ def test_island_golden_numbers(outputs, autotvd_dir):
     assert new["financials"]["grand_total"] == 16_065_644.29
     assert new["meta"]["unmapped_count"] == 1693
     assert new["meta"]["dnc_count"] == 75
+
+
+# P3.3: A-H 16,705,852 vs. 16,700,000 (+5,852, within 0.1 %); Equipment Rental on top.
+ISLAND_TARGET_CONSISTENCY = {
+    "total_target": 16_700_000,
+    "sum_a_to_h": 16_705_852,
+    "sum_carved_out": 0,
+    "sum_on_top": 400_000,
+    "gap": 5_852,
+    "gap_pct": 0.035,
+    "gap_incl_on_top": 405_852,
+    "tolerance": 0.001,
+    "tolerance_amount": 16_700,
+    "status": "within_tolerance",
+    "override_reason": None,
+    "carved_out_clusters": {},
+    "on_top_clusters": {"Equipment Rental": 400_000},
+}
+
+
+def test_island_target_consistency(outputs):
+    new = _load(outputs["new"] / "results" / "latest.json")
+    assert new["target_consistency"] == ISLAND_TARGET_CONSISTENCY
+    orig = _load(outputs["orig"] / "results" / "latest.json")
+    assert "target_consistency" not in orig
+
+
+# P3.4: the converted Island cost DB validates with 0 errors; the placeholder rows are
+# listed as unpriced, the D5030/D5090 mislabels as warnings (codes kept).
+def test_island_cost_db_validation(outputs):
+    block = _load(outputs["new"] / "results" / "latest.json")["cost_db_validation"]
+    assert block["error_count"] == 0 and block["status"] == "warnings"
+    assert block["rows"] == 48
+    assert block["not_rated"] == {"qty_reliability": 48, "cost_reliability": 48}
+    assert [(u["cluster"], u["assembly_code"]) for u in block["unpriced"]] == [
+        ("Substructure", "A1020"), ("Interiors", "C3030"), ("Special Construction", "F1000"),
+    ]
+    warnings = "\n".join(block["warnings"])
+    assert "(D5030): description: 'Fire Protection Systems' suggests D40" in warnings
+    assert "(D5090): description: 'HVAC Systems' suggests D30" in warnings
+    assert "cluster 'Equipment Rental' is a custom cluster" in warnings
+    assert block["warning_count"] == len(block["warnings"]) == 8
+
+
+# P3.5: explicit amount split, no budget (total_target); the shares of the 16.7M total sum
+# to 1.00035 (the 5,852 gap above).
+def test_island_target_derivation(outputs):
+    block = _load(outputs["new"] / "results" / "latest.json")["target_derivation"]
+    assert block["method"] == "explicit" and block["budget"] is None
+    assert block["target_above_budget"] is None and block["warnings"] == []
+    assert block["total_target"] == block["course_cluster_base"] == 16_700_000
+    targets = {x: c["target"] for x, c in block["clusters"].items()}
+    assert targets == {"A": 1_781_276, "B": 3_826_446, "C": 2_005_842, "D": 4_041_448,
+                       "E": 1_319_286, "F": 1_001_839, "G": 1_435_258, "H": 1_294_457}
+    assert block["sums"]["target"] == 16_705_852
+    assert block["sums"]["final_share"] == pytest.approx(16_705_852 / 16_700_000, abs=1e-9)
+    assert "owner_share" not in block["clusters"]["A"]
+
+
+# P3.5: the Island cost DB is not rated, so every $ is not_rated.
+def test_island_reliability(outputs):
+    new = _load(outputs["new"] / "results" / "latest.json")
+    rel = new["reliability"]
+    grand_total = new["financials"]["grand_total"]
+    assert grand_total == 16_065_644.29
+    for cat in ("quantity", "cost", "overall"):
+        assert rel["totals"][cat] == {"high": 0, "medium": 0, "low": 0,
+                                      "not_rated": grand_total}
+    assert rel["totals"]["estimate"] == grand_total
+    by_cluster = {r["cluster"]: r["estimate"] for r in new["cluster_summary"]}
+    assert {n: c["estimate"] for n, c in rel["clusters"].items()} == by_cluster
+    assert rel["totals_a_to_h"]["estimate"] == pytest.approx(
+        grand_total - by_cluster["Equipment Rental"], abs=0.005)
+
+
+# P3.5: the equivalence snapshot is the current run (no --event/--note given).
+def test_island_tracking(outputs):
+    new = _load(outputs["new"] / "results" / "latest.json")
+    assert new["tracking"] == {
+        "target": 16_700_000,
+        "rows": [{
+            "date": new["meta"]["date"], "label": SNAPSHOT_LABEL, "event": None, "note": None,
+            "estimate": 16_065_644.29, "delta": 634_355.71, "current": True,
+        }],
+    }
