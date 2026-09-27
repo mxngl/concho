@@ -443,6 +443,62 @@ when the pipeline scripts move into the team template.
 Without `--config`, `modeled` is true when any input is non-zero (a stated urinal flow rate
 counts, decision D11).
 
+## Island use-phase example (P3.8)
+
+`engines/common/examples/island_2026_use_phase.project_config.json` is the Island config with
+the use phase stated; everything outside `stv` equals the reference config, which stays
+"not modeled" (golden 2,517,183.14 kgCO₂e unchanged). Values from the Island slides and, where
+the slides give no course input, the team's own workbook `STV_LAMARCASINA_BAMBOO.xlsx` (IPD_
+Challenge `STV_Template/`; **team input, not course data**).
+
+### Slide values → course inputs
+
+| Slide | Course input (`Use Phase` / `Construction and Materials`) | Config value | Assumption |
+|---|---|---|---|
+| 162,000 kWh/yr electricity use | D19 Electricity Drawn from Grid | `grid_kwh: 0` | **annual netting**: grid = max(0, 162,000 − 216,992) = 0. Assumes storage or net metering over the year; the surplus of 54,992 kWh/yr gets no credit (the course has no export row). Same as the team workbook (D19 blank). |
+| 216,992 kWh/yr PV | D20 On-site Renewable Electricity | `onsite_renewable_kwh: 216992` | the course books it at zero impact and does not subtract it from the grid |
+| (PV panels) | C&M row: Energy / `Photovoltaics (sf)` | `stv.construction_items`: 5,000 sf | team input (team workbook). **Mismatch**: ~5.5 kWh/m²/day (San Juan) × ~20 % module efficiency × ~0.8 performance ratio gives ~150,000 kWh/yr for 5,000 sf; 216,992 kWh/yr would need ~7,000–7,500 sf |
+| – | D29 Natural Gas, D22 Cogeneration | `natural_gas_m3: 0`, `cogeneration: null` | all-electric building (no gas or cogeneration in the slides or the team workbook) |
+| 187,000 gal/yr water | D32–D37 fixture flow rates (course: 900 occupants × 250 days, fixed) | toilet 1.0 gpf, `urinal_gpf: null` (no urinals → toilet factor 1.0), WC sink 0.2 gpm, lab sink 0.3 gpm, kitchen sink 0, shower 0 | the team's fixture inputs as they are (team workbook D32–D37); not back-calculated to 187,000 |
+| – | D38 Landscaping | `landscaping_gal: 0` | team workbook: none |
+| 12,610 SF collection area | D40 Rainwater Collection (gal/yr) | `rainwater_gal: 396183` | team workbook value; it corresponds to 12,610 SF × ~56 in/yr × 0.623 gal/(sf·in) × 0.9 runoff. The credit is capped by the course at toilet + urinal + landscaping water (675,000 gal/yr here), so it is fully credited |
+
+Course water for these inputs: toilet 675,000 + WC sink 67,500 + lab sink 13,500 =
+**756,000 gal/yr gross (+304 % vs. the slide's 187,000)**; minus 396,183 rainwater =
+**359,817 gal/yr net (+92 %)**. The difference comes from the course's fixed occupancy
+(900 people × 250 days), which the slide figure evidently does not use.
+
+### Result (six Current exports, one run; reference workbook `STV_ConceptA_Bambo.xlsx`, same with the course workbook)
+
+| | Carbon kgCO₂e | Energy MJ | Water kg |
+|---|---|---|---|
+| Construction (reference C) | 2,517,183.14 | 28,396,923.44 | 30,026,557.14 |
+| + PV panels 5,000 sf | 206,969.00 | 2,678,270.49 | 3,809,140.52 |
+| **Construction total** | **2,724,152.14** | **31,075,193.93** | **33,835,697.66** |
+| Use phase, 50 years (water only; grid 0) | 45,414.05 | 506,239.08 | 145,234,734.80 |
+| **Construction + 50 years use** | **2,769,566.19** | **31,581,433.01** | **179,070,432.45** |
+| Island target | 7,396,873.85 | 155,969,076.59 | 271,387,397.26 |
+| **% of target** | **37.4 %** | **20.2 %** | **66.0 %** |
+
+The use phase equals the team workbook's own cached `Use Phase` F13:I13 (the same inputs in
+the course formulas; pinned in `tests/stv/test_golden_stv.py`). The PV panels add 8.2 % to
+the construction carbon.
+
+**Sensitivity of the grid assumption** (added to the totals above; Island grid factors):
+
+| Grid kWh/yr | Carbon kgCO₂e (% of target) | Energy MJ (%) | Water kg (%) |
+|---|---|---|---|
+| 0 (annual netting, example) | 2,769,566.19 (37.4 %) | 31,581,433.01 (20.2 %) | 179,070,432.45 (66.0 %) |
+| 12,000 (PV only ~150,000 kWh/yr, from 5,000 sf) | 3,284,366.19 (44.4 %) | 38,393,554.22 (24.6 %) | 180,717,216.45 (66.6 %) |
+| 162,000 (gross, PV not netted) | 9,719,366.19 (131.4 %) | 123,545,069.34 (79.2 %) | 201,302,016.45 (74.2 %) |
+
+**Open data questions for Max/Ash:** (1) PV area vs. output: 5,000 sf vs. ~7,000–7,500 sf
+for 216,992 kWh/yr; (2) water: the course formula gives 756,000 gal/yr gross / 359,817 net
+for the team's fixture rates, the slides 187,000 gal/yr; (3) whether annual netting of PV
+is the intended reading (the gross case exceeds the carbon target); (4) the other Energy /
+MEP items of the team workbook (EV battery 1,200 kWh, integrated solar water heating 100
+sf, rainwater tank 5,000 gal) are not in the example.
+
 ## Island 2026 reference result
 
 **The current Island result is 2,517,183.14 kgCO₂e** (28,396,923.44 MJ, 30,026,557.14 kg
@@ -538,7 +594,9 @@ rule 4).
   results (`data_flags`). No custom bamboo material yet: see "Engineered bamboo" above.
 - **Use phase = 0.** A and C contain no use-phase inputs (no kWh, gas, water or PV), while
   the target covers construction + 50 years of operation. So C is embodied only and its
-  % of target is not comparable with the target's scope. Only B has use-phase inputs (P3.8).
+  % of target is not comparable with the target's scope. Only B has use-phase inputs. Since
+  P3.8 the reference config says so explicitly (`not_modeled` with a reason), and the
+  second example adds the use phase (see "Island use-phase example" above).
 - **Unmapped Parts.** In C, 166 structural `Parts` rows (plus 1 floor) are skipped by the
   structural importer, and 96 `Parts` rows by the architecture importer (together with 370
   furniture, 118 generic models, 32 plumbing fixtures, …; 655 skipped architecture rows).

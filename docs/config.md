@@ -13,7 +13,11 @@ Examples:
 - [`template/project_config.example.json`](../template/project_config.example.json): neutral
   example with invented values; field-by-field notes in [`template/README.md`](../template/README.md).
 - [`engines/common/examples/island_2026.project_config.json`](../engines/common/examples/island_2026.project_config.json):
-  the Island 2026 values from the current engine defaults.
+  the Island 2026 values from the current engine defaults (use phase not modeled, so the
+  reference result 2,517,183.14 kgCO₂e stays reproducible).
+- [`engines/common/examples/island_2026_use_phase.project_config.json`](../engines/common/examples/island_2026_use_phase.project_config.json):
+  the same with the use phase and the PV panels from the Island slides and the team workbook
+  (P3.8; assumptions in [`docs/engines/stv.md`](engines/stv.md#island-use-phase-example-p38)).
 
 ## Commands
 

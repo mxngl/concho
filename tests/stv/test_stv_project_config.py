@@ -458,3 +458,23 @@ def test_combine_rejects_different_config_items(reference, tmp_path):
     assert len(STVResults.combine([run(5.0), run(5.0)]).construction_items) == 1
     with pytest.raises(ValueError, match="different stv.construction_items"):
         STVResults.combine([run(5.0), run(6.0)])
+
+
+def test_island_use_phase_example_config():
+    """P3.8: the second Island example states the use phase (slide values, team inputs)."""
+    path = ISLAND_CONFIG.with_name("island_2026_use_phase.project_config.json")
+    settings = STVProjectSettings.from_config(load_config(path), path.parent)
+    assert settings.use_phase_modeled and not settings.use_phase_all_zero
+    assert settings.use_phase["electricity_from_grid_kwh"] == 0  # 162,000 - 216,992 < 0
+    assert settings.use_phase["onsite_renewable_kwh"] == 216_992
+    assert settings.use_phase["water_use"]["urinal_gpf"] is None
+    assert settings.use_phase["water_use"]["rainwater_collection_gal"] == 396_183
+    assert settings.construction_items == [{"assembly": "Energy",
+                                            "material_type": "Photovoltaics (sf)",
+                                            "amount": 5000.0, "origin": "project_config"}]
+    # Everything but the stv section equals the reference config.
+    ref = json.loads(ISLAND_CONFIG.read_text(encoding="utf-8"))
+    ex = json.loads(path.read_text(encoding="utf-8"))
+    assert {k: v for k, v in ex.items() if k != "stv"} == {
+        k: v for k, v in ref.items() if k != "stv"}
+    assert ref["stv"]["use_phase"]["not_modeled"] is True

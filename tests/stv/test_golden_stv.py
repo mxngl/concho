@@ -355,3 +355,42 @@ def test_island_proxy_flags(project):
         sum(PROXY_KGCO2E.values()) / PROJECT["carbon"], rel=REL)
     assert not any(flags["by_assembly"][a]["proxy"] for a in ("Foundation", "MEP", "Roof",
                                                                "Exterior Wall"))
+
+
+# --- P3.8: Island use-phase example (engines/common/examples/island_2026_use_phase...) ------
+
+USE_PHASE_CONFIG = ISLAND_CONFIG.with_name("island_2026_use_phase.project_config.json")
+# The team workbook whose Use Phase inputs the example takes (team input, not course data).
+TEAM_USE_PHASE_WORKBOOK = "STV_Template/STV_LAMARCASINA_BAMBOO.xlsx"
+
+
+def test_island_use_phase_example(monkeypatch, tmp_path, ipd_challenge_dir, trade_results):
+    """Six Current exports + the use-phase config: construction as the reference plus 5,000 sf
+    PV, and a 50-year use phase equal to the team workbook's own 'Use Phase' F13:I13 (the
+    same inputs typed into the course formulas there)."""
+    openpyxl = pytest.importorskip("openpyxl")
+    schedules = ipd_challenge_dir / SCHEDULES
+    args = ["--config", str(USE_PHASE_CONFIG), "--template", str(ipd_challenge_dir / WORKBOOK),
+            "--output-dir", str(tmp_path)]
+    for trade, (_loader, files) in TRADES.items():
+        args += [f"--{trade}-schedule", *(str(schedules / f) for f in files)]
+    monkeypatch.setattr(sys, "argv", ["concho-stv", *args])
+    cli.main()
+    result = _load(tmp_path / "stv_results.json")
+
+    (pv,) = [i for i in result["construction_items"] if i["origin"] == "project_config"]
+    assert (pv["assembly"], pv["material_type"], pv["amount"]) == (
+        "Energy", "Photovoltaics (sf)", 5000.0)
+    embodied = result["breakdown"]["embodied"]
+    assert embodied["carbon"] == pytest.approx(PROJECT["carbon"] + pv["embodied_total"]["carbon"],
+                                               rel=REL)
+
+    ws = openpyxl.load_workbook(ipd_challenge_dir / TEAM_USE_PHASE_WORKBOOK,
+                                data_only=True)["Use Phase"]
+    cached = [float(ws[c].value) for c in ("F13", "G13", "H13", "I13")]
+    use = result["breakdown"]["use_phase"]
+    assert [use[m] for m in ("carbon", "energy", "water", "ozone")] == pytest.approx(cached,
+                                                                                    rel=REL)
+    assert result["breakdown"]["use_electricity"]["carbon"] == 0.0  # annual net: grid 0
+    status = result["use_phase_status"]
+    assert (status["modeled"], status["source"]) == (True, "project_config")
