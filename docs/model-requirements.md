@@ -12,8 +12,9 @@ build of the add-in: [`revit-addin/README.md`](../revit-addin/README.md).
 2. **Any project units** (imperial or metric). Since P4.5 the add-in converts every quantity
    from Revit's internal units into fixed export units (ft, SF, CF, …; see
    [Units](#units-p45)), so the same model gives the same CSV numbers whatever its display
-   units. Exports from add-in versions before P4.5 (display strings) are still read, but only
-   correctly from imperial models.
+   units. Exports from add-in versions before P4.5 (display strings) are still read; TVD
+   converts metric display strings and reports them (see
+   [Old vs new export layout](#old-vs-new-export-layout-p45)).
 3. Elements on **levels** and in **rooms** (the schedule engine groups by level and room).
 4. **Materials** assigned to the element types (STV maps embodied carbon by category, family
    and material).
@@ -151,15 +152,57 @@ These are the units the engines read without conversion: TVD takes `Length`/`Are
 as LF/SF/CF; STV reads plain MEP dimensions as inches, weights as kg and flows as m³/s.
 
 **Old exports** (add-in before P4.5) contain display strings in the project units (`136' -
-0"`, `6590 SF`, `30 m³/h`). The engines still read them, but only correctly from **imperial**
-models (a metric model's `612 m²` is read as 612 SF). Their TVD lengths are also slightly low:
-TVD's display-string parser reads `9' - 7 3/4"` as 9 ft (inches with a fraction are dropped;
-Island ARCH export: 3,638 instead of 3,771 LF on coded elements, −3.5 %). The numeric format
-carries the exact values.
+0"`, `6590 SF`, `30 m³/h`). Since P3.11 TVD reads them with the tolerant parser
+(`engines/common/quantities.py`): feet-inch with fractional inches (`9' - 7 3/4"` = 9.646 ft;
+AutoTVD's parser read 9 ft, which cost the Island architecture export 3.3 % of its coded LF),
+imperial suffixes, and metric strings (`612 m²`) converted to SF and reported in the results
+JSON `quantity_parse_warnings` block; see
+[Quantity parsing](engines/tvd.md#quantity-parsing-p311-p45). STV is unchanged: it reads
+feet-inch lengths exactly (`parse_length_feet`) but takes other quantities as the first number
+(`612 m²` → 612 SF), so metric display-string exports are still only correct for TVD.
 
 Engines: **TVD** reads the Architecture and Structural exports (`--arch`, `--struct`), **STV**
 all three, **Schedule** the combined element context built from all three. "Used by" lists the
 engines that read the column.
+
+## Old vs new export layout (P4.5)
+
+Exports of the add-in before concho #18 (the Island reference exports in AutoTVD `qto/` and
+IPD_Challenge `revit_schedules/`) have fewer columns than the current add-in. Between them no
+column was **renamed or removed**; every change is an added column, and the columns shared by
+both keep their order. The importers select columns by name, so all layouts are read.
+
+| Export | Old layouts (Island files) | Current | Columns added since the old layout |
+|---|---|---|---|
+| Architecture / Structural | **44** (AutoTVD `qto/Architecture_TakeOff.csv`, `qto/Structural_Schedule.csv`, most IPD_Challenge exports) | **58** | `Original Category`, `Original Family`, `Original Type` (after `Type`); the 9 room columns `Room Id` … `Room Location Z (ft)` (after the spatial columns); `Part Source Id`, `Category (local)` (at the end) |
+| Architecture | **56** (IPD_Challenge `Current/04_Island_ARCH_Concept2_Architecture_TakeOff.csv`) | 58 | `Part Source Id`, `Category (local)` |
+| Structural | **47** (IPD_Challenge `Current/STR_Wall_Bamboo_Concept2_amd03_Structural_Schedule.csv`) | 58 | the 9 room columns, `Part Source Id`, `Category (local)` |
+| MEP | **60** (all IPD_Challenge MEP exports) | **71** (69 before P4.3/P4.5) | the 9 room columns (→ 69), `Assembly Code` (P4.3), `Category (local)` (P4.5) |
+
+Other differences of the old files:
+
+- **Values:** display strings in the project units instead of plain decimals (see
+  [Units](#units-p45)).
+- **Header:** the header of AutoTVD `qto/Architecture_TakeOff.csv` ends in
+  `Parameter Snapshot` followed by 11 tab characters, so that column's name is not exactly
+  `Parameter Snapshot`. No engine reads `Parameter Snapshot` from that file (TVD doesn't read
+  the column; STV reads the IPD_Challenge exports, whose headers are clean).
+
+Columns the engines read from the building exports (all present in every layout above; a
+missing column reads as empty, so no alias or fallback is needed):
+
+| Engine | Architecture / Structural | MEP |
+|---|---|---|
+| TVD | `ElementId` (dedup), `Category`, `Family`, `Type`, `Mark`, `Comments` (DNC marker, keyword split), `Assembly Code`, `Length`, `Area`, `Volume`; `Level`, `Material` (unmapped list only) | – |
+| STV | `ElementId`, `Category`, `Family`, `Type`, `Assembly Code`, `Assembly Description`, `Material` (mapping match), `Length`, `Width`, `Height`, `Area`, `Volume`, `Weight`, `Unit Weight` (quantity fields), `Parameter Snapshot` (fallbacks) | `ElementId`, `Category`, `Family`, `Type`, `Assembly Description` (keyword text; empty in MEP exports), `Assembly Code`¹, `Size`, `Diameter`, `Width`, `Height`, `Length`, `Area`, `Volume`, `Material`, `Weight`, `Unit Weight`, `Airflow`, `Flow`, `Connector Flow`, `Parameter Snapshot` |
+
+¹ The STV mapping matches `Assembly Code` only for rows that set one; the Island MEP rows don't,
+so the MEP `Assembly Code` (missing in the 60-column layout, read as empty) changes nothing.
+
+The columns added since the old layouts are read by the schedule engine (room and `Original *`
+columns) or by no engine yet (`Part Source Id` for P3.9, `Category (local)`). `tests/tvd/test_tvd_export_layouts.py` runs TVD on an invented 44-column
+old-layout pair and a 58-column new-layout pair with the same quantities and checks identical
+totals.
 
 ## `<model>_Architecture_TakeOff.csv` and `<model>_Structural_Schedule.csv` (58 columns)
 

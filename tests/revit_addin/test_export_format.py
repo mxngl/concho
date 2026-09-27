@@ -10,9 +10,9 @@ format with the right quantities:
   ``ParameterReader.FormatFeetInches`` in ``revit-addin/ParameterReader.cs``) and ``Size``
   (``3"`` / ``4"x4"``, built by the add-in from the dimensions),
 - the Island reference exports converted to the new format give the same STV results and the
-  same TVD areas, volumes and counts (needs the reference fixtures, skipped otherwise). TVD
-  lengths differ on purpose: TVD's display-string parser reads ``9' - 7 3/4"`` as 9 ft (it only
-  handles inches without a fraction), the numeric format carries the exact length.
+  same TVD quantities (needs the reference fixtures, skipped otherwise). Since P3.11 TVD reads
+  the display strings exactly too (``9' - 7 3/4"`` = 9.646 ft; before, AutoTVD's parser gave
+  9 ft, which TVD still does with ``--legacy-length-parsing``).
 
 The format helpers below mirror the C# formatting; keep them in sync.
 """
@@ -368,7 +368,7 @@ def test_island_exports_in_numeric_format_give_same_results(
     converted = [_convert_building_row(row) for row in rows]
     target = _write(tmp_path, name, columns, converted)
 
-    # TVD: same areas, volumes, counts; lengths exact (see module docstring).
+    # TVD: same areas, volumes, counts; lengths exact in both formats (P3.11).
     old_qtys, old_unmapped, old_counts, _, old_dnc = aggregate_quantities(rows)
     new_rows = load_csv_text(target.read_text("utf-8"))
     new_qtys, new_unmapped, new_counts, _, new_dnc = aggregate_quantities(new_rows)
@@ -382,6 +382,7 @@ def test_island_exports_in_numeric_format_give_same_results(
                 key,
             )
         assert new_qtys[code]["length_lf"] == pytest.approx(exact_lengths[code], abs=1e-3), code
+        assert quantities["length_lf"] == pytest.approx(exact_lengths[code], abs=1e-9), code
 
     # STV: same construction items.
     old_items = _items(loader(source, ISLAND_MAPPING))

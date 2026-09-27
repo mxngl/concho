@@ -1,6 +1,6 @@
 ﻿ElementId,Category,Family,Type,Level,Mark,Assembly Code,Length,Area,Volume,Material,Comments
 1001,Floors,Floor,Slab 6in,L1,,A1030,,100 SF,50.00 CF,Concrete,
-1002,Floors,Floor,Slab 6in,L1,,A1030,,"1,000 SF",500.00 CF,Concrete,
+1002,Floors,Floor,Slab 6in,L1,,A1030,,"1,000.00 SF",500.00 CF,Concrete,
 1003,Walls,Basic Wall,Partition,L1,,C1010,"10' - 6""",200 SF,,Gypsum,
 1004,Walls,Basic Wall,Exterior Plaster,L1,,B2010,,300 SF,,Plaster,
 1005,Walls,Curtain Wall,Storefront,L1,,B2010,,150 SF,,Glass,
