@@ -223,8 +223,8 @@ def test_empty_unit_cost_warns():
 @pytest.mark.parametrize("value", ["0", "4", "high", "2.0"])
 def test_reliability_1_to_3(value):
     err = _one_error(_row(cost_reliability=value))
-    assert err == (f"row 2 (B2020): cost_reliability: '{value}' must be 1, 2 or 3 (low, "
-                   "medium, high), or empty.")
+    assert err == (f"row 2 (B2020): cost_reliability: '{value}' must be 1, 2 or 3 (high, "
+                   "medium, low), or empty.")
 
 
 def test_blank_reliability_warns_once_per_column():

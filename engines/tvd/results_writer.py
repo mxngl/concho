@@ -20,8 +20,11 @@ def build_results_payload(
     *,
     project_name: str = "",
     team_name: str = "",
+    target_derivation: dict | None = None,
     target_consistency: dict | None = None,
     cost_db_validation: dict | None = None,
+    reliability: dict | None = None,
+    tracking: dict | None = None,
 ) -> dict:
     """
     Build the structured results dict of a run.
@@ -33,6 +36,11 @@ def build_results_payload(
     financials        – grand total, TVD target, delta, $/SF, status
     cluster_targets   – dict of cluster → target value
     cluster_summary   – list of {cluster, estimate, target, delta, delta_pct, per_sf}
+    target_derivation – how the cluster targets A-H were derived (P3.5; only if given):
+                        method, budget (course formula inputs + amount, or null),
+                        total_target, target_above_budget, course_cluster_base,
+                        clusters {A..H: name, final_share, target, ...}, warnings;
+                        see docs/engines/tvd.md
     target_consistency – cluster targets vs. total target (P3.3; only if given):
                         total_target, sum_a_to_h, sum_carved_out, sum_on_top, gap,
                         gap_pct, gap_incl_on_top, tolerance, tolerance_amount, status
@@ -41,6 +49,12 @@ def build_results_payload(
     cost_db_validation – cost DB validation result (P3.4; only if given): status
                         (ok | warnings), rows, error_count, warning_count, warnings,
                         unpriced [{row, cluster, assembly_code}], not_rated {column: count}
+    reliability       – estimate $ per cluster by reliability level (P3.5; only if given):
+                        scale, clusters {name: {quantity, cost, overall: {high, medium,
+                        low, not_rated}, estimate}}, totals, totals_a_to_h
+    tracking          – course "TVD Tracking" table (P3.5; only if given): target, rows
+                        [{date, label, event, note, estimate, delta = target − estimate,
+                        current}]
     line_items        – dict of cluster → list of full line-item rows
     """
     ts       = ts or datetime.now()
@@ -106,10 +120,16 @@ def build_results_payload(
         "cluster_targets":  {k: round(v, 2) for k, v in targets.items()},
         "cluster_summary":  cluster_summary_out,
     }
+    if target_derivation is not None:
+        payload["target_derivation"] = target_derivation
     if target_consistency is not None:
         payload["target_consistency"] = target_consistency
     if cost_db_validation is not None:
         payload["cost_db_validation"] = cost_db_validation
+    if reliability is not None:
+        payload["reliability"] = reliability
+    if tracking is not None:
+        payload["tracking"] = tracking
     payload["line_items"] = grouped
     return payload
 

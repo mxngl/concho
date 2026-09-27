@@ -52,7 +52,7 @@ All paths in the file are relative to the config file.
 
 | Engine | Fields read | Notes |
 |---|---|---|
-| TVD (`concho-tvd --config`) | `project.name`, `project.team_name`, `project.gross_sf` (also `per_gsf` cost rows), `tvd.total_target` / `tvd.target`, `tvd.cluster_split` (`explicit`), `tvd.custom_clusters` (also the allowed non-course clusters of the cost DB), `tvd.target_sum_tolerance`, `tvd.target_sum_override`, `files.cost_db` (default for `--cost`, `cost_db.csv` format, P3.4) | Cluster targets: course clusters A–H under their canonical names (`Special Construction`), then the custom clusters. `derive_from_references` is not implemented yet (P3.5). The total target excludes `on_top` custom clusters. Target check and `target_consistency` block: see below. Results JSON: `meta.project_name`, `meta.team_name`. |
+| TVD (`concho-tvd --config`) | `project.name`, `project.team_name`, `project.gross_sf` (also `per_gsf` cost rows), `tvd.total_target` / `tvd.target`, `tvd.budget`, `tvd.cluster_split` (`explicit` or `derive_from_references`), `tvd.custom_clusters` (also the allowed non-course clusters of the cost DB), `tvd.target_sum_tolerance`, `tvd.target_sum_override`, `files.cost_db` (default for `--cost`, `cost_db.csv` format, P3.4) | Cluster targets: course clusters A–H under their canonical names (`Special Construction`), then the custom clusters. `derive_from_references` follows the course sheets **TVD Targets** / **TVD Owners** (P3.5; formulas and the `target_derivation` block in [`docs/engines/tvd.md`](engines/tvd.md#target-derivation-p35)). The total target excludes `on_top` custom clusters. Target check and `target_consistency` block: see below. Results JSON: `meta.project_name`, `meta.team_name`. |
 | TVD dashboard | team name, GSF, targets (from the run) | No project strings in the renderer. |
 | STV (`concho-stv --config`) | `stv.course_team` (`--team` overrides), `stv.lifetime_years`, `stv.use_phase`, `stv.custom_materials_file` / `files.custom_materials` | `lifetime_years` ≠ 50 is used but reported as a warning (the course formula uses 50). `not_modeled: true` → use phase 0 (warning). `cogeneration: null` = no cogeneration. `urinal_gpf: null` = no urinals (toilet factor 1.0), an explicit `0` = course behaviour (factor 0.75), decision D11 (engine since P3.10). Custom materials are loaded and validated only; the calculation uses them from P3.7. `--no-use-phase` skips the use phase (for per-trade runs combined later). |
 
@@ -106,16 +106,19 @@ categories stay an engine default (`engines/tvd/rules.py`). The engine validates
 
    | Field | Course workbook source |
    |---|---|
-   | `tvd.budget.grant`, `grant_year`, `construction_year`, `inflation`, `roi` | budget inputs on **TVD Targets** (formula: grant × (1 − inflation + ROI)^(construction_year − grant_year)) |
-   | `tvd.target` | the target the team sets below that budget, **TVD Targets** |
+   | `tvd.budget.grant`, `grant_year`, `construction_year`, `inflation`, `roi` | **TVD Targets** C5, C6, C7, C8, C9 (budget C10 = grant × (1 − inflation + ROI)^(construction_year − grant_year), computed) |
+   | `tvd.target` | the target the team sets, **TVD Targets** C11 (a target above the budget is a warning) |
    | `tvd.total_target` | instead of `budget` + `target`: a fixed total (e.g. from an older team worksheet) |
-   | `tvd.cluster_split` `derive_from_references` → `reference_columns` | the RSMeans reference column and the three previous-project columns on **TVD Targets** (enter shares as fractions per cluster A–H) |
-   | `…owner_ratings`, `…reallocation_pct` | owner value ratings on **TVD Owners** and the reallocated share (course: 10 %) |
+   | `tvd.cluster_split` `derive_from_references` → `reference_columns` | **TVD Targets** G5:J12: the RSMeans SF estimate column (G) and the three previous-project columns (H–J), up to 4 columns; enter shares as fractions per cluster A–H |
+   | `…owner_ratings.owners` | owner columns on **TVD Owners** (D, E: "Owner's Value (Owner 1)", "(Owner 2)") |
+   | `…owner_ratings.items` | value items per cluster on **TVD Owners** (column C, rows 6–20, grouped by the cluster labels in column B), each with its 0–10 rating per owner; a blank rating is `null` or left out |
+   | `…reallocation_pct` | **TVD Owners** C22 (course: 10 %) |
+   | `…team_adjustment` | **TVD Targets** M5:M12, the team's additional % per cluster (fractions, must sum to 0; optional) |
+   | `…target_shares` | **TVD Targets** N5:N12 if the team typed its own target shares (must sum to 1.0); `null` = use L + M |
    | `tvd.cluster_split` `explicit` → `values` | the resulting cluster targets (amount) or shares (pct), **TVD Targets** column N |
    | clusters `A`–`H` | cluster sheets **A Substructure**, **B Shell**, **C Interiors**, **D Services**, **E Equip. and Furn.**, **F Special Const.**, **G Bldg. Sitework**, **H Gen. Cond.** (roll-up on **TVD Summary**) |
    | `tvd.custom_clusters` | not in the course workbook: team data (`is_course_data: false`); choose `carved_out` (part of the total) or `on_top` (added to it) |
 
-   The exact cells are pinned when the engine implements the derivation (P3.5).
 4. **stv:** `course_team` is your team row in the course STV workbook (`CEE_222_STV_V12.xlsx`,
    `Construction and Materials` C5). The use-phase values come from its **Use Phase** sheet:
    `grid_kwh` ← "Electricity Drawn from Grid:", `onsite_renewable_kwh` ← "On-site Renewable
@@ -167,11 +170,15 @@ Generated from `docs/schema/project_config.schema.json`; do not edit by hand.
 | `tvd.cluster_split{explicit}.basis` | `"pct"` \| `"amount"` | yes |  | `pct`: values are fractions of the course-cluster total (total target minus carved-out custom clusters) and must sum to 1.0. `amount`: values are currency amounts that, with the carved-out custom clusters, must sum to the total target. |
 | `tvd.cluster_split{explicit}.values` | map `"A"` \| `"B"` \| `"C"` \| `"D"` \| `"E"` \| `"F"` \| `"G"` \| `"H"` → number | yes |  | One value per course cluster A-H (all eight required; 0 is allowed). |
 | `tvd.cluster_split{derive_from_references}.method` | `"derive_from_references"` | yes |  |  |
-| `tvd.cluster_split{derive_from_references}.reference_columns` | list of object | yes |  | RSMeans reference and previous projects (course: 1 + 3 columns). (≥ 1 item(s)) |
+| `tvd.cluster_split{derive_from_references}.reference_columns` | list of object | yes |  | RSMeans SF estimate and previous projects ('TVD Targets' columns G-J; course: 1 + 3 columns, up to 4). (≥ 1 item(s)) |
 | `tvd.cluster_split{derive_from_references}.reference_columns[].name` | string | yes |  | Column label, e.g. 'RSMeans' or 'Project 1'. |
 | `tvd.cluster_split{derive_from_references}.reference_columns[].shares` | map `"A"` \| `"B"` \| `"C"` \| `"D"` \| `"E"` \| `"F"` \| `"G"` \| `"H"` → number | yes |  | Share per course cluster A-H; the eight shares must sum to 1.0. |
-| `tvd.cluster_split{derive_from_references}.owner_ratings` | map `"A"` \| `"B"` \| `"C"` \| `"D"` \| `"E"` \| `"F"` \| `"G"` \| `"H"` → number | yes |  | Owner value rating per course cluster A-H (course sheet 'TVD Owners'). |
-| `tvd.cluster_split{derive_from_references}.reallocation_pct` | number |  | `0.1` | Share of the total reallocated by owner ratings (0.10 = 10 %). (≥ 0, ≤ 1) |
+| `tvd.cluster_split{derive_from_references}.owner_ratings` | object | yes |  | Owner value ratings per value item and owner (course sheet 'TVD Owners'). |
+| `tvd.cluster_split{derive_from_references}.owner_ratings.owners` | list of string | yes |  | Owner names (course: 'Owner 1', 'Owner 2'). (≥ 1 item(s)) |
+| `tvd.cluster_split{derive_from_references}.owner_ratings.items` | map `"A"` \| `"B"` \| `"C"` \| `"D"` \| `"E"` \| `"F"` \| `"G"` \| `"H"` → list of object | yes |  | Value items per course cluster A-H (all eight keys required; an empty list = the cluster is not rated and gets no owner share). |
+| `tvd.cluster_split{derive_from_references}.reallocation_pct` | number |  | `0.1` | Share reallocated by the owner ratings (0.10 = 10 %; 'TVD Owners' C22). L = K x (1 - reallocation_pct) + G x reallocation_pct. (≥ 0, ≤ 1) |
+| `tvd.cluster_split{derive_from_references}.team_adjustment` | map `"A"` \| `"B"` \| `"C"` \| `"D"` \| `"E"` \| `"F"` \| `"G"` \| `"H"` → number |  |  | Additional share per cluster from the team's input ('TVD Targets' column M), as fractions that sum to 0; missing clusters = 0. |
+| `tvd.cluster_split{derive_from_references}.target_shares` | map `"A"` \| `"B"` \| `"C"` \| `"D"` \| `"E"` \| `"F"` \| `"G"` \| `"H"` → number \| null |  | `null` | Target share per cluster A-H typed in by the team ('TVD Targets' column N); must sum to 1.0. null (default) = the target shares are L + M. |
 | `tvd.custom_clusters` | list of object |  |  | Optional non-course clusters. |
 | `tvd.custom_clusters[].name` | string | yes |  | Display name, e.g. 'Equipment Rental'. |
 | `tvd.custom_clusters[].target` | number | yes |  | Target amount in project currency. (≥ 0) |

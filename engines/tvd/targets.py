@@ -2,7 +2,9 @@
 
 :class:`ProjectTargets` holds everything project-specific the engine and the dashboard need:
 project and team name, gross floor area, the total target and one target per cluster
-(course clusters A-H by display name, then the custom clusters).
+(course clusters A-H by display name, then the custom clusters). The course cluster targets
+come from :func:`engines.tvd.derivation.derive_targets` (explicit split or the course method,
+P3.5).
 """
 
 from __future__ import annotations
@@ -12,10 +14,9 @@ from dataclasses import dataclass, field
 from engines.common.config import (
     CLUSTER_NAMES,
     ROUNDING_AMOUNT,
-    CourseCluster,
-    ExplicitSplit,
     ProjectConfig,
 )
+from engines.tvd.derivation import TargetDerivation, derive_targets
 
 
 def _plain(x: float) -> float | int:
@@ -36,35 +37,26 @@ class ProjectTargets:
     target_sum_tolerance: float = 0.001
     # Reason for accepting a mismatch outside the tolerance (tvd.target_sum_override).
     target_sum_override: str | None = None
+    # How the course cluster targets were derived (P3.5; budget, course method).
+    derivation: TargetDerivation | None = None
 
     @classmethod
     def from_config(cls, config: ProjectConfig) -> ProjectTargets:
         tvd = config.tvd
-        split = tvd.cluster_split
-        if not isinstance(split, ExplicitSplit):
-            raise NotImplementedError(
-                "tvd.cluster_split method 'derive_from_references' is not implemented yet "
-                "(roadmap P3.5); use method 'explicit'."
-            )
-        total = tvd.effective_total
-        if split.basis == "amount":
-            course = {c: split.values[c] for c in CourseCluster}
-        else:  # pct of the course-cluster total (total minus carved-out custom clusters)
-            base = total - tvd.carved_out_total
-            course = {c: split.values[c] * base for c in CourseCluster}
-
-        targets = {CLUSTER_NAMES[c]: _plain(v) for c, v in course.items()}
+        derivation = derive_targets(tvd)
+        targets = {CLUSTER_NAMES[c]: _plain(v) for c, v in derivation.final_amount.items()}
         targets.update({c.name: _plain(c.target) for c in tvd.custom_clusters})
         return cls(
             project_name=config.project.name,
             team_name=config.project.team_name,
             currency=config.project.currency,
             gross_sf=_plain(config.project.gross_sf),
-            total_target=_plain(total),
+            total_target=_plain(tvd.effective_total),
             cluster_targets=targets,
             custom_modes={c.name: c.mode for c in tvd.custom_clusters},
             target_sum_tolerance=tvd.target_sum_tolerance,
             target_sum_override=tvd.target_sum_override,
+            derivation=derivation,
         )
 
     @property
@@ -164,7 +156,7 @@ class ProjectTargets:
                 "tvd.target_sum_tolerance, or accept the mismatch with "
                 "tvd.target_sum_override (a reason)."
             )
-        notes = []
+        notes = list(self.derivation.warnings) if self.derivation else []
         if status == "within_tolerance":
             notes.append(f"cluster targets within tolerance: {self._gap_text()}.")
         elif status == "override":

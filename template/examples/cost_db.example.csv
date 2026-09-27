@@ -8,8 +8,8 @@
 # Row 4: fixed    - lump sum: 1 x unit cost
 # Row 5: percent  - 5 % of the sum of all other lines (unit %, unit_cost left empty)
 cluster,assembly_code,group,description,unit,unit_cost,quantity_rule,quantity_value,qty_reliability,cost_reliability,source,split_keywords,qty_label
-Interiors,C1010,Partitions,Invented gypsum partition,SF,12.50,takeoff,,3,2,invented example,,
-Interiors,C3010,Wall Finishes,Invented wall paint,SF,1.80,mirror:C1010,,3,2,invented example,,
+Interiors,C1010,Partitions,Invented gypsum partition,SF,12.50,takeoff,,1,2,invented example,,
+Interiors,C3010,Wall Finishes,Invented wall paint,SF,1.80,mirror:C1010,,1,2,invented example,,
 Interiors,C1030,Fittings,Invented toilet partition,EA,950.00,count_codes:D2010,,2,2,invented example,,
-General Conditions,H4000,General Conditions,Invented site overhead lump sum,LS,250000.00,fixed,1,2,1,invented example,,
-General Conditions,H5000,Contingency,Invented design contingency,%,,pct_of_subtotal,5,1,1,invented example,,
+General Conditions,H4000,General Conditions,Invented site overhead lump sum,LS,250000.00,fixed,1,2,3,invented example,,
+General Conditions,H5000,Contingency,Invented design contingency,%,,pct_of_subtotal,5,3,3,invented example,,

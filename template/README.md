@@ -40,7 +40,10 @@ validation rules: [`docs/config.md`](../docs/config.md). Check your copy with
   A team with a fixed total writes `"total_target": …` instead of `budget` + `target`.
   - `cluster_split` with `method: derive_from_references` mirrors the course "TVD Targets" /
     "TVD Owners" sheets: four reference columns (shares per cluster A–H, each column sums
-    to 1.0), owner ratings per cluster and the 10 % reallocation. The alternative is
+    to 1.0), owner value items per cluster rated 0–10 by two owners (`null` = blank), the
+    10 % reallocation and a team adjustment (+1 % Shell, −1 % Building Sitework; sums to 0).
+    `target_shares: null` means the targets are L + M; typed-in shares (course column N)
+    would replace them. The alternative is
     `method: explicit` with `basis: amount` (currency per cluster) or `basis: pct`
     (fractions summing to 1.0).
   - `custom_clusters`: "Owner Allowance" is team data (`is_course_data: false`) and

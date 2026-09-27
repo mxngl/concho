@@ -34,7 +34,7 @@ row: [`docs/schema/cost_db.schema.json`](../schema/cost_db.schema.json) (pydanti
 | `unit_cost` | – | cost per unit, **plain decimal** (`1670000.00`); empty = unpriced (priced 0, warning) |
 | `quantity_rule` | yes | see "Quantity rules" |
 | `quantity_value` | rule | plain decimal: the quantity (`fixed`), factor (`per_gsf`), percent (`pct_of_subtotal`); empty otherwise |
-| `qty_reliability`, `cost_reliability` | – | 1 = low, 2 = medium, 3 = high; empty = not rated (warning; used by the reliability summary in P3.5) |
+| `qty_reliability`, `cost_reliability` | – | **1 = high, 2 = medium, 3 = low** (course scale, cluster sheets rows 26–28 in 'A Substructure', `M26:M28`); empty = not rated (warning; used by the reliability summary, see below) |
 | `source` | – | where the unit cost comes from (free text) |
 | `split_keywords` | – | sub-code rows only, see "Keyword split" |
 | `qty_label` | – (optional column) | label shown as the quantity source (`qty_src`) instead of the engine's generic label |
@@ -116,12 +116,12 @@ cluster nor in `tvd.custom_clusters` is an error.
 
 ```csv
 cluster,assembly_code,group,description,unit,unit_cost,quantity_rule,quantity_value,qty_reliability,cost_reliability,source,split_keywords,qty_label
-Interiors,C1010,Partitions,Invented gypsum partition,SF,12.50,takeoff,,3,2,invented,,
-Interiors,C3010,Wall Finishes,Invented wall paint,SF,1.80,mirror:C1010,,3,2,invented,,
+Interiors,C1010,Partitions,Invented gypsum partition,SF,12.50,takeoff,,1,2,invented,,
+Interiors,C3010,Wall Finishes,Invented wall paint,SF,1.80,mirror:C1010,,1,2,invented,,
 Interiors,C1030,Fittings,Invented toilet partition,EA,950.00,count_codes:D2010,,2,2,invented,,
-Services,D5010,Electrical Service & Distribution,Invented electrical,GSF,20.00,per_gsf,,1,1,invented,,
-General Conditions,H4000,General Conditions,Invented site overhead,LS,250000.00,fixed,1,2,1,invented,,
-General Conditions,H5000,Contingency,Invented design contingency,%,,pct_of_subtotal,5,1,1,invented,,
+Services,D5010,Electrical Service & Distribution,Invented electrical,GSF,20.00,per_gsf,,3,3,invented,,
+General Conditions,H4000,General Conditions,Invented site overhead,LS,250000.00,fixed,1,2,3,invented,,
+General Conditions,H5000,Contingency,Invented design contingency,%,,pct_of_subtotal,5,3,3,invented,,
 Substructure,A1020,Special Foundations,,,,takeoff,,,,,,
 ```
 
@@ -185,6 +185,130 @@ Island 2026 (reference test, converted into a temporary folder): 48 rows, **0 er
 8 warnings** (3 placeholders A1020/C3030/F1000, custom cluster Equipment Rental, both
 reliability columns not rated, D5030 and D5090 mislabels), no exact duplicates; the TVD run
 on it reproduces the AutoTVD results (grand total 16,065,644.29, unmapped 1693, DNC 75).
+
+## Target derivation (P3.5)
+
+`engines/tvd/derivation.py` derives the cluster targets A–H from `project_config` (`tvd`) the
+way the course workbook's **TVD Targets** and **TVD Owners** sheets do. All inputs come from
+the config; the engine never reads the workbook. The result is the `target_derivation` block
+of the results JSON (before `target_consistency`).
+
+### Budget (`TVD Targets` C5:C11)
+
+| Course cell | Config | Meaning |
+|---|---|---|
+| C5 | `tvd.budget.grant` | construction grant from the donor |
+| C6 | `tvd.budget.grant_year` | grant year |
+| C7 | `tvd.budget.construction_year` | construction year |
+| C8 | `tvd.budget.inflation` | expected inflation (fraction) |
+| C9 | `tvd.budget.roi` | return on investment (fraction) |
+| C10 | – (computed) | **budget** = grant × (1 − inflation + roi) ^ (construction_year − grant_year) |
+| C11 | `tvd.target` | the team's **total target**, an explicit input |
+
+A target above the budget is a warning (config validation, engine notes and
+`target_derivation.warnings`), not an error. With `tvd.total_target` instead of
+`budget` + `target` there is no budget (`budget: null`).
+
+### Cluster split: `derive_from_references` (`TVD Targets` / `TVD Owners`)
+
+| Step | Course cells | Engine |
+|---|---|---|
+| reference shares | `TVD Targets` G5:J12 (RSMeans SF estimate, previous projects 1–3) | `reference_columns` (1–4 columns, shares sum to 1.0) |
+| **K** reference average | K5:K12 = `IF(all 0, 0, AVERAGE(G:J))` | mean of the reference columns (0 if all are 0) |
+| owner ratings | `TVD Owners` D6:E20: value items (C) per cluster (B), rated 0–10 per owner | `owner_ratings.owners` + `owner_ratings.items` |
+| cluster value **F** | F = `AVERAGE` of all rating cells of the cluster's items (blank cells ignored) | mean of all non-blank ratings of the cluster's items (not the mean of item means) |
+| owner share **G** | G = F / `SUM(F6:F20)` | F / sum of F; a cluster without any rating gets 0 (warning) |
+| **L** owner-adjusted | L5:L12 = K × (1 − C22) + H, H = G / C22 / 100 | **L = K × (1 − p) + G × p**, p = `reallocation_pct` (C22) |
+| **M** team adjustment | M5:M12 (typed in) | `team_adjustment` (fractions, must sum to 0, missing = 0; error otherwise or if L + M < 0) |
+| **N** target share | N5:N12 (typed in by the team, not computed) | `target_shares` if given (sum 1.0), else **L + M** |
+| $ rows | G16:N23 = share × C11 | share × `course_cluster_base` (total target − carved-out custom clusters; = C11 without them) |
+
+**Deviation from the course formula (L).** The course's `TVD Owners` H computes the owner
+term as `G / C22 / 100`. That equals `G × C22` only for C22 = 10 % (0.1 / 0.1 / 100 = 0.01
+= 0.1 × 0.1). For any other reallocation the course's L column no longer sums to 100 %
+(e.g. C22 = 25 %: H sums to 0.04 instead of 0.25, L sums to 0.79). The engine implements
+the intended formula L = K × (1 − p) + G × p, which sums to 1 for every p; with the course's
+10 % both give the same numbers (the course-equivalence test checks this, and pins the
+course formula for 25 %). `course_owner_term()` in `derivation.py` documents the course
+formula; the engine does not use it. To be reported to the course together with the
+`TVD Summary` C25 bug (P3.10 item 6).
+
+Other edge cases handled differently from the sheet (the sheet shows an error there):
+a cluster whose ratings are all blank or all 0 (course F = `""`, G = `#VALUE!`) gets an
+owner share of 0; all ratings 0 with `reallocation_pct` > 0 is a config error.
+
+### `target_derivation` block
+
+| Key | Meaning |
+|---|---|
+| `method` | `explicit` or `derive_from_references` (`tvd.cluster_split.method`) |
+| `budget` | `{grant, grant_year, construction_year, years, inflation, roi, amount}` (C5:C10), or `null` |
+| `total_target` | the total target (C11 / `tvd.total_target`) |
+| `target_above_budget` | `true`/`false`, `null` without a budget |
+| `course_cluster_base` | amount split among A–H: total target − carved-out custom clusters (course: C11) |
+| `reallocation_pct`, `references`, `owners`, `final_source` | `derive_from_references` only: p, the reference column names, the owner names, `L+M` or `target_shares` |
+| `clusters` | per course cluster `A`…`H`: `name`, `final_share` (share of `course_cluster_base`), `target` ($). `derive_from_references` adds `reference_shares` (G–J), `reference_average` (K), `owner_items`, `owner_value` (F, `null` = not rated), `owner_share` (G), `owner_adjusted` (L), `team_adjustment` (M), `derived_share` (L + M) and `amounts` ($ of each: `references`, `reference_average`, `owner_adjusted`, `team_adjustment`, `derived`) |
+| `sums` | sums over A–H of `final_share` and `target` (+ K, G, L, M, L + M for `derive_from_references`) |
+| `warnings` | e.g. target above budget, clusters without owner ratings |
+
+Shares are rounded to 10 decimals, amounts to cents.
+
+For an explicit split with `basis: amount`, `final_share` = amount / `course_cluster_base`
+(Island 2026: the shares sum to 1.00035, the 5,852 gap of `target_consistency`).
+
+## Reliability summary (P3.5)
+
+`engines/tvd/reliability.py` sums the line estimates by reliability, like the course
+cluster sheets (rows below the line items, e.g. `'A Substructure'!K26:P28`: labels
+High/Medium/Low in K, ratings 1/2/3 in M, `SUMIF` over the ratings in N = quantity,
+O = cost data, P = overall) and the **TVD Reliability** sheet (per cluster and totals).
+
+- Scale: **1 = High, 2 = Medium, 3 = Low** (`qty_reliability`, `cost_reliability` of the
+  cost DB).
+- **Overall** of a line = the worse of its two ratings (course column P = `MAX(N:O)`); a
+  line with only one rating takes that one (`MAX` ignores blanks); a line with none is
+  `not_rated`.
+- Unrated lines are summed as `not_rated`, so high + medium + low + not_rated = the
+  cluster estimate in every category.
+
+Results JSON `reliability` (after `cost_db_validation`):
+
+| Key | Meaning |
+|---|---|
+| `scale` | `{"1": "high", "2": "medium", "3": "low"}` |
+| `clusters` | per cluster of the run (course clusters and custom clusters): `quantity`, `cost`, `overall`, each `{high, medium, low, not_rated}` in $, plus `estimate` (the cluster total) |
+| `totals` | the same over all clusters (`estimate` = grand total) |
+| `totals_a_to_h` | the same over the course clusters A–H only (the scope of the course sheet) |
+
+**Course sheet errors, not copied:** in **TVD Reliability**, E14 (quantity HIGH of
+H General Conditions) points to `'H Gen. Cond.'!W30` (the target column) instead of N30,
+and the LOW totals C6 (quantity) and C18 (cost) are `SUM(C7:C13)` / `SUM(C19:C25)`, which
+leave out the H row. The engine sums all clusters A–H. To be reported to the course with the
+`TVD Summary` C25 bug (P3.10 item 6).
+
+Island 2026 is not rated (the migrated cost DB has empty reliability columns), so its whole
+estimate is `not_rated` in all three categories.
+
+## Tracking (P3.5)
+
+Like the course sheet **TVD Tracking** (DATE, EVENT, ESTIMATE, DELTA = target − estimate),
+every run can carry an event label and a note:
+
+```bash
+concho-tvd --config … --arch … --struct … --out out \
+           --snapshot "Week 12" --event "Design review 1" --note "after the facade VE"
+```
+
+- `--event` / `--note` are stored in the history snapshot (keys `event`, `note`, written
+  only when set; snapshots without them, including all older ones, load unchanged).
+- The results JSON gets a `tracking` block: `target` (the current total target) and `rows`,
+  one per history snapshot (oldest first) with `date`, `label`, `event`, `note`, `estimate`
+  (the snapshot's grand total) and `delta` = target − estimate (positive = under target, as
+  in the course), then the current run. With `--snapshot` the current run is the last
+  snapshot; without it a row `Run <date>` is added. `current: true` marks this run's row.
+- The delta of older snapshots uses the **current** target (course: `=$D$5-D…`).
+- The demo snapshot that a local run creates in an empty history folder is not in the table
+  of that run.
 
 ## Cent rounding of line totals (P3.10 item 4)
 

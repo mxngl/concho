@@ -317,7 +317,7 @@
     },
     "DeriveFromReferences": {
       "additionalProperties": false,
-      "description": "Course method: cluster share = average of the reference columns, then\n`reallocation_pct` of the total is reallocated by the owner value ratings.",
+      "description": "Course method ('TVD Targets' / 'TVD Owners'): cluster share = mean of the reference\ncolumns (K), `reallocation_pct` of it reallocated by the owner value ratings\n(L = K x (1 - p) + G x p), plus an optional team adjustment (M); or the target shares\ntyped in by the team (column N).",
       "properties": {
         "method": {
           "const": "derive_from_references",
@@ -325,33 +325,60 @@
           "type": "string"
         },
         "reference_columns": {
-          "description": "RSMeans reference and previous projects (course: 1 + 3 columns).",
+          "description": "RSMeans SF estimate and previous projects ('TVD Targets' columns G-J; course: 1 + 3 columns, up to 4).",
           "items": {
             "$ref": "#/$defs/ReferenceColumn"
           },
+          "maxItems": 4,
           "minItems": 1,
           "title": "Reference Columns",
           "type": "array"
         },
         "owner_ratings": {
-          "additionalProperties": {
-            "minimum": 0,
-            "type": "number"
-          },
-          "description": "Owner value rating per course cluster A-H (course sheet 'TVD Owners').",
-          "propertyNames": {
-            "$ref": "#/$defs/CourseCluster"
-          },
-          "title": "Owner Ratings",
-          "type": "object"
+          "$ref": "#/$defs/OwnerRatings",
+          "description": "Owner value ratings per value item and owner (course sheet 'TVD Owners')."
         },
         "reallocation_pct": {
           "default": 0.1,
-          "description": "Share of the total reallocated by owner ratings (0.10 = 10 %).",
+          "description": "Share reallocated by the owner ratings (0.10 = 10 %; 'TVD Owners' C22). L = K x (1 - reallocation_pct) + G x reallocation_pct.",
           "maximum": 1,
           "minimum": 0,
           "title": "Reallocation Pct",
           "type": "number"
+        },
+        "team_adjustment": {
+          "additionalProperties": {
+            "maximum": 1,
+            "minimum": -1,
+            "type": "number"
+          },
+          "description": "Additional share per cluster from the team's input ('TVD Targets' column M), as fractions that sum to 0; missing clusters = 0.",
+          "propertyNames": {
+            "$ref": "#/$defs/CourseCluster"
+          },
+          "title": "Team Adjustment",
+          "type": "object"
+        },
+        "target_shares": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "maximum": 1,
+                "minimum": 0,
+                "type": "number"
+              },
+              "propertyNames": {
+                "$ref": "#/$defs/CourseCluster"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Target share per cluster A-H typed in by the team ('TVD Targets' column N); must sum to 1.0. null (default) = the target shares are L + M.",
+          "title": "Target Shares"
         }
       },
       "required": [
@@ -582,6 +609,42 @@
         "subagent"
       ],
       "title": "Models",
+      "type": "object"
+    },
+    "OwnerRatings": {
+      "additionalProperties": false,
+      "description": "Owner value ratings (course sheet 'TVD Owners'): value items per cluster, each rated\n0-10 by several owners. Cluster value = mean of all ratings of its items.",
+      "properties": {
+        "owners": {
+          "description": "Owner names (course: 'Owner 1', 'Owner 2').",
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Owners",
+          "type": "array"
+        },
+        "items": {
+          "additionalProperties": {
+            "items": {
+              "$ref": "#/$defs/ValueItem"
+            },
+            "type": "array"
+          },
+          "description": "Value items per course cluster A-H (all eight keys required; an empty list = the cluster is not rated and gets no owner share).",
+          "propertyNames": {
+            "$ref": "#/$defs/CourseCluster"
+          },
+          "title": "Items",
+          "type": "object"
+        }
+      },
+      "required": [
+        "owners",
+        "items"
+      ],
+      "title": "OwnerRatings",
       "type": "object"
     },
     "ProjectSection": {
@@ -956,6 +1019,43 @@
         }
       },
       "title": "UsePhase",
+      "type": "object"
+    },
+    "ValueItem": {
+      "additionalProperties": false,
+      "description": "One owner value item of a cluster (course sheet 'TVD Owners', column C), rated 0-10\nby each owner (columns D, E, ...).",
+      "properties": {
+        "item": {
+          "description": "Value item, e.g. 'Energy Efficiency'.",
+          "minLength": 1,
+          "title": "Item",
+          "type": "string"
+        },
+        "ratings": {
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "maximum": 10,
+                "minimum": 0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "description": "Rating 0-10 per owner (owner name as in `owners`). A missing owner or null = blank (ignored, as in the course).",
+          "propertyNames": {
+            "minLength": 1
+          },
+          "title": "Ratings",
+          "type": "object"
+        }
+      },
+      "required": [
+        "item"
+      ],
+      "title": "ValueItem",
       "type": "object"
     },
     "WaterUse": {
