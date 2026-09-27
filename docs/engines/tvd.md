@@ -209,6 +209,34 @@ A target above the budget is a warning (config validation, engine notes and
 `target_derivation.warnings`), not an error. With `tvd.total_target` instead of
 `budget` + `target` there is no budget (`budget: null`).
 
+### Cluster split: `derive_from_references` (`TVD Targets` / `TVD Owners`)
+
+| Step | Course cells | Engine |
+|---|---|---|
+| reference shares | `TVD Targets` G5:J12 (RSMeans SF estimate, previous projects 1–3) | `reference_columns` (1–4 columns, shares sum to 1.0) |
+| **K** reference average | K5:K12 = `IF(all 0, 0, AVERAGE(G:J))` | mean of the reference columns (0 if all are 0) |
+| owner ratings | `TVD Owners` D6:E20: value items (C) per cluster (B), rated 0–10 per owner | `owner_ratings.owners` + `owner_ratings.items` |
+| cluster value **F** | F = `AVERAGE` of all rating cells of the cluster's items (blank cells ignored) | mean of all non-blank ratings of the cluster's items (not the mean of item means) |
+| owner share **G** | G = F / `SUM(F6:F20)` | F / sum of F; a cluster without any rating gets 0 (warning) |
+| **L** owner-adjusted | L5:L12 = K × (1 − C22) + H, H = G / C22 / 100 | **L = K × (1 − p) + G × p**, p = `reallocation_pct` (C22) |
+| **M** team adjustment | M5:M12 (typed in) | `team_adjustment` (fractions, must sum to 0, missing = 0; error otherwise or if L + M < 0) |
+| **N** target share | N5:N12 (typed in by the team, not computed) | `target_shares` if given (sum 1.0), else **L + M** |
+| $ rows | G16:N23 = share × C11 | share × `course_cluster_base` (total target − carved-out custom clusters; = C11 without them) |
+
+**Deviation from the course formula (L).** The course's `TVD Owners` H computes the owner
+term as `G / C22 / 100`. That equals `G × C22` only for C22 = 10 % (0.1 / 0.1 / 100 = 0.01
+= 0.1 × 0.1). For any other reallocation the course's L column no longer sums to 100 %
+(e.g. C22 = 25 %: H sums to 0.04 instead of 0.25, L sums to 0.79). The engine implements
+the intended formula L = K × (1 − p) + G × p, which sums to 1 for every p; with the course's
+10 % both give the same numbers (the course-equivalence test checks this, and pins the
+course formula for 25 %). `course_owner_term()` in `derivation.py` documents the course
+formula; the engine does not use it. To be reported to the course together with the
+`TVD Summary` C25 bug (P3.10 item 6).
+
+Other edge cases handled differently from the sheet (the sheet shows an error there):
+a cluster whose ratings are all blank or all 0 (course F = `""`, G = `#VALUE!`) gets an
+owner share of 0; all ratings 0 with `reallocation_pct` > 0 is a config error.
+
 ### `target_derivation` block
 
 | Key | Meaning |
@@ -218,8 +246,12 @@ A target above the budget is a warning (config validation, engine notes and
 | `total_target` | the total target (C11 / `tvd.total_target`) |
 | `target_above_budget` | `true`/`false`, `null` without a budget |
 | `course_cluster_base` | amount split among A–H: total target − carved-out custom clusters (course: C11) |
-| `clusters` | per course cluster `A`…`H`: `name`, `final_share` (share of `course_cluster_base`), `target` ($) |
-| `warnings` | e.g. target above budget |
+| `reallocation_pct`, `references`, `owners`, `final_source` | `derive_from_references` only: p, the reference column names, the owner names, `L+M` or `target_shares` |
+| `clusters` | per course cluster `A`…`H`: `name`, `final_share` (share of `course_cluster_base`), `target` ($). `derive_from_references` adds `reference_shares` (G–J), `reference_average` (K), `owner_items`, `owner_value` (F, `null` = not rated), `owner_share` (G), `owner_adjusted` (L), `team_adjustment` (M), `derived_share` (L + M) and `amounts` ($ of each: `references`, `reference_average`, `owner_adjusted`, `team_adjustment`, `derived`) |
+| `sums` | sums over A–H of `final_share` and `target` (+ K, G, L, M, L + M for `derive_from_references`) |
+| `warnings` | e.g. target above budget, clusters without owner ratings |
+
+Shares are rounded to 10 decimals, amounts to cents.
 
 For an explicit split with `basis: amount`, `final_share` = amount / `course_cluster_base`
 (Island 2026: the shares sum to 1.00035, the 5,852 gap of `target_consistency`).
