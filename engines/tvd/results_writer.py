@@ -25,6 +25,7 @@ def build_results_payload(
     cost_db_validation: dict | None = None,
     reliability: dict | None = None,
     tracking: dict | None = None,
+    quantity_parse_warnings: dict | None = None,
 ) -> dict:
     """
     Build the structured results dict of a run.
@@ -55,6 +56,10 @@ def build_results_payload(
     tracking          – course "TVD Tracking" table (P3.5; only if given): target, rows
                         [{date, label, event, note, estimate, delta = target − estimate,
                         current}]
+    quantity_parse_warnings – quantity cells the parser could not read cleanly (P3.11; only if
+                        given): parser (tolerant | legacy), total, columns {column: {count,
+                        by_issue {issue: count}, examples [{value, issue}] (max. 20, raw
+                        cell text only)}}; see docs/engines/tvd.md
     line_items        – dict of cluster → list of full line-item rows
     """
     ts       = ts or datetime.now()
@@ -130,6 +135,8 @@ def build_results_payload(
         payload["reliability"] = reliability
     if tracking is not None:
         payload["tracking"] = tracking
+    if quantity_parse_warnings is not None:
+        payload["quantity_parse_warnings"] = quantity_parse_warnings
     payload["line_items"] = grouped
     return payload
 

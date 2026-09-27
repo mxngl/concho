@@ -74,6 +74,10 @@ def build_parser() -> argparse.ArgumentParser:
                         help="Output folder for results/ and the dashboard")
     parser.add_argument("--history", metavar="DIR",
                         help="History snapshot folder (default: OUT/history)")
+    # P3.11: AutoTVD's quantity parser (fractional inches dropped). Hidden: only for the
+    # AutoTVD equivalence test and for reproducing the submitted Island value.
+    parser.add_argument("--legacy-length-parsing", action="store_true",
+                        help=argparse.SUPPRESS)
     return parser
 
 
@@ -119,7 +123,8 @@ def main(argv: list[str] | None = None) -> int:
     # 1–6. Load data, compute line items and cluster summary
     # (run.notes repeat the target warnings of the config validation printed above.)
     try:
-        run = run_files(args.arch, args.struct, cost_path, project)
+        run = run_files(args.arch, args.struct, cost_path, project,
+                        legacy_length_parsing=args.legacy_length_parsing)
     except CostDbError as exc:
         parser.error(f"{exc}\nCheck the file with: concho costdb validate {cost_path}")
     for warning in run.cost_db_validation["warnings"]:

@@ -10,6 +10,7 @@ legacy dashboard lives in :mod:`dashboards.tvd.legacy_render`.
 from dataclasses import dataclass, field
 
 from engines.common.config import ProjectConfig
+from engines.common.quantities import QuantityParseLog
 from engines.tvd.cost_db import CostDb, Rule, load_cost_db
 from engines.tvd.loading import load_csv_file, merge_takeoffs, source_label
 from engines.tvd.quantities import aggregate_quantities, calculate_costs, split_rules
@@ -36,6 +37,7 @@ class TvdRun:
     notes: list[str] = field(default_factory=list)
     cost_db_validation: dict | None = None
     reliability: dict | None = None
+    quantity_parse_warnings: dict | None = None
 
     @property
     def targets(self) -> dict[str, float]:
@@ -66,6 +68,7 @@ class TvdRun:
             cost_db_validation=self.cost_db_validation,
             reliability=self.reliability,
             tracking=tracking,
+            quantity_parse_warnings=self.quantity_parse_warnings,
         )
 
 
@@ -86,8 +89,14 @@ def compute(
     cost_db: CostDb,
     config: ProjectConfig | ProjectTargets,
     source: str = "",
+    *,
+    legacy_length_parsing: bool = False,
 ) -> TvdRun:
-    """Run the TVD computation on parsed QTO rows and a validated cost DB."""
+    """Run the TVD computation on parsed QTO rows and a validated cost DB.
+
+    ``legacy_length_parsing`` switches back to AutoTVD's quantity parser (fractional inches
+    dropped, P3.11); it exists only to keep the AutoTVD equivalence test meaningful.
+    """
     if not cost_db.ok:
         raise ValueError("compute() needs a cost DB without validation errors")
     project = _project(config)
@@ -101,12 +110,22 @@ def compute(
           f"combined={len(all_elements)}, duplicates removed={dupes}")
 
     # Aggregate takeoff quantities (excluding furnishings and DNC elements)
+    parse_log = QuantityParseLog()
     code_qtys, unmapped_count, all_ac_counts, unmapped_rows, dnc_count = aggregate_quantities(
-        all_elements, EXCLUDE_CATEGORIES, ac_keyword_split=split_rules(lines)
+        all_elements, EXCLUDE_CATEGORIES, ac_keyword_split=split_rules(lines),
+        parse_log=parse_log, legacy_length_parsing=legacy_length_parsing,
     )
+    parse_warnings = {
+        "parser": "legacy" if legacy_length_parsing else "tolerant",
+        **parse_log.block(),
+    }
     print(f"   Assembly codes in takeoff: {len(code_qtys)}")
     print(f"   Unmapped elements (no AC): {unmapped_count}")
     print(f"   Skipped (DNC marker):      {dnc_count}")
+    if legacy_length_parsing:
+        print("   Quantity parser: legacy (AutoTVD, fractional inches dropped)")
+    elif parse_log.total:
+        print(f"   Quantity parse warnings:   {parse_log.total} (see quantity_parse_warnings)")
     for line in lines:
         if line.rule is Rule.COUNT_CODES:
             count = sum(all_ac_counts.get(c, 0) for c in dict.fromkeys(line.rule_targets))
@@ -131,11 +150,14 @@ def compute(
         notes=notes,
         cost_db_validation=cost_db.validation_block(),
         reliability=reliability_summary(lines, results),
+        quantity_parse_warnings=parse_warnings,
     )
 
 
 def run_files(
-    arch_path: str, struct_path: str, cost_path: str, config: ProjectConfig | ProjectTargets
+    arch_path: str, struct_path: str, cost_path: str, config: ProjectConfig | ProjectTargets,
+    *,
+    legacy_length_parsing: bool = False,
 ) -> TvdRun:
     """Load the QTO exports and the cost DB from explicit local paths and run :func:`compute`.
 
@@ -149,4 +171,5 @@ def run_files(
     ]
     source = "Custom files — " + ", ".join(parts)
     print(f"Loaded data from custom paths: {', '.join(parts)}")
-    return compute(load_csv_file(arch_path), load_csv_file(struct_path), cost_db, config, source)
+    return compute(load_csv_file(arch_path), load_csv_file(struct_path), cost_db, config, source,
+                   legacy_length_parsing=legacy_length_parsing)

@@ -14,9 +14,9 @@ Line totals are rounded to cents when computed; see
 
 | Module | Content |
 |---|---|
-| `loading.py` | CSV reading (BOM cleanup), quantity string parsing, `merge_takeoffs` (dedup by `ElementId`, structural wins) |
+| `loading.py` | CSV reading (BOM cleanup), AutoTVD's legacy quantity parser `parse_qty_str` (only with `--legacy-length-parsing`), `merge_takeoffs` (dedup by `ElementId`, structural wins) |
 | `cost_db.py` | `cost_db.csv` format (P3.4): pydantic row model, loader, validator (`concho costdb validate`) |
-| `quantities.py` | aggregation (DNC marker, excluded categories, keyword AC split) and quantity rules |
+| `quantities.py` | aggregation (DNC marker, excluded categories, keyword AC split; `Length`/`Area`/`Volume` via the shared tolerant parser `engines/common/quantities.py`, P3.11) and quantity rules |
 | `summary.py` | cluster summary, console formatting |
 | `engine.py` | `compute()` / `run_files()`: inputs + project config → `TvdRun` (line items, summary, counts, results dict) |
 | `targets.py` | `ProjectTargets`: project values from `project_config` (names, GSF, total and cluster targets, custom clusters, tolerance) |
@@ -66,6 +66,10 @@ concho-tvd --config path/to/project_config.json \
 | `--event LABEL`, `--note TEXT` | tracking event and note of this run (course **TVD Tracking**, P3.5): stored in the snapshot (with `--snapshot`) and in the `tracking` table of the results JSON |
 | `--history DIR` | history folder (default `OUT/history`) |
 
+Hidden flag (not in `--help`): `--legacy-length-parsing` uses AutoTVD's quantity parser, which reads
+`9' - 7 3/4"` as 9 ft (P3.11). Only for the AutoTVD equivalence test and for reproducing the
+submitted Island value 16,065,644.29; see [Quantity parsing](../../docs/engines/tvd.md#quantity-parsing-p311-p45).
+
 Without `--ci`, the dashboard opens in the browser and, if the history folder is empty, a demo
 "Test Version" snapshot is created (same as AutoTVD).
 
@@ -101,6 +105,9 @@ it.
 
 - `tests/tvd/test_tvd_units.py`: quantity rules and the dedup, on the invented fixture in
   `tests/fixtures/tvd_synthetic/`.
+- `tests/common/test_quantities.py` (P3.11): the tolerant quantity parser, every format.
+- `tests/tvd/test_tvd_export_layouts.py` (P4.5): an invented old-layout (44 columns, display
+  strings) and new-layout (58 columns, decimals) export pair give identical totals.
 - `tests/tvd/test_tvd_quantity_rules.py` (P3.4): each `quantity_rule`, the keyword split,
   `qty_label`, the `cost_db_validation` block and the stop on an invalid cost DB, on a small
   synthetic project.
@@ -123,7 +130,9 @@ it.
   Masked since P3.2: the cluster name (`Special Contruction` → `Special Construction`), the team
   name and the GSF expressions in the dashboard. With the reference inputs it also checks grand
   total 16,065,644.29, `unmapped_count` 1693 and `dnc_count` 75, and pins the Island
-  `target_consistency` block separately (P3.3). Skipped unless `AUTOTVD_DIR` is set:
+  `target_consistency` block separately (P3.3). Since P3.11 this engine runs there with
+  `--legacy-length-parsing`; a third run with the default parser pins the corrected Island
+  golden (16,081,484.40, per-cluster estimates, only C1010 changed). Skipped unless `AUTOTVD_DIR` is set:
 
   ```bash
   git clone --branch island-2026-final https://github.com/mxngl/AutoTVD /tmp/AutoTVD

@@ -184,7 +184,9 @@ script validates the new file (exit 1 on errors). Never commit the converted Isl
 Island 2026 (reference test, converted into a temporary folder): 48 rows, **0 errors,
 8 warnings** (3 placeholders A1020/C3030/F1000, custom cluster Equipment Rental, both
 reliability columns not rated, D5030 and D5090 mislabels), no exact duplicates; the TVD run
-on it reproduces the AutoTVD results (grand total 16,065,644.29, unmapped 1693, DNC 75).
+on it reproduces the AutoTVD results with `--legacy-length-parsing` (grand total
+16,065,644.29, unmapped 1693, DNC 75); with the default parser the grand total is
+16,081,484.40 (see [Quantity parsing](#quantity-parsing-p311-p45)).
 
 ## Target derivation (P3.5)
 
@@ -335,11 +337,113 @@ Consequences:
 - A line's `qty × unit_cost` recomputed from the results JSON can differ from its `total` by
   a cent or so, because `qty` is stored rounded.
 
-**Decision (P3.10):** the stored results stay rounded as they are. The Island reference
-(grand total 16,065,644.29) and the AutoTVD equivalence test (`test_tvd_equivalence.py`,
+**Decision (P3.10):** the stored results stay rounded as they are. The Island references
+(grand total 16,065,644.29 legacy, 16,081,484.40 corrected, P3.11) and the AutoTVD equivalence test (`test_tvd_equivalence.py`,
 identical results JSON, history snapshot and dashboard) depend on this rounding;
 rounding only for display would change stored totals by fractions of a cent and break that
 comparison. Revisit only together with a new Island reference.
+
+## Quantity parsing (P3.11, P4.5)
+
+TVD reads `Length`, `Area` and `Volume` with the shared parser
+[`engines/common/quantities.py`](../../engines/common/quantities.py) (`parse_quantity`). It reads
+both export generations of the Revit add-in (column layouts:
+[`docs/model-requirements.md`](../model-requirements.md#old-vs-new-export-layout-p45)):
+
+| Input | Example | Read as |
+|---|---|---|
+| plain decimal (add-in since #18) | `312.5`, `-3.25`, `.5` | the column's unit: ft / SF / CF |
+| feet-inch | `9' - 7 3/4"`, `9'-7 3/4"`, `136' - 0"`, `10' - 6.5"`, `-2' - 6"` | ft (9.6458, 9.6458, 136, 10.5417, −2.5) |
+| feet only, inches only | `12'`, `7 3/4"`, `1/2"`, `11"` | ft |
+| imperial suffix | `6590 SF`, `42.75 CF`, `88 LF`, `12 ft`, `12 ft²`, `12 ft³`, `12 sq ft`, `12 cu ft`, `6 in` | ft / SF / CF |
+| metric suffix (old metric-model exports) | `3 m`, `3000 mm`, `300 cm`, `612 m²`, `1.5 m³` | **converted** to ft / SF / CF, counted as `metric_converted` |
+| empty, blank | `""`, `"  "` | 0, no warning |
+
+A leading `-` negates the whole value (`-2' - 6"` = −2.5 ft; the old parser gave −1.5).
+Whitespace around every part is ignored.
+
+**Separators.** `.` is the decimal point. `,` is a thousands separator only when no other
+reading is possible: grouping with a decimal point (`1,234.5`) or with at least two groups
+(`1,234,567`). Every other comma (`1,234` = 1234 or 1.234?, `1.234,5`, `12,5`) and dotted
+grouping (`1.234.567`) is **not guessed**: the cell counts 0 and is reported as
+`ambiguous_separator`. The new add-in format never contains separators (invariant decimals);
+none of the Island exports has one either.
+
+**Not counted, reported:** `unknown_unit` (e.g. `12 kg`, `12 yd`), `unit_mismatch` (a unit of the
+wrong dimension for the column, e.g. `12 SF` in `Length`, `9' - 6"` in `Area`), `no_number`
+(`n/a`, `SF`, `9' - 7 3/4` without the inch mark). The run continues.
+
+### `quantity_parse_warnings` block
+
+Every results JSON has it (only rows that are aggregated are checked: coded, not DNC, not an
+excluded category):
+
+```json
+"quantity_parse_warnings": {
+  "parser": "tolerant",
+  "total": 3,
+  "columns": {
+    "Area": {
+      "count": 3,
+      "by_issue": {"ambiguous_separator": 1, "metric_converted": 2},
+      "examples": [{"value": "612 m²", "issue": "metric_converted"},
+                   {"value": "1,234", "issue": "ambiguous_separator"}]
+    }
+  }
+}
+```
+
+`examples` holds up to 20 distinct raw cell strings per column, nothing else from the row (no
+ElementId). `metric_converted` values are counted (converted); all other issues count 0.
+
+### Legacy mode
+
+`--legacy-length-parsing` (hidden CLI flag; `legacy_length_parsing=True` in `compute()` /
+`run_files()`, not a `project_config` field) switches back to AutoTVD's parser
+(`engines.tvd.loading.parse_qty_str`): first number unless the string is `F' - I"` with whole or
+decimal inches, so `9' - 7 3/4"` is read as 9 ft. The block then says `"parser": "legacy"`. It
+exists so the AutoTVD equivalence test (`tests/tvd/test_tvd_equivalence.py`) still proves the
+byte-identical migration against `island-2026-final`, and to reproduce the submitted Island
+value.
+
+### Island delta (before/after)
+
+**16,065,644.29 was the submitted Island value.** It came from AutoTVD's parser, which dropped
+fractional inches, and is now the **legacy** reference (`test_island_golden_numbers`, run with
+`--legacy-length-parsing`). The corrected run (engine default) is pinned in
+`test_island_corrected_golden`. Inputs: AutoTVD `island-2026-final` (`qto/*.csv`,
+`cost_data.csv` converted to `cost_db.csv`).
+
+| | Legacy (submitted) | Corrected | Delta USD | Delta % |
+|---|---:|---:|---:|---:|
+| Grand total | 16,065,644.29 | 16,081,484.40 | +15,840.11 | +0.099 % |
+| Unmapped elements | 1693 | 1693 | 0 | |
+| DNC elements | 75 | 75 | 0 | |
+
+LF-priced lines that changed (the only one; all other lines are identical):
+
+| Uniformat code | Line | Old LF | New LF | Old $ | New $ |
+|---|---|---:|---:|---:|---:|
+| C1010 | Interior partitions (Interiors) | 782.58 | 820.63 | 325,836.40 | 341,676.51 |
+
+Per cluster:
+
+| Cluster | Legacy | Corrected | Delta USD | Delta % |
+|---|---:|---:|---:|---:|
+| Substructure | 466,690.00 | 466,690.00 | 0.00 | 0 % |
+| Shell | 4,430,372.01 | 4,430,372.01 | 0.00 | 0 % |
+| Interiors | 1,537,403.04 | 1,553,243.15 | +15,840.11 | +1.030 % |
+| Services | 5,175,000.00 | 5,175,000.00 | 0.00 | 0 % |
+| Equipment and Furnishings | 234,080.72 | 234,080.72 | 0.00 | 0 % |
+| Special Construction | 217,825.00 | 217,825.00 | 0.00 | 0 % |
+| Building Sitework | 598,273.52 | 598,273.52 | 0.00 | 0 % |
+| General Conditions | 3,006,000.00 | 3,006,000.00 | 0.00 | 0 % |
+| Equipment Rental | 400,000.00 | 400,000.00 | 0.00 | 0 % |
+
+Lengths on coded elements also changed for B2010 (951.58 → 974.86 LF, architecture export) and
+in the structural export (3,062.25 → 3,108.63 LF over all codes), but the Island cost DB prices
+those codes by SF / CY, so the totals don't move. Coded LF of the architecture export: 1,806.17
+→ 1,867.48 (−3.3 % in the legacy read). Areas, volumes and counts are identical in both modes.
 
 ## Course workbook bug found in P2.5
 
