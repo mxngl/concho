@@ -116,6 +116,7 @@ namespace QTO
         private ExportSummary ExportElementsToCsv(Document doc, IList<Element> elementsToExport, string filePath)
         {
             ExportSummary summary = new ExportSummary();
+            bool metric = ParameterReader.IsMetric(doc, SpecTypeId.Length);
             StringBuilder csv = new StringBuilder();
             csv.AppendLine(
                 "ElementId,Category,Family,Type,Level,Mark,System Name,System Type,Service Type,Classification,Size,Diameter,Width,Height,Length,Area,Volume,Material,Weight,Unit Weight,Insulation Thickness,Lining Thickness,Airflow,Flow,Pressure Drop,Cooling Capacity,Heating Capacity,Power,Voltage,Current,Apparent Load,Connected Load,Connector Count,Connector Flow,Connector Demand,Connector Max Diameter (in),Connector Max Width (in),Connector Max Height (in),Location Type,Position X (ft),Position Y (ft),Position Z (ft),Start X (ft),Start Y (ft),Start Z (ft),End X (ft),End Y (ft),End Z (ft),Rotation (deg),Bounding Box Min X (ft),Bounding Box Min Y (ft),Bounding Box Min Z (ft),Bounding Box Max X (ft),Bounding Box Max Y (ft),Bounding Box Max Z (ft),Bounding Box Center X (ft),Bounding Box Center Y (ft),Bounding Box Center Z (ft),Room Id,Room Number,Room Name,Room Level,Room Area (SF),Room Volume (CF),Room Location X (ft),Room Location Y (ft),Room Location Z (ft),Comments,Parameter Snapshot,Assembly Code"
@@ -132,8 +133,8 @@ namespace QTO
                 string family = GetFamilyName(elem);
                 string typeName = GetTypeName(doc, elem);
                 string level = GetLevelName(doc, elem);
-                string mark = GetFirstAvailableParameterValue(doc, elem, "Mark");
-                string systemName = GetFirstAvailableParameterValue(doc, elem, "System Name", "System");
+                string mark = ParameterReader.Text(doc, elem, new ParamCandidate("Mark", BuiltInParameter.ALL_MODEL_MARK));
+                string systemName = ParameterReader.Text(doc, elem, new ParamCandidate("System Name", BuiltInParameter.RBS_SYSTEM_NAME_PARAM), "System");
                 string systemType = GetFirstAvailableParameterValue(doc, elem, "System Type");
                 string serviceType = GetFirstAvailableParameterValue(doc, elem, "Service Type");
                 string classification = GetFirstAvailableParameterValue(
@@ -143,97 +144,38 @@ namespace QTO
                     "Flow Classification",
                     "Part Type"
                 );
-                string size = GetFirstAvailableParameterValue(doc, elem, "Size", "Nominal Size", "Overall Size");
-                string diameter = GetFirstAvailableParameterValue(
-                    doc,
-                    elem,
-                    "Diameter",
-                    "Nominal Diameter",
-                    "Duct Diameter"
-                );
-                string width = GetFirstAvailableParameterValue(doc, elem, "Width", "Nominal Width", "Duct Width");
-                string height = GetFirstAvailableParameterValue(doc, elem, "Height", "Nominal Height", "Duct Height");
-                string length = GetFirstAvailableParameterValue(doc, elem, "Length", "Overall Size");
-                string area = GetFirstAvailableParameterValue(doc, elem, "Area", "Surface Area");
-                string volume = GetFirstAvailableParameterValue(doc, elem, "Volume");
+                MepQuantities quantities = MepQuantities.Read(doc, elem);
+                string size = BuildSize(doc, elem, quantities, connectorMetrics, metric, summary);
+                string diameter = ParameterReader.Format(quantities.DiameterInches);
+                string width = ParameterReader.Format(quantities.WidthInches);
+                string height = ParameterReader.Format(quantities.HeightInches);
+                // The one text column: fixed feet-inch format that the STV MEP importer parses (P4.5).
+                string length = ParameterReader.FormatFeetInches(quantities.LengthFeet);
+                string area = ParameterReader.Format(quantities.Area);
+                string volume = ParameterReader.Format(quantities.Volume);
                 string material = GetMaterialSummary(doc, elem);
-                string weight = GetFirstAvailableParameterValue(
-                    doc,
-                    elem,
-                    "Weight",
-                    "Calculated Weight",
-                    "Mass"
-                );
-                string unitWeight = GetFirstAvailableParameterValue(
-                    doc,
-                    elem,
-                    "Unit Weight",
-                    "Weight per Unit Length",
-                    "Mass per Unit Length"
-                );
-                string insulationThickness = GetFirstAvailableParameterValue(
-                    doc,
-                    elem,
-                    "Insulation Thickness"
-                );
-                string liningThickness = GetFirstAvailableParameterValue(doc, elem, "Lining Thickness");
-                string airflow = GetFirstAvailableParameterValue(
-                    doc,
-                    elem,
-                    "Air Flow",
-                    "Airflow",
-                    "Calculated Supply Air Flow",
-                    "Calculated Exhaust Air Flow",
-                    "Calculated Return Air Flow",
-                    "Flow"
-                );
-                string flow = GetFirstAvailableParameterValue(
-                    doc,
-                    elem,
-                    "Flow",
-                    "Flow Rate",
-                    "Actual Flow",
-                    "Demand Flow"
-                );
-                string pressureDrop = GetFirstAvailableParameterValue(
-                    doc,
-                    elem,
-                    "Pressure Drop",
-                    "Calculated Pressure Drop",
-                    "Fitting Pressure Drop",
-                    "Loss Method"
-                );
-                string coolingCapacity = GetFirstAvailableParameterValue(
-                    doc,
-                    elem,
-                    "Cooling Capacity",
-                    "Total Cooling Capacity",
-                    "Sensible Cooling Capacity"
-                );
-                string heatingCapacity = GetFirstAvailableParameterValue(
-                    doc,
-                    elem,
-                    "Heating Capacity",
-                    "Heating Load",
-                    "Total Heating Capacity"
-                );
-                string power = GetFirstAvailableParameterValue(
-                    doc,
-                    elem,
-                    "Power",
-                    "Power Factor",
-                    "Motor Power",
-                    "Input Power"
-                );
-                string voltage = GetFirstAvailableParameterValue(doc, elem, "Voltage");
-                string current = GetFirstAvailableParameterValue(doc, elem, "Current", "Current Rating");
-                string apparentLoad = GetFirstAvailableParameterValue(doc, elem, "Apparent Load");
-                string connectedLoad = GetFirstAvailableParameterValue(doc, elem, "Connected Load", "Load Name");
-                string comments = GetFirstAvailableParameterValue(doc, elem, "Comments");
+                string weight = ParameterReader.Format(quantities.Weight);
+                string unitWeight = ParameterReader.Format(quantities.UnitWeight);
+                string insulationThickness = ParameterReader.Format(quantities.InsulationThicknessInches);
+                string liningThickness = ParameterReader.Format(quantities.LiningThicknessInches);
+                string airflow = ParameterReader.Format(quantities.Airflow);
+                string flow = ParameterReader.Format(quantities.Flow);
+                string pressureDrop = ParameterReader.Format(quantities.PressureDrop);
+                string coolingCapacity = ParameterReader.Format(quantities.CoolingCapacity);
+                string heatingCapacity = ParameterReader.Format(quantities.HeatingCapacity);
+                string power = ParameterReader.Format(quantities.Power);
+                string voltage = ParameterReader.Format(quantities.Voltage);
+                string current = ParameterReader.Format(quantities.Current);
+                string apparentLoad = ParameterReader.Format(quantities.ApparentLoad);
+                string connectedLoad = ParameterReader.Format(quantities.ConnectedLoad);
+                string comments = ParameterReader.Text(doc, elem, new ParamCandidate("Comments", BuiltInParameter.ALL_MODEL_INSTANCE_COMMENTS));
                 string parameterSnapshot = BuildParameterSnapshot(doc, elem);
                 // Last column (P4.3): appended so readers that use column positions keep working.
-                string assemblyCode = GetFirstAvailableParameterValue(doc, elem, "Assembly Code");
+                string assemblyCode = ParameterReader.AssemblyCode(doc, elem);
                 summary.Add(category, assemblyCode);
+                summary.AddQuantities(category, quantities.LengthFeet, quantities.Area, quantities.Volume);
+                if (metric && UsesSnapshotFallback(quantities, parameterSnapshot))
+                    summary.SnapshotFallbackCount++;
 
                 csv.AppendLine(string.Join(",",
                     EscapeCsv(elementId),
@@ -269,7 +211,9 @@ namespace QTO
                     EscapeCsv(apparentLoad),
                     EscapeCsv(connectedLoad),
                     EscapeCsv(connectorMetrics.Count.ToString(CultureInfo.InvariantCulture)),
-                    EscapeCsv(FormatDouble(connectorMetrics.Flow)),
+                    EscapeCsv(Math.Abs(connectorMetrics.Flow) < 1e-9
+                        ? ""
+                        : ParameterReader.Format(UnitUtils.ConvertFromInternalUnits(connectorMetrics.Flow, UnitTypeId.CubicMetersPerSecond))),
                     EscapeCsv(FormatDouble(connectorMetrics.Demand)),
                     EscapeCsv(FormatDouble(connectorMetrics.MaxDiameterInches)),
                     EscapeCsv(FormatDouble(connectorMetrics.MaxWidthInches)),
@@ -311,6 +255,109 @@ namespace QTO
 
             File.WriteAllText(filePath, csv.ToString(), Encoding.UTF8);
             return summary;
+        }
+
+        /// <summary>
+        /// Size in inches built from the numeric dimensions (<c>3"</c> or <c>4"x4"</c>), else from
+        /// the largest connector. Without dimensions Revit's Size text is used, except in projects
+        /// with metric sizes (STV would read millimetres as inches): then Size stays empty and the
+        /// element is counted in the summary dialog.
+        /// </summary>
+        private static string BuildSize(
+            Document doc,
+            Element elem,
+            MepQuantities quantities,
+            ConnectorMetrics connectorMetrics,
+            bool metricLength,
+            ExportSummary summary)
+        {
+            if (quantities.DiameterInches > 0)
+                return ParameterReader.FormatInchMark(quantities.DiameterInches.Value);
+
+            if (quantities.WidthInches > 0 && quantities.HeightInches > 0)
+                return ParameterReader.FormatInchMark(quantities.WidthInches.Value) + "x" +
+                       ParameterReader.FormatInchMark(quantities.HeightInches.Value);
+
+            if (connectorMetrics.MaxDiameterInches > 1e-9)
+                return ParameterReader.FormatInchMark(connectorMetrics.MaxDiameterInches);
+
+            if (connectorMetrics.MaxWidthInches > 1e-9 && connectorMetrics.MaxHeightInches > 1e-9)
+                return ParameterReader.FormatInchMark(connectorMetrics.MaxWidthInches) + "x" +
+                       ParameterReader.FormatInchMark(connectorMetrics.MaxHeightInches);
+
+            string text = ParameterReader.Text(
+                doc,
+                elem,
+                new ParamCandidate("Size", BuiltInParameter.RBS_CALCULATED_SIZE),
+                "Nominal Size",
+                "Overall Size"
+            );
+            if (string.IsNullOrWhiteSpace(text))
+                return "";
+
+            if (metricLength || ParameterReader.IsMetric(doc, SizeSpec(elem)))
+            {
+                summary.SizeLeftEmptyCount++;
+                return "";
+            }
+
+            return text;
+        }
+
+        private static ForgeTypeId SizeSpec(Element elem)
+        {
+            long categoryId = elem.Category?.Id.Value ?? 0;
+            if (categoryId == (long)BuiltInCategory.OST_DuctCurves ||
+                categoryId == (long)BuiltInCategory.OST_DuctFitting ||
+                categoryId == (long)BuiltInCategory.OST_DuctAccessory ||
+                categoryId == (long)BuiltInCategory.OST_DuctTerminal ||
+                categoryId == (long)BuiltInCategory.OST_FlexDuctCurves)
+                return SpecTypeId.DuctSize;
+
+            if (categoryId == (long)BuiltInCategory.OST_PipeCurves ||
+                categoryId == (long)BuiltInCategory.OST_PipeFitting ||
+                categoryId == (long)BuiltInCategory.OST_PipeAccessory ||
+                categoryId == (long)BuiltInCategory.OST_FlexPipeCurves ||
+                categoryId == (long)BuiltInCategory.OST_Sprinklers ||
+                categoryId == (long)BuiltInCategory.OST_PlumbingFixtures)
+                return SpecTypeId.PipeSize;
+
+            if (categoryId == (long)BuiltInCategory.OST_CableTray ||
+                categoryId == (long)BuiltInCategory.OST_CableTrayFitting)
+                return SpecTypeId.CableTraySize;
+
+            if (categoryId == (long)BuiltInCategory.OST_Conduit ||
+                categoryId == (long)BuiltInCategory.OST_ConduitFitting)
+                return SpecTypeId.ConduitSize;
+
+            return SpecTypeId.Length;
+        }
+
+        /// <summary>
+        /// True if STV would have to read a dimension, length or flow from the Parameter Snapshot
+        /// (display text in project units) because the unit-safe main column is empty.
+        /// </summary>
+        private static bool UsesSnapshotFallback(MepQuantities quantities, string snapshot)
+        {
+            bool noDimensions = !quantities.DiameterInches.HasValue &&
+                                !quantities.WidthInches.HasValue &&
+                                !quantities.HeightInches.HasValue;
+            if (noDimensions && SnapshotHas(snapshot, "Hydraulic Diameter", "Duct Width", "Duct Height"))
+                return true;
+
+            if (!quantities.LengthFeet.HasValue &&
+                SnapshotHas(snapshot, "Length", "Duct Length", "Computed Length", "Length 1", "Duct Length 1"))
+                return true;
+
+            return !quantities.Airflow.HasValue && !quantities.Flow.HasValue &&
+                   SnapshotHas(snapshot, "Supply Air Outlet Flow", "Supply Air Inlet Flow", "Return Air Inlet Flow", "Flow");
+        }
+
+        private static bool SnapshotHas(string snapshot, params string[] names)
+        {
+            return snapshot
+                .Split(new[] { " | " }, StringSplitOptions.None)
+                .Any(part => names.Any(name => part.StartsWith(name + "=", StringComparison.Ordinal)));
         }
 
         private string BuildParameterSnapshot(Document doc, Element elem)

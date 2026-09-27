@@ -195,55 +195,27 @@ namespace QTO
                 string originalFamily = GetOriginalPartValue(elem, doc, "Original Family", "Original Family Name");
                 string originalType = GetOriginalPartValue(elem, doc, "Original Type", "Original Type Name");
                 string level = GetLevelName(doc, elem);
-                string mark = GetFirstAvailableParameterValue(doc, elem, "Mark");
-                string assemblyCode = GetFirstAvailableParameterValue(doc, elem, "Assembly Code");
+                string mark = ParameterReader.Text(doc, elem, new ParamCandidate("Mark", BuiltInParameter.ALL_MODEL_MARK));
+                string assemblyCode = ParameterReader.AssemblyCode(doc, elem);
+                string assemblyDescription = ParameterReader.AssemblyDescription(doc, elem);
+                BuildingQuantities quantities = BuildingQuantities.Read(doc, elem);
                 summary.Add(category, assemblyCode);
-                string assemblyDescription = GetFirstAvailableParameterValue(doc, elem, "Assembly Description");
-                string length = GetFirstAvailableParameterValue(doc, elem, "Length", "Cut Length", "Span");
-                string width = GetFirstAvailableParameterValue(doc, elem, "Width", "Actual Width");
-                string depth = GetFirstAvailableParameterValue(
-                    doc,
-                    elem,
-                    "Depth",
-                    "Thickness",
-                    "Structural Depth"
-                );
-                string height = GetFirstAvailableParameterValue(doc, elem, "Height", "Thickness");
-                string area = GetFirstAvailableParameterValue(
-                    doc,
-                    elem,
-                    "Area",
-                    "Host Area Computed",
-                    "Computed Area"
-                );
-                string volume = GetFirstAvailableParameterValue(
-                    doc,
-                    elem,
-                    "Volume",
-                    "Host Volume Computed"
-                );
-                string weight = GetFirstAvailableParameterValue(
-                    doc,
-                    elem,
-                    "Weight",
-                    "Calculated Weight",
-                    "Mass"
-                );
-                string unitWeight = GetFirstAvailableParameterValue(
-                    doc,
-                    elem,
-                    "Material: Unit weight",
-                    "Unit Weight",
-                    "Weight per Unit Length",
-                    "Mass per Unit Length"
-                );
+                summary.AddQuantities(category, quantities.Length, quantities.Area, quantities.Volume);
+                string length = ParameterReader.Format(quantities.Length);
+                string width = ParameterReader.Format(quantities.Width);
+                string depth = ParameterReader.Format(quantities.Depth);
+                string height = ParameterReader.Format(quantities.Height);
+                string area = ParameterReader.Format(quantities.Area);
+                string volume = ParameterReader.Format(quantities.Volume);
+                string weight = ParameterReader.Format(quantities.Weight);
+                string unitWeight = ParameterReader.Format(quantities.UnitWeight);
                 string material = GetMaterialSummary(doc, elem);
                 string typeComments = GetTypeParameterValue(doc, elem, "Type Comments");
                 string baseLevel = GetFirstAvailableParameterValue(doc, elem, "Base Level");
                 string topLevel = GetFirstAvailableParameterValue(doc, elem, "Top Level");
-                string baseOffset = GetFirstAvailableParameterValue(doc, elem, "Base Offset");
-                string topOffset = GetFirstAvailableParameterValue(doc, elem, "Top Offset");
-                string comments = GetFirstAvailableParameterValue(doc, elem, "Comments");
+                string baseOffset = ParameterReader.Format(quantities.BaseOffset);
+                string topOffset = ParameterReader.Format(quantities.TopOffset);
+                string comments = ParameterReader.Text(doc, elem, new ParamCandidate("Comments", BuiltInParameter.ALL_MODEL_INSTANCE_COMMENTS));
                 string parameterSnapshot = BuildParameterSnapshot(doc, elem);
 
                 csv.AppendLine(string.Join(",",
