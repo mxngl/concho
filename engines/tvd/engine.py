@@ -49,8 +49,9 @@ class TvdRun:
     def gross_sf(self) -> float:
         return self.project.gross_sf
 
-    def results_payload(self, ts=None) -> dict:
-        """The results dict in the ``results/SCHEMA.md`` format."""
+    def results_payload(self, ts=None, tracking: dict | None = None) -> dict:
+        """The results dict in the ``results/SCHEMA.md`` format; ``tracking`` is the block
+        from :func:`engines.tvd.history.tracking_table` (P3.5, optional)."""
         return build_results_payload(
             self.results, self.summary, self.unmapped_count,
             self.source, self.targets, self.total_target, self.gross_sf,
@@ -64,6 +65,7 @@ class TvdRun:
             target_consistency=self.project.target_consistency(),
             cost_db_validation=self.cost_db_validation,
             reliability=self.reliability,
+            tracking=tracking,
         )
 
 

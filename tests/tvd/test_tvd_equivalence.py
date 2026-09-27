@@ -97,8 +97,10 @@ def _strip_meta(payload: dict) -> dict:
     payload = json.loads(json.dumps(payload))
     # P3.5: new block, not in the original; tested in test_island_target_derivation.
     payload.pop("target_derivation", None)
-    # P3.5: new block, not in the original; tested in test_island_reliability.
+    # P3.5: new blocks, not in the original; tested in test_island_reliability and
+    # test_island_tracking.
     payload.pop("reliability", None)
+    payload.pop("tracking", None)
     # P3.3: new block, not in the original; tested in test_island_target_consistency.
     payload.pop("target_consistency", None)
     # P3.4: new block, not in the original; tested in test_island_cost_db_validation.

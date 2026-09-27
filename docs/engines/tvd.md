@@ -289,6 +289,27 @@ leave out the H row. The engine sums all clusters A–H. To be reported to the c
 Island 2026 is not rated (the migrated cost DB has empty reliability columns), so its whole
 estimate is `not_rated` in all three categories.
 
+## Tracking (P3.5)
+
+Like the course sheet **TVD Tracking** (DATE, EVENT, ESTIMATE, DELTA = target − estimate),
+every run can carry an event label and a note:
+
+```bash
+concho-tvd --config … --arch … --struct … --out out \
+           --snapshot "Week 12" --event "Winter presentation" --note "after the facade VE"
+```
+
+- `--event` / `--note` are stored in the history snapshot (keys `event`, `note`, written
+  only when set; snapshots without them, including all older ones, load unchanged).
+- The results JSON gets a `tracking` block: `target` (the current total target) and `rows`,
+  one per history snapshot (oldest first) with `date`, `label`, `event`, `note`, `estimate`
+  (the snapshot's grand total) and `delta` = target − estimate (positive = under target, as
+  in the course), then the current run. With `--snapshot` the current run is the last
+  snapshot; without it a row `Run <date>` is added. `current: true` marks this run's row.
+- The delta of older snapshots uses the **current** target (course: `=$D$5-D…`).
+- The demo snapshot that a local run creates in an empty history folder is not in the table
+  of that run.
+
 ## Cent rounding of line totals (P3.10 item 4)
 
 The engine rounds each **line total to cents when it computes it**, and every sum is built

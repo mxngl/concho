@@ -9,7 +9,8 @@ the run (errors stop it; old AutoTVD ``cost_data.csv`` files are converted with
 Output layout under ``--out DIR`` (mirrors the AutoTVD repo layout):
 
 - ``DIR/results/<YYYYMMDD_HHMMSS>.json`` and ``DIR/results/latest.json``
-- ``DIR/history/`` snapshots (override with ``--history DIR``)
+- ``DIR/history/`` snapshots (override with ``--history DIR``); ``--event`` / ``--note`` add
+  a tracking event and note to the run (snapshot and the results JSON ``tracking`` table)
 - ``DIR/TVD_Dashboard.html``, or ``DIR/docs/index.html`` with ``--ci``
 """
 
@@ -17,13 +18,20 @@ import argparse
 import os
 import sys
 import webbrowser
+from datetime import datetime
 from pathlib import Path
 
 from engines.common.config import validate_config_file
 from engines.tvd.alert import fire_budget_webhook
 from engines.tvd.cost_db import CostDbError
 from engines.tvd.engine import run_files
-from engines.tvd.history import load_history, make_demo_snapshot, save_snapshot
+from engines.tvd.history import (
+    load_history,
+    make_demo_snapshot,
+    save_snapshot,
+    tracking_row,
+    tracking_table,
+)
 from engines.tvd.results_writer import save_results_json
 from engines.tvd.summary import fmt_usd, grand_total_of
 from engines.tvd.targets import ProjectTargets
@@ -46,6 +54,12 @@ def build_parser() -> argparse.ArgumentParser:
         help='Save a named snapshot of this run to the history folder before generating '
              'the dashboard. Example: --snapshot "Scheme A – Week 12"',
     )
+    parser.add_argument("--event", metavar="LABEL",
+                        help='Tracking event of this run (course "TVD Tracking" column EVENT), '
+                             'e.g. "Winter presentation"; stored in the snapshot and the '
+                             "results JSON tracking table")
+    parser.add_argument("--note", metavar="TEXT",
+                        help="Free-text note for this run (stored like --event)")
     parser.add_argument("--config", metavar="FILE", required=True,
                         help="project_config JSON with the project values (targets, GSF, "
                              "names); see docs/config.md")
@@ -112,12 +126,25 @@ def main(argv: list[str] | None = None) -> int:
         print(f"   Cost DB warning: {warning}")
     results, summary, unmapped_count = run.results, run.summary, run.unmapped_count
 
-    # 6b. Save structured results JSON (timestamped + latest.json)
-    results_path = save_results_json(os.path.join(out_dir, "results"), run.results_payload())
+    # 6b. Save an explicit snapshot if requested, then load the history (tracking table)
+    if args.snapshot:
+        snap_path = save_snapshot(history_dir, args.snapshot, results, summary, unmapped_count,
+                                  event=args.event, note=args.note)
+        print(f"   Snapshot saved: {snap_path}")
+    history = load_history(history_dir)
+    grand_total = grand_total_of(summary)
+    ts = datetime.now()
+    current = None if args.snapshot else tracking_row(
+        ts.strftime("%Y-%m-%d"), f"Run {ts:%Y-%m-%d}", grand_total, run.total_target,
+        event=args.event, note=args.note, current=True)
+    tracking = tracking_table(history, run.total_target, current)
+
+    # 6c. Save structured results JSON (timestamped + latest.json)
+    payload = run.results_payload(ts=ts, tracking=tracking)
+    results_path = save_results_json(os.path.join(out_dir, "results"), payload)
     print(f"   Results JSON: {results_path}")
 
-    # 6c. Fire the budget alert webhook if grand total exceeds target
-    grand_total = grand_total_of(summary)
+    # 6d. Fire the budget alert webhook if grand total exceeds target
     if grand_total > run.total_target:
         fire_budget_webhook(summary, grand_total, run.total_target)
 
@@ -132,13 +159,11 @@ def main(argv: list[str] | None = None) -> int:
     overall = run.reliability["totals"]["overall"]
     print("  Reliability (overall): " + ", ".join(
         f"{level.replace('_', ' ')} {fmt_usd(amount)}" for level, amount in overall.items()))
+    print(f"  Tracking: {len(tracking['rows'])} row(s); this run "
+          f"{fmt_usd(grand_total)}, delta (target − estimate) "
+          f"{run.total_target - grand_total:+,.2f}")
 
-    # 8. Save explicit snapshot if requested, then load history
-    if args.snapshot:
-        snap_path = save_snapshot(history_dir, args.snapshot, results, summary, unmapped_count)
-        print(f"\n   Snapshot saved: {snap_path}")
-
-    history = load_history(history_dir)
+    # 8. Demo snapshot for the dashboard (local mode, empty history only)
     if not history and not ci_mode:
         print("\n   No history snapshots found — creating demo snapshot...")
         make_demo_snapshot(history_dir, results, unmapped_count)
