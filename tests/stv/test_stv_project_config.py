@@ -60,6 +60,10 @@ def test_island_settings():
     assert settings.use_phase == {} and not settings.use_phase_modeled
     assert any("not_modeled" in w for w in settings.warnings)
     assert settings.custom_materials is None
+    # P3.6: files.stv_mapping, resolved relative to the config file.
+    settings = STVProjectSettings.from_config(load_config(ISLAND_CONFIG), ISLAND_CONFIG.parent)
+    island_mapping = Path(__file__).resolve().parents[2] / "engines/stv/examples/island"
+    assert settings.stv_mapping.resolve() == island_mapping / "stv_mapping.csv"
 
 
 def test_river_settings():

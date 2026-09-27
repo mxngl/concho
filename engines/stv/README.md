@@ -82,7 +82,9 @@ concho-stv --config engines/common/examples/island_2026.project_config.json --ou
 ## Tests
 
 `pytest tests/stv` runs unit tests on invented reference data (incl. `test_stv_project_config.py`:
-config → team/lifetime/use phase, custom materials validation, CLI). The Island target test
+config → team/lifetime/use phase, custom materials validation, CLI; `test_stv_mapping.py`:
+mapping validator, matching order, ties, conversions; `test_stv_default_mapping.py`: a
+synthetic Uniformat-only project with the default table). The Island target test
 (`tests/stv/test_stv_course_workbook.py`) runs only when `COURSE_STV_XLSX` is set.
 The course-equivalence test (`tests/stv/test_stv_course_equivalence.py`, P2.4/P3.10) also
 needs LibreOffice Calc; see [tests/README.md](../../tests/README.md).

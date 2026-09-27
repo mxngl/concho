@@ -32,13 +32,15 @@ Skipped unless the fixtures are present (``python scripts/fetch_fixtures.py``).
 from __future__ import annotations
 
 import json
+import sys
 from collections import defaultdict
 from pathlib import Path
 
 import pytest
 
 from engines.common.config import load_config
-from engines.stv import STVEngine, STVInputs
+from engines.stv import STVEngine, STVInputs, cli
+from engines.stv.coverage import build_mapping_coverage
 from engines.stv.mapping import StvMapping, load_stv_mapping
 from engines.stv.models import ConstructionItem, STVResults
 from engines.stv.project import STVProjectSettings
@@ -240,3 +242,84 @@ def test_river_config_changes_targets_and_use_phase(reference_data, ipd_challeng
     assert river["breakdown"]["use_water"]["water"] > 0
     assert project["breakdown"]["use_phase"]["carbon"] == 0.0
 
+
+# --- P3.6: mapping coverage of the Island exports -----------------------------------------
+
+# Rows skipped before P3.6: architecture 655, structural 167 (166 Parts + 1 floor), MEP 170
+# (docs/engines/stv.md, "Unmapped Parts"); now split into unmapped and zero quantity.
+ELEMENTS = {
+    "architecture": {"total": 1986, "mapped": 1331, "zero_quantity": 3, "unmapped": 652},
+    "structural": {"total": 505, "mapped": 338, "zero_quantity": 0, "unmapped": 167},
+    "mep": {"total": 1516, "mapped": 1346, "zero_quantity": 74, "unmapped": 96},
+}
+# Floor elements in both the architecture and the structural export (P2.3, P3.9).
+DOUBLE_FLOORS = {"1241457", "1789623", "1789655"}
+
+
+@pytest.fixture(scope="module")
+def island_coverage(ipd_challenge_dir, island_mapping, project) -> dict:
+    reports = [loader(ipd_challenge_dir / SCHEDULES / f, island_mapping)
+               for loader, files in TRADES.values() for f in files]
+    return build_mapping_coverage(reports, island_mapping, STVResults.from_dict(project))
+
+
+def test_island_mapping_coverage_counts(island_coverage):
+    for discipline, counts in ELEMENTS.items():
+        block = island_coverage["disciplines"][discipline]
+        assert {k: block["elements"][k] for k in counts} == counts, discipline
+    assert island_coverage["total"]["kgco2e"] == pytest.approx(PROJECT["carbon"], rel=REL)
+
+
+def test_island_parts_stay_unmapped_and_are_listed(island_coverage):
+    unmapped = island_coverage["disciplines"]["structural"]["unmapped_types"]
+    parts = next(t for t in unmapped if t["category"] == "Parts")
+    assert parts["count"] == 166
+    assert parts["materials"] == ["Structural Bamboo (CLB)"]
+    assert parts["volume_cf"] > 0
+    arch_parts = next(t for t in island_coverage["disciplines"]["architecture"]["unmapped_types"]
+                      if t["category"] == "Parts")
+    assert arch_parts["count"] == 96
+
+
+def test_island_cross_discipline_elements(island_coverage):
+    cross = {x["element_id"]: x for x in island_coverage["cross_discipline_elements"]}
+    assert DOUBLE_FLOORS <= set(cross)
+    outcome = {o["discipline"]: o for o in cross["1241457"]["occurrences"]}
+    assert outcome["structural"]["status"] == "unmapped"
+    assert (outcome["architecture"]["stv_material_type"], outcome["architecture"]["amount"]) == (
+        "Concrete (sf)", 6848.0)
+
+
+def test_island_bamboo_proxy_rules(island_coverage):
+    proxies = {r["category"]: r for r in island_coverage["rules"]
+               if r["keyword"] == "structural bamboo" and r["discipline"] == "structural"}
+    assert proxies["Structural Columns"]["won"] == 99
+    assert proxies["Structural Framing"]["won"] == 113
+    assert proxies["Structural Columns"]["stv_material_type"] == "Glulam Column (kg)"
+
+
+def test_island_estimates(island_coverage, project):
+    estimated = {d: b["estimated"] for d, b in island_coverage["disciplines"].items()}
+    assert estimated["architecture"]["elements"] == estimated["structural"]["elements"] == 0
+    assert estimated["mep"]["elements"] > 0
+    assert 0 < estimated["mep"]["kgco2e"] < island_coverage["disciplines"]["mep"]["kgco2e"]
+    flagged = {(i["assembly"], i["material_type"]) for i in project["construction_items"]
+               if i["estimated"]}
+    assert flagged and all(assembly == "MEP" for assembly, _ in flagged)
+
+
+def test_island_cli_single_run(monkeypatch, tmp_path, ipd_challenge_dir):
+    """All six exports in one concho-stv call: same total, full coverage block."""
+    schedules = ipd_challenge_dir / SCHEDULES
+    args = ["--config", str(ISLAND_CONFIG), "--template", str(ipd_challenge_dir / WORKBOOK),
+            "--output-dir", str(tmp_path)]
+    for trade, (_loader, files) in TRADES.items():
+        args += [f"--{trade}-schedule", *(str(schedules / f) for f in files)]
+    monkeypatch.setattr(sys, "argv", ["concho-stv", *args])
+    cli.main()
+    result = _load(tmp_path / "stv_results.json")
+    assert result["metric_summary"]["carbon"]["project"] == pytest.approx(PROJECT["carbon"],
+                                                                          rel=REL)
+    coverage = result["mapping_coverage"]
+    assert coverage["mapping_file"].endswith("engines/stv/examples/island/stv_mapping.csv")
+    assert DOUBLE_FLOORS <= {x["element_id"] for x in coverage["cross_discipline_elements"]}
