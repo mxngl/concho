@@ -700,7 +700,12 @@ class FilesSection(_Model):
         description="TVD cost DB (cost_db.csv format, P3.4; see docs/engines/tvd.md). The TVD "
                     "engine validates it before the run.",
     )
-    stv_mapping: RelPath | None = Field(default=None, description="STV mapping CSV (P3.6).")
+    stv_mapping: RelPath | None = Field(
+        default=None,
+        description="STV mapping table (stv_mapping.csv format, P3.6; see docs/engines/stv.md). "
+                    "concho-stv maps the Revit exports with it; unset = the default table "
+                    "template/stv_mapping.csv.",
+    )
     custom_materials: RelPath | None = Field(
         default=None, description="Custom materials CSV (P3.7)."
     )
