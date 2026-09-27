@@ -26,15 +26,15 @@ from pathlib import Path
 
 import pytest
 
-from engines.stv.revit_architecture import _parse_length_feet as arch_parse_length_feet
-from engines.stv.revit_architecture import load_architecture_schedule
-from engines.stv.revit_mep import (
+from engines.stv.conversions import (
     _extract_inches,
     _extract_size_pair_inches,
-    _parse_length_feet,
-    _resolve_nominal_diameter_inches,
-    load_mep_schedule,
+    nominal_diameter_in,
+    parse_length_feet,
 )
+from engines.stv.mapping import load_stv_mapping
+from engines.stv.revit_architecture import load_architecture_schedule
+from engines.stv.revit_mep import load_mep_schedule
 from engines.stv.revit_structural import load_structural_schedule
 from engines.tvd.loading import load_csv_text, parse_qty_str
 from engines.tvd.quantities import aggregate_quantities
@@ -46,6 +46,13 @@ ARCH_COLUMNS = [
     "Type Comments", "Base Level", "Top Level", "Base Offset", "Top Offset", "Comments",
     "Parameter Snapshot",
 ]
+REPO_ROOT = Path(__file__).resolve().parents[2]
+# Since P3.6 the STV importers map rows with a mapping table; the Island table reproduces the
+# former hardcoded importers.
+ISLAND_MAPPING = load_stv_mapping(
+    REPO_ROOT / "engines" / "stv" / "examples" / "island" / "stv_mapping.csv"
+)
+
 MEP_COLUMNS = [
     "ElementId", "Category", "Family", "Type", "Level", "Mark", "System Name", "System Type",
     "Size", "Diameter", "Width", "Height", "Length", "Area", "Volume", "Material", "Weight",
@@ -108,7 +115,14 @@ def _items(report) -> dict[tuple[str, str], float]:
 )
 def test_mep_length_format_round_trips_through_stv_parser(feet):
     text = fmt_feet_inches(feet)
-    assert _parse_length_feet(text) == pytest.approx(feet, abs=1e-4)
+    assert parse_length_feet(text) == pytest.approx(feet, abs=1e-4)
+
+
+def test_plain_decimal_feet_also_parse_since_p36():
+    """Since P3.6 STV reads a bare number as feet, so MEP Length can switch to plain decimals
+    (planned with the engine part of P4.5)."""
+    assert parse_length_feet(fmt(12.53125)) == pytest.approx(12.53125)
+    assert parse_length_feet(fmt(0.75)) == pytest.approx(0.75)
 
 
 def test_mep_length_format_examples():
@@ -125,7 +139,7 @@ def test_mep_size_round_diameter_round_trips(inches):
     size = fmt_inch_mark(inches)
     assert _extract_inches(size) == pytest.approx(inches, abs=1e-3)
     row = {"Size": size}
-    assert _resolve_nominal_diameter_inches(row) == pytest.approx(inches, abs=1e-3)
+    assert nominal_diameter_in(row) == pytest.approx(inches, abs=1e-3)
 
 
 @pytest.mark.parametrize(("width", "height"), [(4.0, 4.0), (12.0, 8.0), (24.5, 10.25)])
@@ -219,7 +233,7 @@ def test_tvd_quantity_parser_plain_decimals():
 
 def test_stv_reads_numeric_architecture_export(tmp_path):
     path = _write(tmp_path, "m_Architecture_TakeOff.csv", ARCH_COLUMNS, ARCH_ROWS)
-    report = load_architecture_schedule(path)
+    report = load_architecture_schedule(path, ISLAND_MAPPING)
     items = _items(report)
     assert items[("Exterior Wall", "Brick on Metal Stud (sf)")] == pytest.approx(312.5)
     interior = items[("Interior Wall", "Steel Studs and Painted Gypsum (sf)")]
@@ -231,15 +245,15 @@ def test_stv_reads_numeric_architecture_export(tmp_path):
 
 
 def test_stv_door_fallback_same_as_display_strings():
-    assert arch_parse_length_feet(fmt(3.0)) == pytest.approx(3.0)
-    assert arch_parse_length_feet("3' - 0\"") == pytest.approx(3.0)
-    old = arch_parse_length_feet("6' - 8 1/4\"")
-    assert arch_parse_length_feet(fmt(6.6875)) == pytest.approx(old)
+    assert parse_length_feet(fmt(3.0)) == pytest.approx(3.0)
+    assert parse_length_feet("3' - 0\"") == pytest.approx(3.0)
+    old = parse_length_feet("6' - 8 1/4\"")
+    assert parse_length_feet(fmt(6.6875)) == pytest.approx(old)
 
 
 def test_stv_reads_numeric_structural_export(tmp_path):
     path = _write(tmp_path, "m_Structural_Schedule.csv", ARCH_COLUMNS, STRUCT_ROWS)
-    report = load_structural_schedule(path)
+    report = load_structural_schedule(path, ISLAND_MAPPING)
     items = _items(report)
     assert items[("Columns", "Reinforced Concrete Column (cy)")] == pytest.approx(48.0 / 27.0)
     assert items[("Foundation", "Strip Foundation (cy)")] == pytest.approx(1.0)
@@ -267,7 +281,9 @@ MEP_ROWS = [
 
 
 def test_stv_reads_numeric_mep_export(tmp_path):
-    report = load_mep_schedule(_write(tmp_path, "m_MEP_TakeOff.csv", MEP_COLUMNS, MEP_ROWS))
+    report = load_mep_schedule(
+        _write(tmp_path, "m_MEP_TakeOff.csv", MEP_COLUMNS, MEP_ROWS), ISLAND_MAPPING
+    )
     items = _items(report)
     assert items[("MEP", 'Steel Duct 12"D (ft)')] == pytest.approx(20.234375, abs=1e-4)
     assert items[("MEP", 'Steel Duct 18"D (ft)')] == pytest.approx(0.75, abs=1e-4)
@@ -281,8 +297,8 @@ def test_stv_mep_airflow_same_as_display_string(tmp_path):
     old = dict(MEP_ROWS[2], Airflow="30 m³/h", Flow="30 m³/h")
     new_path = _write(tmp_path, "new_MEP_TakeOff.csv", MEP_COLUMNS, [MEP_ROWS[2]])
     old_path = _write(tmp_path, "old_MEP_TakeOff.csv", MEP_COLUMNS, [old])
-    new_items = _items(load_mep_schedule(new_path))
-    old_items = _items(load_mep_schedule(old_path))
+    new_items = _items(load_mep_schedule(new_path, ISLAND_MAPPING))
+    old_items = _items(load_mep_schedule(old_path, ISLAND_MAPPING))
     assert new_items[("MEP", "Air Handling Unit (m^3/s)")] == pytest.approx(
         old_items[("MEP", "Air Handling Unit (m^3/s)")], rel=1e-4
     )
@@ -301,7 +317,7 @@ def _convert_building_row(row: dict[str, str]) -> dict[str, str]:
     converted = dict(row)
     for column in LENGTH_COLUMNS:
         if row.get(column):
-            converted[column] = fmt(arch_parse_length_feet(row[column]))
+            converted[column] = fmt(parse_length_feet(row[column]))
     for column in MEASURE_COLUMNS:
         if row.get(column):
             converted[column] = fmt(parse_qty_str(row[column]))
@@ -323,7 +339,7 @@ def _exact_lengths(rows: list[dict[str, str]]) -> dict[str, float]:
         marked = any("DNC" in row.get(field, "").upper() for field in fields)
         if not code or marked or row.get("Category", "").strip() == "Furniture":
             continue
-        totals[code] = totals.get(code, 0.0) + arch_parse_length_feet(row.get("Length", ""))
+        totals[code] = totals.get(code, 0.0) + parse_length_feet(row.get("Length", ""))
     return totals
 
 
@@ -360,8 +376,8 @@ def test_island_exports_in_numeric_format_give_same_results(
         assert new_qtys[code]["length_lf"] == pytest.approx(exact_lengths[code], abs=1e-3), code
 
     # STV: same construction items.
-    old_items = _items(loader(source))
-    new_items = _items(loader(target))
+    old_items = _items(loader(source, ISLAND_MAPPING))
+    new_items = _items(loader(target, ISLAND_MAPPING))
     assert new_items.keys() == old_items.keys()
     for key, value in old_items.items():
         assert new_items[key] == pytest.approx(value, rel=1e-6, abs=1e-6), key

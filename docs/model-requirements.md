@@ -231,12 +231,13 @@ electrical equipment, electrical and lighting fixtures, sprinklers.
 | 69 | `Parameter Snapshot` | text (display units) | see below | optional | STV, Schedule |
 | 70 | `Assembly Code` | Uniformat code | BIP `UNIFORMAT_CODE` / `ASSEMBLY_CODE` (2026), `Assembly Code` | **required** (new in P4.3) | – (not read by an engine yet) |
 
-**`Length` is the one text column** of the exports: the STV MEP importer only reads lengths with
-`'` / `"` marks (a plain `12.5` would be read as 0), so the add-in writes a fixed,
-culture-invariant feet-inch format generated from the internal value: whole feet, inches with 3
-decimals, no fractions (`12' - 6.375"`, `0' - 9.000"`). STV reads it back within 1e-4 ft
-(`tests/revit_addin/test_export_format.py`). The switch to plain decimal feet comes with the
-engine part of P4.5. `Size` is text too, but built from the numeric dimensions in inches.
+**`Length` is the one text column** of the exports: a fixed, culture-invariant feet-inch format
+generated from the internal value: whole feet, inches with 3 decimals, no fractions
+(`12' - 6.375"`, `0' - 9.000"`). It was chosen because the STV MEP importer before P3.6 only read
+lengths with `'` / `"` marks (a plain `12.5` was read as 0). STV reads it back within 1e-4 ft
+(`tests/revit_addin/test_export_format.py`). Since P3.6 STV's `parse_length_feet` also reads a
+bare number as feet, so the switch to plain decimal feet (planned with the engine part of P4.5)
+needs no further engine change. `Size` is text too, but built from the numeric dimensions in inches.
 
 Numeric columns only take numeric parameters: `Overall Size`, `Loss Method`, `Power Factor`
 and `Load Name` (text or unitless values that older exports wrote into `Length`, `Pressure Drop`,
