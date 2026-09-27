@@ -63,12 +63,9 @@ namespace QTO
                     return Result.Cancelled;
 
                 string csvPath = ExportPathHelper.GetScheduleFilePath(doc, exportFolder, "MEP_TakeOff");
-                ExportElementsToCsv(doc, mepElements, csvPath);
+                ExportSummary summary = ExportElementsToCsv(doc, mepElements, csvPath);
 
-                TaskDialog.Show(
-                    "Revit Export",
-                    $"Exported {mepElements.Count} MEP elements to:\n{csvPath}"
-                );
+                summary.Show("MEP", csvPath);
 
                 return Result.Succeeded;
             }
@@ -116,8 +113,9 @@ namespace QTO
                 .ToList();
         }
 
-        private void ExportElementsToCsv(Document doc, IList<Element> elementsToExport, string filePath)
+        private ExportSummary ExportElementsToCsv(Document doc, IList<Element> elementsToExport, string filePath)
         {
+            ExportSummary summary = new ExportSummary();
             StringBuilder csv = new StringBuilder();
             csv.AppendLine(
                 "ElementId,Category,Family,Type,Level,Mark,System Name,System Type,Service Type,Classification,Size,Diameter,Width,Height,Length,Area,Volume,Material,Weight,Unit Weight,Insulation Thickness,Lining Thickness,Airflow,Flow,Pressure Drop,Cooling Capacity,Heating Capacity,Power,Voltage,Current,Apparent Load,Connected Load,Connector Count,Connector Flow,Connector Demand,Connector Max Diameter (in),Connector Max Width (in),Connector Max Height (in),Location Type,Position X (ft),Position Y (ft),Position Z (ft),Start X (ft),Start Y (ft),Start Z (ft),End X (ft),End Y (ft),End Z (ft),Rotation (deg),Bounding Box Min X (ft),Bounding Box Min Y (ft),Bounding Box Min Z (ft),Bounding Box Max X (ft),Bounding Box Max Y (ft),Bounding Box Max Z (ft),Bounding Box Center X (ft),Bounding Box Center Y (ft),Bounding Box Center Z (ft),Room Id,Room Number,Room Name,Room Level,Room Area (SF),Room Volume (CF),Room Location X (ft),Room Location Y (ft),Room Location Z (ft),Comments,Parameter Snapshot,Assembly Code"
@@ -235,6 +233,7 @@ namespace QTO
                 string parameterSnapshot = BuildParameterSnapshot(doc, elem);
                 // Last column (P4.3): appended so readers that use column positions keep working.
                 string assemblyCode = GetFirstAvailableParameterValue(doc, elem, "Assembly Code");
+                summary.Add(category, assemblyCode);
 
                 csv.AppendLine(string.Join(",",
                     EscapeCsv(elementId),
@@ -311,6 +310,7 @@ namespace QTO
             }
 
             File.WriteAllText(filePath, csv.ToString(), Encoding.UTF8);
+            return summary;
         }
 
         private string BuildParameterSnapshot(Document doc, Element elem)

@@ -28,7 +28,8 @@ Manual install: copy `QTO.dll` and `QTO.addin` into
 ## First export
 
 The first takeoff asks for the export folder. The choice is saved to `concho_addin.json` next to
-`QTO.dll`; edit or delete that file to change the folder.
+`QTO.dll`; edit or delete that file to change the folder. After each export a summary shows the
+element count and how many elements have an Assembly Code.
 
 Model requirements (columns, Assembly Codes): `docs/model-requirements.md` in the Concho repo.
 

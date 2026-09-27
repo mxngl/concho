@@ -57,12 +57,9 @@ namespace QTO
 
                 string csvPath = ExportPathHelper.GetScheduleFilePath(doc, exportFolder, "Structural_Schedule");
 
-                ExportElementsToCsv(doc, structuralElements, csvPath);
+                ExportSummary summary = ExportElementsToCsv(doc, structuralElements, csvPath);
 
-                TaskDialog.Show(
-                    "Revit Export",
-                    $"Exported {structuralElements.Count} structural elements to:\n{csvPath}"
-                );
+                summary.Show("Structural", csvPath);
 
                 return Result.Succeeded;
             }
@@ -173,8 +170,9 @@ namespace QTO
                 || normalized.Contains("rebar");
         }
 
-        private void ExportElementsToCsv(Document doc, IList<Element> elementsToExport, string filePath)
+        private ExportSummary ExportElementsToCsv(Document doc, IList<Element> elementsToExport, string filePath)
         {
+            ExportSummary summary = new ExportSummary();
             StringBuilder csv = new StringBuilder();
 
             // Header row
@@ -196,6 +194,7 @@ namespace QTO
                 string level = GetLevelName(doc, elem);
                 string mark = GetParameterValue(elem.LookupParameter("Mark"), doc);
                 string assemblyCode = GetAssemblyCode(elem, doc);
+                summary.Add(category, assemblyCode);
                 string assemblyDescription = GetParameterValue(elem.LookupParameter("Assembly Description"), doc);
                 string length = GetFirstAvailableParameterValue(
                     doc,
@@ -321,6 +320,7 @@ namespace QTO
             }
 
             File.WriteAllText(filePath, csv.ToString(), Encoding.UTF8);
+            return summary;
         }
 
         private string BuildParameterSnapshot(Document doc, Element elem)

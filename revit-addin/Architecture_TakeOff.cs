@@ -58,13 +58,13 @@ namespace QTO
                     return Result.Cancelled;
 
                 string csvPath = ExportPathHelper.GetScheduleFilePath(doc, exportFolder, "Architecture_TakeOff");
-                ExportElementsToCsv(doc, architecturalElements, csvPath);
+                ExportSummary summary = ExportElementsToCsv(doc, architecturalElements, csvPath);
                 string roomBoundaryPath = ExportPathHelper.GetScheduleFilePath(doc, exportFolder, "Room_Boundaries");
                 int roomCount = RoomBoundaryExporter.ExportRoomsToCsv(doc, roomBoundaryPath);
 
-                TaskDialog.Show(
-                    "Revit Export",
-                    $"Exported {architecturalElements.Count} architectural elements to:\n{csvPath}\n\n" +
+                summary.Show(
+                    "Architecture",
+                    csvPath,
                     $"Exported {roomCount} room boundaries to:\n{roomBoundaryPath}"
                 );
 
@@ -175,8 +175,9 @@ namespace QTO
             return normalized.Contains("ceiling");
         }
 
-        private void ExportElementsToCsv(Document doc, IList<Element> elementsToExport, string filePath)
+        private ExportSummary ExportElementsToCsv(Document doc, IList<Element> elementsToExport, string filePath)
         {
+            ExportSummary summary = new ExportSummary();
             StringBuilder csv = new StringBuilder();
             csv.AppendLine(
                 "ElementId,Category,Family,Type,Original Category,Original Family,Original Type,Level,Mark,Assembly Code,Assembly Description,Length,Width,Depth,Height,Area,Volume,Weight,Unit Weight,Material,Type Comments,Base Level,Top Level,Base Offset,Top Offset,Location Type,Position X (ft),Position Y (ft),Position Z (ft),Start X (ft),Start Y (ft),Start Z (ft),End X (ft),End Y (ft),End Z (ft),Rotation (deg),Bounding Box Min X (ft),Bounding Box Min Y (ft),Bounding Box Min Z (ft),Bounding Box Max X (ft),Bounding Box Max Y (ft),Bounding Box Max Z (ft),Bounding Box Center X (ft),Bounding Box Center Y (ft),Bounding Box Center Z (ft),Room Id,Room Number,Room Name,Room Level,Room Area (SF),Room Volume (CF),Room Location X (ft),Room Location Y (ft),Room Location Z (ft),Comments,Parameter Snapshot"
@@ -196,6 +197,7 @@ namespace QTO
                 string level = GetLevelName(doc, elem);
                 string mark = GetFirstAvailableParameterValue(doc, elem, "Mark");
                 string assemblyCode = GetFirstAvailableParameterValue(doc, elem, "Assembly Code");
+                summary.Add(category, assemblyCode);
                 string assemblyDescription = GetFirstAvailableParameterValue(doc, elem, "Assembly Description");
                 string length = GetFirstAvailableParameterValue(doc, elem, "Length", "Cut Length", "Span");
                 string width = GetFirstAvailableParameterValue(doc, elem, "Width", "Actual Width");
@@ -305,6 +307,7 @@ namespace QTO
             }
 
             File.WriteAllText(filePath, csv.ToString(), Encoding.UTF8);
+            return summary;
         }
 
         private string BuildParameterSnapshot(Document doc, Element elem)

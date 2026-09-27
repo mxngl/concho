@@ -19,6 +19,7 @@ search with a config file + folder dialog.
 | `QTO.addin` | Revit manifest; registers the external commands below |
 | `Structural_TakeOff.cs`, `Architecture_TakeOff.cs`, `MEP_TakeOff.cs` | Quantity takeoff commands (CSV export) |
 | `SpatialElementData.cs`, `RoomSpatialData.cs` | Spatial data shared by the takeoffs: element location/bounding box, room assignment, room boundary export |
+| `ExportSummary.cs` | Summary dialog after each takeoff: element count, % with Assembly Code, missing codes by category |
 | `ExportPathHelper.cs` | Reads the export folder from `concho_addin.json` next to the DLL (folder dialog if missing) and builds the CSV file name |
 | `Push_TaskName_To_Revit.cs` | Push 4D Build Code command |
 | `Push_Manufacton_Parameters_To_Revit.cs`, `Push_Kit_To_Revit.cs`, `Push_Assembly_To_Revit.cs`, `CsvParameterPushHelper.cs` | Prefab parameter push commands and their shared CSV/parameter helper |
@@ -41,6 +42,9 @@ Also in the source, but **not registered in `QTO.addin`** (so not visible in Rev
 |---|---|
 | `QTO.Push_Kit_To_Revit` | Push Kit: writes `kit_id` from `Revit_Kit_Parameter_Map.csv` into `Prefab_Kit_ID` (subset of Push Manufacton Parameters). |
 | `QTO.Push_Assembly_To_Revit` | Push Assembly: writes `assembly_id` from `Revit_Assembly_Id_Map.csv` into `Prefab_Assembly_ID` (subset of Push Manufacton Parameters). |
+
+After each takeoff a summary dialog shows the element count, the share of elements with an
+`Assembly Code`, and the elements without one grouped by category (top 10 + "…and N more").
 
 The **spatial data export** is not a separate command: every takeoff adds location, bounding box
 and room columns per element (`SpatialElementData`, `RoomAssignmentData`), and Architecture
@@ -100,7 +104,7 @@ expanded. To change the folder, edit or delete the file.
   editable text parameters.
 
 Planned fixes: **P4.2** (release pipeline + `install.ps1`), **P4.3** (export contract in
-`docs/model-requirements.md` + summary dialog with Assembly Code coverage).
+`docs/model-requirements.md`).
 
 ## CSV export columns
 
