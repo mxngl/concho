@@ -38,7 +38,15 @@ jobs:
           dotnet-version: "8.0.x"
 
       - name: Build (Revit ${{ matrix.year }})
-        run: dotnet build revit-addin/Concho.QTO.sln -c "${{ matrix.config }}"
+        shell: pwsh
+        run: |
+          # Tag v<x.y.z>[-<suffix>] sets the assembly version; otherwise QTO.csproj's VersionPrefix.
+          $versionArgs = @()
+          if ($env:GITHUB_REF_TYPE -eq 'tag' -and $env:GITHUB_REF_NAME -match '^v(\d+\.\d+\.\d+)(?:-(.+))?$') {
+            $versionArgs += "-p:VersionPrefix=$($Matches[1])"
+            if ($Matches[2]) { $versionArgs += "-p:VersionSuffix=$($Matches[2])" }
+          }
+          dotnet build revit-addin/Concho.QTO.sln -c "${{ matrix.config }}" @versionArgs
 
       - name: Package
         shell: pwsh

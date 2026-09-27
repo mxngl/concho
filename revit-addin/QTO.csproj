@@ -47,6 +47,16 @@
     <DefineConstants>$(DefineConstants);REVIT$(RevitVersion)</DefineConstants>
   </PropertyGroup>
 
+  <!-- Assembly metadata (P4.5). Release builds for a tag v<x.y.z>[-<suffix>] pass VersionPrefix and
+       VersionSuffix from the tag (.github/workflows/revit-addin-release.yml). -->
+  <PropertyGroup>
+    <VersionPrefix>0.4.5</VersionPrefix>
+    <Company>Concho – Maximilian Nagel &amp; Ashmitha Jaysi Sivakumar, Stanford AEC Global Teamwork</Company>
+    <Product>Concho QTO Revit add-in</Product>
+    <Copyright>© 2026 Maximilian Nagel &amp; Ashmitha Jaysi Sivakumar</Copyright>
+    <AssemblyTitle>Concho QTO Revit add-in (Revit $(RevitVersion))</AssemblyTitle>
+  </PropertyGroup>
+
   <ItemGroup>
     <Compile Include="*.cs" />
   </ItemGroup>
