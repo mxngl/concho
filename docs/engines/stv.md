@@ -38,6 +38,119 @@ Course logic lives in `engine.py`, `reference.py` and `models.py`. The Revit imp
 **Island-specific** mapping of Revit rows to (assembly, material type) plus unit conversions.
 This is team logic, not course data, and is replaced by a mapping table in P3.6.
 
+## Mapping table: `stv_mapping.csv` (P3.6)
+
+One table per project maps the Revit exports to course LCA catalog entries. It is
+validated against the course LCA catalog of the workbook given with `--template` /
+`$COURSE_STV_XLSX`.
+
+> The table names catalog entries (assembly, material type) but holds **no LCA values**;
+> the catalog is read from the course workbook at runtime, never committed.
+
+One CSV row per rule, UTF-8, comma-separated, header row with these names (order free).
+Lines starting with `#` are comments; blank lines are skipped. Row numbers in messages are
+file line numbers. JSON Schema of one row: [`docs/schema/stv_mapping.schema.json`](../schema/stv_mapping.schema.json)
+(pydantic model `StvMappingRow` in `engines/stv/mapping.py`; `concho stvmap schema`).
+
+| Column | Required | Content |
+|---|---|---|
+| `discipline` | – (optional column) | `architecture`, `structural` or `mep`: the rule only sees elements of that export; empty = all. The discipline comes from the importer (`--architecture-schedule` etc., or the `source_schedule` of a central BIM row), not from the export. |
+| `assembly_code` | – | Uniformat code, validated like the cost DB codes (P3.4, `engines/common/uniformat.csv`: level 3 `B2010`, the 4-digit form of a level-2 code `B2000`, or an extension). Matches element Assembly Codes that **start with** it (`B2010` → `B2010`, `B2010100`; `B2000` → everything in `B20`). No sub-codes. |
+| `category` | – | Revit Category, case-insensitive (`Walls`, `Structural Framing`). |
+| `keyword` | – | case-insensitive substrings of Family + Type + Material + Assembly Description; see "Keywords". Needs a category. |
+| `priority` | – (optional column) | whole number ≥ 0, default 100; lower wins among rules of the same specificity. |
+| `stv_assembly` | yes | assembly of the course LCA catalog (`Exterior Wall`, `Columns`, `MEP`, …) |
+| `stv_material_type` | yes | material type of that assembly in the catalog (`Concrete Cladding (sf)`) |
+| `quantity_field` | yes | `area` (SF), `volume` (CF), `length` (FT), `count` (1 per element), `weight` (kg: `Weight`, else `Unit Weight`), `airflow` (m³/s: `Airflow`/`Flow`, the snapshot flows, else `Connector Flow`) |
+| `conversion` | – | named conversion, see "Conversions"; empty = the quantity as read |
+| `note` | yes (may be empty) | free text: why the rule exists, proxies (`proxy, see P3.7`) |
+
+A rule needs a `category` or an `assembly_code`; a `keyword` needs a `category`.
+
+### Matching order
+
+For each element the matching rules are ranked:
+
+1. **Specificity:** code + category + keyword > code + category > code > category + keyword
+   > category.
+2. **Priority** among the rules of the most specific level: the lowest `priority` wins.
+
+If two rules remain (same specificity, same priority), that is a **tie**: an error that
+names the element (ElementId, file and line, category / family / type) and both rules. The
+run stops; the fix is a lower priority for one rule or a narrower keyword. Rules with the
+same code, category, keyword and priority for overlapping disciplines would tie on every
+element and are rejected by the validator without an export. `priority` is how an
+`if … elif …` order is written: in the Island file the footing rule (priority 20) beats the
+generic concrete rule (30) for `Footing-Rectangular` in concrete.
+
+An element no rule matches is **unmapped**; an element whose winning rule gives a quantity
+of 0 (no area, no airflow, …) is **zero quantity**. Neither is counted; both are listed in
+the coverage report. Rules do not fall through to a less specific rule on a zero quantity.
+
+### Keywords
+
+- `a|b`: any of the terms; `a&b`: all of them. `&` binds looser than `|`:
+  `exterior|curtain & glass|glazing` = (exterior or curtain) and (glass or glazing).
+- Terms are matched as substrings of the lowercased Family, Type, Material and Assembly
+  Description (each field on its own); whitespace inside a term is kept, around it trimmed.
+- **Numeric tests** on named values defined in code (`engines/stv/conversions.py`):
+  `diameter_in<=15`, `diameter_in>15` (also `<`, `>=`). `diameter_in` is the nominal duct
+  diameter from `Diameter`/`Size`/`Width`/`Height` or the parameter snapshot; when it is
+  unknown the test is false (the Island file then falls back to a category rule). No free
+  formulas.
+
+### Conversions
+
+Named conversions in `engines/stv/conversions.py`. Their parameters are **team values and
+must be given in the table** (no code defaults). `name=value` is the short form for
+conversions with one parameter; several parameters: `name(a=1;b=2)`; lists: `a/b/c`.
+
+| `conversion` | `quantity_field` | Unit | Quantity |
+|---|---|---|---|
+| (empty) | any | sf, cf, ft, count, kg, m^3/s | the field as read |
+| `cf_to_cy` | `volume` | cy | CF / 27 |
+| `density_kg_per_cf=<ρ>` | `volume` | kg | CF × ρ |
+| `door_area(thickness_in=<t>)` | `area` | sf | Area; else Width × Height; else Volume / t (fallbacks = estimate) |
+| `duct_equivalent_length` | `length` | ft | Length; else Volume / Area; else Volume^(1/3) (fallbacks = estimate) |
+| `duct_weight_estimate(surface_factor=<f>;density_kg_per_m3=<ρ>;gauge_m=<g1/g2/…>;gauge_limits_m=<l1/…>)` | `weight` | kg | Weight; else sheet weight of a rectangular duct: f × 2 (w + h) × length × gauge × ρ, gauge = first `gauge_m` whose `gauge_limits_m` ≥ the larger side, else the last (estimate) |
+
+**Unit check:** the unit that `quantity_field` + `conversion` produce must equal the unit of
+the material type in the catalog (the `(…)` at the end of its name: `Glulam Beam (kg)` →
+kg). `count` fits the catalog's count units (Turbine, Panel, Charger, …), not physical units.
+
+**Estimates:** a quantity that comes from a fallback (marked above) is flagged. Each line item
+of the results carries `estimated` (true/false) and `estimated_amount` (the part of `amount`
+from estimates).
+
+### Validation
+
+```bash
+concho stvmap validate stv_mapping.csv [--template CEE_222_STV_V12.xlsx] \
+    [--architecture a.csv ...] [--structural s.csv ...] [--mep m.csv ...]   # 0 = valid, 1 = errors
+concho stvmap schema                                                           # JSON Schema of one row
+```
+
+Without a workbook (`--template` or `$COURSE_STV_XLSX`) the catalog check is skipped with a
+warning. With exports, every element is matched and ties are errors. From Python:
+`engines.stv.mapping.validate_stv_mapping_file(path, catalog=reference_data)` or
+`load_stv_mapping(path, catalog=...)` (raises `StvMappingError`).
+
+| Check | Result |
+|---|---|
+| missing, unknown (with suggestion) or duplicated column; empty file; more cells than columns | error |
+| `discipline` not architecture / structural / mep | error |
+| `assembly_code` not in the Uniformat reference (with suggestions), malformed, sub-code | error |
+| neither category nor code; keyword without category | error |
+| keyword: empty term, unknown numeric test, malformed test | error |
+| `priority` not a whole number ≥ 0 | error |
+| `stv_assembly` / `stv_material_type` empty, not in the course catalog (with suggestions) | error |
+| `quantity_field` unknown | error |
+| conversion unknown, parameter missing / unknown / not a positive decimal, wrong `quantity_field` | error |
+| unit of quantity_field + conversion ≠ unit of the material type | error |
+| same code, category, keyword and priority for overlapping disciplines (static tie) | error |
+| an element of a given export matches two rules with the same specificity and priority | error |
+| no course workbook given (catalog not checked) | warning |
+
 ## Island 2026 reference result
 
 **The current Island result is 2,517,183.14 kgCO₂e** (28,396,923.44 MJ, 30,026,557.14 kg

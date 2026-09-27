@@ -20,6 +20,9 @@ Since P3.2 the team, lifetime and use phase come from the Island example config
 second, invented config (course team "River", modeled use phase) must change exactly the
 targets and the use phase.
 
+The line items now also carry ``estimated`` / ``estimated_amount`` (P3.6), which the
+stored reference files do not have; they are left out of the file comparison.
+
 Skipped unless the fixtures are present (``python scripts/fetch_fixtures.py``).
 """
 
@@ -45,6 +48,8 @@ TEAM = "Island"
 REPO_ROOT = Path(__file__).resolve().parents[2]
 ISLAND_CONFIG = REPO_ROOT / "engines" / "common" / "examples" / "island_2026.project_config.json"
 RIVER_CONFIG = REPO_ROOT / "tests" / "fixtures" / "configs" / "river_test.project_config.json"
+# P3.6 item fields that the stored reference results do not have.
+P36_ITEM_KEYS = ("estimated", "estimated_amount")
 WORKBOOK = "STV_Template/STV_ConceptA_Bambo.xlsx"
 SCHEDULES = "revit_schedules/Current"
 
@@ -95,6 +100,13 @@ def _trade_items(loader, paths: list[Path]) -> list[ConstructionItem]:
         for (assembly, material_type), amount in sorted(totals.items())
         if amount > 0
     ]
+
+
+def _without_p36(result: dict) -> dict:
+    """The result without the P3.6 item fields (for the comparison with stored files)."""
+    items = [{k: v for k, v in item.items() if k not in P36_ITEM_KEYS}
+             for item in result["construction_items"]]
+    return {**result, "construction_items": items}
 
 
 def _assert_close(actual, expected, path: str = "") -> None:
@@ -169,13 +181,13 @@ def test_project_totals(project):
 def test_project_matches_reference_file(project, expected_project):
     _assert_close(project["metric_summary"], expected_project["metric_summary"], "metrics")
     _assert_close(project["breakdown"], expected_project["breakdown"], "breakdown")
-    _assert_close(project, expected_project)
+    _assert_close(_without_p36(project), expected_project)
 
 
 @pytest.mark.parametrize("trade", list(TRADES))
 def test_trade_matches_reference_file(trade, trade_results, ipd_challenge_dir):
     expected = _load(ipd_challenge_dir / EXPECTED_TRADE.format(trade=trade))
-    _assert_close(trade_results[trade].to_dict(), expected, trade)
+    _assert_close(_without_p36(trade_results[trade].to_dict()), expected, trade)
 
 
 def test_ipd_copy_of_project_file_is_identical(autostv_dir, ipd_challenge_dir):

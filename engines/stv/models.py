@@ -110,6 +110,9 @@ class ConstructionItem:
     assembly: str
     material_type: str
     amount: float
+    # P3.6: part of ``amount`` that comes from a fallback estimate of the mapping
+    # (engines/stv/conversions.py); reporting only, not used in the calculation.
+    estimated_amount: float = 0.0
 
 
 @dataclass(slots=True)
@@ -163,6 +166,7 @@ class STVInputs:
                 assembly=item["assembly"],
                 material_type=item["material_type"],
                 amount=float(item["amount"]),
+                estimated_amount=float(item.get("estimated_amount", 0.0)),
             )
             for item in payload.get("construction_items", [])
         ]
@@ -217,6 +221,7 @@ class ConstructionImpactResult:
     materials: ImpactVector
     transport: ImpactVector
     construction: ImpactVector
+    estimated_amount: float = 0.0  # P3.6, see ConstructionItem
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -228,6 +233,8 @@ class ConstructionImpactResult:
             "materials": self.materials.to_dict(),
             "transport": self.transport.to_dict(),
             "construction": self.construction.to_dict(),
+            "estimated": self.estimated_amount > 0,
+            "estimated_amount": self.estimated_amount,
         }
 
     @classmethod
@@ -241,6 +248,7 @@ class ConstructionImpactResult:
             materials=ImpactVector.from_dict(payload.get("materials", {})),
             transport=ImpactVector.from_dict(payload.get("transport", {})),
             construction=ImpactVector.from_dict(payload.get("construction", {})),
+            estimated_amount=float(payload.get("estimated_amount", 0.0)),
         )
 
 

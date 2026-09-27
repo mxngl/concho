@@ -1,0 +1,91 @@
+{
+  "$id": "https://github.com/mxngl/concho/blob/main/docs/schema/stv_mapping.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "One rule of ``stv_mapping.csv``. Team data, not course data.",
+  "properties": {
+    "discipline": {
+      "default": "",
+      "description": "Only for elements of this export (architecture | structural | mep); empty = all. The discipline comes from the importer, not the export.",
+      "pattern": "^(|architecture|structural|mep)$",
+      "title": "Discipline",
+      "type": "string"
+    },
+    "assembly_code": {
+      "default": "",
+      "description": "Uniformat code (engines/common/uniformat.csv: level 3, the 4-digit form of a level-2 code such as B2000, or an extension). Matches element Assembly Codes that start with it. Empty = any code.",
+      "pattern": "^(|[A-Z][0-9]{4})$",
+      "title": "Assembly Code",
+      "type": "string"
+    },
+    "category": {
+      "default": "",
+      "description": "Revit Category (case-insensitive), e.g. 'Walls'. Empty = any category (then assembly_code is required and keyword must be empty).",
+      "title": "Category",
+      "type": "string"
+    },
+    "keyword": {
+      "default": "",
+      "description": "Case-insensitive substrings of Family + Type + Material + Assembly Description: 'a|b' = any, 'a&b' = all ('&' binds looser). A term can be a named numeric test such as 'diameter_in<=15'. Needs a category.",
+      "title": "Keyword",
+      "type": "string"
+    },
+    "priority": {
+      "default": 100,
+      "description": "Orders rules of the same specificity that match the same element: lower wins. Default 100.",
+      "minimum": 0,
+      "title": "Priority",
+      "type": "integer"
+    },
+    "stv_assembly": {
+      "description": "Assembly of the course LCA catalog, e.g. 'Exterior Wall'.",
+      "minLength": 1,
+      "title": "Stv Assembly",
+      "type": "string"
+    },
+    "stv_material_type": {
+      "description": "Material/Type of the course LCA catalog for that assembly, e.g. 'Concrete Cladding (sf)'. Its unit must match quantity_field + conversion.",
+      "minLength": 1,
+      "title": "Stv Material Type",
+      "type": "string"
+    },
+    "quantity_field": {
+      "description": "area (SF) | volume (CF) | length (FT) | count | weight (kg) | airflow (m^3/s), read from the export row.",
+      "pattern": "^(area|volume|length|count|weight|airflow)$",
+      "title": "Quantity Field",
+      "type": "string"
+    },
+    "conversion": {
+      "default": "",
+      "description": "Named conversion: cf_to_cy, density_kg_per_cf(density_kg_per_cf=...), door_area(thickness_in=...), duct_equivalent_length, duct_weight_estimate(surface_factor=...;density_kg_per_m3=...;gauge_m=...;gauge_limits_m=...). One-parameter conversions may be written name=value. Empty = none.",
+      "title": "Conversion",
+      "type": "string"
+    },
+    "note": {
+      "default": "",
+      "description": "Free text (why this rule, proxies, ...).",
+      "title": "Note",
+      "type": "string"
+    }
+  },
+  "required": [
+    "stv_assembly",
+    "stv_material_type",
+    "quantity_field"
+  ],
+  "title": "stv_mapping.csv row",
+  "type": "object",
+  "x-csv-columns": [
+    "assembly_code",
+    "category",
+    "keyword",
+    "stv_assembly",
+    "stv_material_type",
+    "quantity_field",
+    "conversion",
+    "note",
+    "discipline",
+    "priority"
+  ],
+  "x-csv-notes": "One CSV row per rule. Empty cells = empty string. discipline and priority are optional columns. Lines starting with '#' are comments. Most specific rule wins (code+category+keyword > code+category > code > category+keyword > category), then the lowest priority; a remaining tie is an error. See docs/engines/stv.md."
+}
