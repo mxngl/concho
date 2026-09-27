@@ -11,8 +11,9 @@ Contents: `QTO.dll`, `QTO.addin`, `install.cmd`, `install.ps1`, `INSTALL.md`.
 2. Unzip the whole zip into a folder.
 3. **Double-click `install.cmd`.**
 4. Windows shows **"Open File – Security Warning"** because the file comes from the internet.
-   Click **Open**. (If a blue "Windows protected your PC" window appears instead, click
-   **More info** → **Run anyway**.)
+   Click **Run** (German Windows: **Ausführen**). (If a blue "Windows protected your PC" window
+   appears instead, click **More info** (Weitere Informationen) → **Run anyway** (Trotzdem
+   ausführen).)
 
    The installer copies `QTO.dll` and `QTO.addin` to
    `%AppData%\Autodesk\Revit\Addins\<version>\` and asks before overwriting existing files.
