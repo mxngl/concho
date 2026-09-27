@@ -695,7 +695,11 @@ class FilesSection(_Model):
     `macro_schedule` are needed by the engines (error if set but missing, warning if unset);
     the others are optional (warning if set but missing)."""
 
-    cost_db: RelPath | None = Field(default=None, description="TVD cost DB CSV (P3.4).")
+    cost_db: RelPath | None = Field(
+        default=None,
+        description="TVD cost DB (cost_db.csv format, P3.4; see docs/engines/tvd.md). The TVD "
+                    "engine validates it before the run.",
+    )
     stv_mapping: RelPath | None = Field(default=None, description="STV mapping CSV (P3.6).")
     custom_materials: RelPath | None = Field(
         default=None, description="Custom materials CSV (P3.7)."

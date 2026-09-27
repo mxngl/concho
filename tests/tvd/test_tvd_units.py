@@ -6,7 +6,7 @@ import pytest
 
 from engines.tvd import alert
 from engines.tvd.cli import main
-from engines.tvd.cost_db import load_cost_data, parse_cost
+from engines.tvd.cost_db import CostDbRow, cost_db_from_dicts, load_cost_db
 from engines.tvd.engine import run_files
 from engines.tvd.history import load_history, save_snapshot
 from engines.tvd.loading import load_csv_file, merge_takeoffs, parse_qty_str
@@ -27,18 +27,6 @@ def items(run):
 # ── parsing ──────────────────────────────────────────────────────────────────
 
 @pytest.mark.parametrize("val, expected", [
-    ("$6.184,22", 6184.22),     # German: period thousands, comma decimal
-    ("$25,00", 25.0),           # German without thousands separator
-    ("$1,000.00", 1000.0),      # US
-    ("750", 750.0),
-    ("", None),
-    ("n/a", None),
-])
-def test_parse_cost(val, expected):
-    assert parse_cost(val) == expected
-
-
-@pytest.mark.parametrize("val, expected", [
     ("6590 SF", 6590.0),
     ("1,000 SF", 1000.0),
     ("42.75 CF", 42.75),
@@ -55,14 +43,15 @@ def test_bom_is_stripped(synthetic_paths):
 
 
 def test_cost_db_parsing(synthetic_paths):
-    cost = load_cost_data(load_csv_file(synthetic_paths["cost"]))
-    assert len(cost) == 17  # blank row skipped
-    by_ac = {c["ac"]: c for c in cost}
-    assert by_ac["B2010.CW"]["cost"] == 1200.50
-    assert by_ac["B1020"]["fixed_qty"] == 500.0
-    assert by_ac["B1010"]["cost"] is None
-    assert by_ac["A1030"]["desc"] == "Invented slab"  # column name with trailing spaces
-    assert by_ac["A1030"]["unit"] == "SF"
+    db = load_cost_db(synthetic_paths["cost"])
+    assert len(db.lines) == 17  # comment line skipped
+    by_ac = {line.code: line for line in db.lines}
+    assert by_ac["B2010.CW"].unit_cost == 1200.50
+    assert by_ac["B1020"].quantity_value == 500.0
+    assert by_ac["B1010"].unit_cost is None
+    assert by_ac["A1030"].description == "Invented slab"
+    assert by_ac["A1030"].unit == "SF"
+    assert by_ac["A1030"].row == 4  # file row (comment = 1, header = 2)
 
 
 # ── dedup ────────────────────────────────────────────────────────────────────
@@ -88,14 +77,14 @@ def test_run_counts(run):
 
 def test_fixed_quantity(items):
     assert items["B1020"]["qty"] == 500 and items["B1020"]["qty_src"] == "Fixed"
-    assert items["Z1010"]["total"] == 12345.67
+    assert items["H4000"]["total"] == 12345.67
     assert items["D5010"]["total"] == 2000.0  # fixed qty in a non-takeoff cluster
 
 
 def test_toilet_count_includes_excluded_categories(items):
     # One D2010 in Plumbing Fixtures, one in Furniture (excluded from quantities).
     assert items["C1030"]["qty"] == 2
-    assert items["C1030"]["qty_src"] == "Toilet elements (D2010)"
+    assert items["C1030"]["qty_src"] == "Count of codes (D2010)"
     assert items["C1030"]["total"] == 2000.0
 
 
@@ -121,12 +110,16 @@ def test_takeoff_lookup(items, ac, qty, src, total):
 
 
 def test_takeoff_lookup_units():
-    q = {"X": {"area_sf": 2000.0, "length_lf": 0.0, "volume_cf": 54.0, "count": 3}}
-    base = {"fixed_qty": None, "ac": "X", "cluster": "Shell"}
-    assert pick_quantity({**base, "unit": "MSF"}, q, {}) == (2.0, "Area/1000 (MSF)")
-    assert pick_quantity({**base, "unit": "CF"}, q, {}) == (54.0, "Volume (CF)")
-    assert pick_quantity({**base, "unit": "Flight"}, q, {}) == (3.0, "Count (EA)")
-    assert pick_quantity({**base, "unit": "LS"}, q, {}) == (0.0, "Unknown unit: LS")
+    q = {"B1010": {"area_sf": 2000.0, "length_lf": 0.0, "volume_cf": 54.0, "count": 3}}
+
+    def line(unit):
+        return CostDbRow(cluster="Shell", assembly_code="B1010", unit=unit,
+                         quantity_rule="takeoff")
+
+    assert pick_quantity(line("MSF"), q, {}) == (2.0, "Area/1000 (MSF)")
+    assert pick_quantity(line("CF"), q, {}) == (54.0, "Volume (CF)")
+    assert pick_quantity(line("Flight"), q, {}) == (3.0, "Count (EA)")
+    assert pick_quantity(line("LS"), q, {}) == (0.0, "Unknown unit: LS")
 
 
 def test_keyword_split(items):
@@ -150,7 +143,7 @@ def test_excluded_categories():
 
 def test_non_takeoff_cluster_without_fixed_qty(items):
     assert items["D2010"]["qty"] == 0
-    assert items["D2010"]["qty_src"] == "Fixed only (none set)"
+    assert items["D2010"]["qty_src"] == "Fixed (no quantity set)"
 
 
 def test_notes(items):
@@ -159,11 +152,13 @@ def test_notes(items):
     assert items["B1010"]["notes"] == "No unit cost | Zero qty from takeoff | AC not in takeoff"
 
 
-def test_rules_are_parameterisable():
-    cost = [{"cluster": "Interiors", "ac": "C1030", "group": "", "desc": "", "unit": "EA",
-             "cost": 10.0, "fixed_qty": None}]
-    (row,) = calculate_costs(cost, {}, {"P1": 3, "P2": 1}, toilet_acs={"P1", "P2"})
+def test_rules_come_from_the_cost_db():
+    db = cost_db_from_dicts([{"cluster": "Interiors", "assembly_code": "C1030",
+                              "description": "x", "unit": "EA", "unit_cost": "10",
+                              "quantity_rule": "count_codes:D2010,E2010"}])
+    (row,) = calculate_costs(db.lines, {}, {"D2010": 3, "E2010": 1, "C1010": 7})
     assert row["qty"] == 4 and row["total"] == 40.0
+    assert row["qty_src"] == "Count of codes (D2010, E2010)"
 
 
 # ── summary + results JSON ───────────────────────────────────────────────────
@@ -179,8 +174,13 @@ def test_cluster_summary_and_payload(run):
     payload = run.results_payload()
     assert set(payload) == {
         "meta", "financials", "cluster_targets", "cluster_summary", "target_consistency",
-        "line_items",
+        "cost_db_validation", "line_items",
     }
+    assert list(payload)[-2:] == ["cost_db_validation", "line_items"]
+    assert payload["cost_db_validation"]["error_count"] == 0
+    assert payload["cost_db_validation"]["unpriced"] == [
+        {"row": 6, "cluster": "Shell", "assembly_code": "B1010"}
+    ]
     fin = payload["financials"]
     assert fin["grand_total"] == 307080.67
     assert fin["status"] == "under_target"

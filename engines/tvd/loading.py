@@ -58,26 +58,6 @@ def source_label(path: str) -> str:
     return rel.replace(os.sep, "/")
 
 
-def load_inputs(arch_path: str, struct_path: str, cost_path: str):
-    """Read the two QTO exports and the cost DB from explicit local paths.
-
-    Returns ``(arch_rows, struct_rows, cost_rows, source_label)``.
-    """
-    parts = [
-        f"arch={source_label(arch_path)}",
-        f"struct={source_label(struct_path)}",
-        f"cost={source_label(cost_path)}",
-    ]
-    source = "Custom files — " + ", ".join(parts)
-    print(f"Loaded data from custom paths: {', '.join(parts)}")
-    return (
-        load_csv_file(arch_path),
-        load_csv_file(struct_path),
-        load_csv_file(cost_path),
-        source,
-    )
-
-
 def merge_takeoffs(arch: list[dict], struct: list[dict]) -> list[dict]:
     """
     Merge architectural and structural takeoffs by ElementId (no duplicates).

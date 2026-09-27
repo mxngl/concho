@@ -40,7 +40,7 @@ or `validate_config_file(path)` (returns errors and warnings).
 | `stv.use_phase.not_modeled: true`, or all use-phase values 0 | warning |
 | Dates in order: `budget.grant_year ≤ construction_year`, `schedule.start_date < target_completion ≤ project.completion_date`, each blocked window `start ≤ end` | error |
 | Blocked window or holiday outside the schedule | warning |
-| `files.cost_db`, `files.macro_schedule`: set but not found | error (unset: warning) |
+| `files.cost_db`, `files.macro_schedule`: set but not found | error (unset: warning); the cost DB's content is checked by `concho costdb validate` and by the TVD engine (P3.4) |
 | `files.stv_mapping`, `custom_materials`, `schedule_rules`, `stv.custom_materials_file`: set but not found | warning |
 | `stv.custom_materials_file` and `files.custom_materials` both set but different | error |
 | Secrets: tokens (GitHub, `sk-…`, Slack, AWS, Google, JWT, Discord bot, bearer), URLs with credentials or token parameters, webhook URLs, private keys, 17–20 digit Discord IDs, long opaque strings | error (value not echoed) |
@@ -52,7 +52,7 @@ All paths in the file are relative to the config file.
 
 | Engine | Fields read | Notes |
 |---|---|---|
-| TVD (`concho-tvd --config`) | `project.name`, `project.team_name`, `project.gross_sf`, `tvd.total_target` / `tvd.target`, `tvd.cluster_split` (`explicit`), `tvd.custom_clusters`, `tvd.target_sum_tolerance`, `tvd.target_sum_override`, `files.cost_db` (default for `--cost`) | Cluster targets: course clusters A–H under their canonical names (`Special Construction`), then the custom clusters. `derive_from_references` is not implemented yet (P3.5). The total target excludes `on_top` custom clusters. Target check and `target_consistency` block: see below. Results JSON: `meta.project_name`, `meta.team_name`. |
+| TVD (`concho-tvd --config`) | `project.name`, `project.team_name`, `project.gross_sf` (also `per_gsf` cost rows), `tvd.total_target` / `tvd.target`, `tvd.cluster_split` (`explicit`), `tvd.custom_clusters` (also the allowed non-course clusters of the cost DB), `tvd.target_sum_tolerance`, `tvd.target_sum_override`, `files.cost_db` (default for `--cost`, `cost_db.csv` format, P3.4) | Cluster targets: course clusters A–H under their canonical names (`Special Construction`), then the custom clusters. `derive_from_references` is not implemented yet (P3.5). The total target excludes `on_top` custom clusters. Target check and `target_consistency` block: see below. Results JSON: `meta.project_name`, `meta.team_name`. |
 | TVD dashboard | team name, GSF, targets (from the run) | No project strings in the renderer. |
 | STV (`concho-stv --config`) | `stv.course_team` (`--team` overrides), `stv.lifetime_years`, `stv.use_phase`, `stv.custom_materials_file` / `files.custom_materials` | `lifetime_years` ≠ 50 is used but reported as a warning (the course formula uses 50). `not_modeled: true` → use phase 0 (warning). `cogeneration: null` = no cogeneration. `urinal_gpf: null` = no urinals (toilet factor 1.0), an explicit `0` = course behaviour (factor 0.75), decision D11 (engine since P3.10). Custom materials are loaded and validated only; the calculation uses them from P3.7. `--no-use-phase` skips the use phase (for per-trade runs combined later). |
 
@@ -89,9 +89,12 @@ Island 2026 example: A–H 16,705,852 vs. total 16,700,000 → gap +5,852 (+0.03
 0.1 % tolerance of 16,700), Equipment Rental 400,000 on top → `gap_incl_on_top` 405,852,
 status `within_tolerance`; no override needed.
 
-The TVD quantity rule tables (takeoff clusters A–C, quantity mirrors, keyword split, toilet
-codes, excluded categories) are engine defaults in `engines/tvd/rules.py` until they move to
-the cost DB (P3.4).
+The TVD quantity rules (takeoff, mirrors, keyword split, counted codes, lump sums) are in the
+cost DB since P3.4 (`quantity_rule`, `split_keywords`; format in
+[`docs/engines/tvd.md`](engines/tvd.md#cost-db-format-cost_dbcsv-p34)); only the excluded
+categories stay an engine default (`engines/tvd/rules.py`). The engine validates
+`files.cost_db` before the run (`concho costdb validate`): errors stop it, warnings go into the
+`cost_db_validation` block of the results JSON.
 
 ## How to fill it in (new team)
 
@@ -234,7 +237,7 @@ Generated from `docs/schema/project_config.schema.json`; do not edit by hand.
 | `agent.extensions.transcripts` | boolean |  | `false` | Meeting transcript agent. |
 | `agent.extensions.clashbot` | boolean |  | `false` | ClashBot (needs ACC/APS access). |
 | `files` | object |  |  | Input files and the exports directory, relative to this config file. `cost_db` and `macro_schedule` are needed by the engines (error if set but missing, warning if unset); the others are optional (warning if set but missing). |
-| `files.cost_db` | string \| null |  | `null` | TVD cost DB CSV (P3.4). |
+| `files.cost_db` | string \| null |  | `null` | TVD cost DB (cost_db.csv format, P3.4; see docs/engines/tvd.md). The TVD engine validates it before the run. |
 | `files.stv_mapping` | string \| null |  | `null` | STV mapping CSV (P3.6). |
 | `files.custom_materials` | string \| null |  | `null` | Custom materials CSV (P3.7). |
 | `files.macro_schedule` | string \| null |  | `null` | Macro schedule CSV (P3B.1). |

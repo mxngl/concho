@@ -2,7 +2,9 @@
 
 Project values (targets, GSF, project/team name) come from ``--config``
 (``project_config`` JSON, see ``docs/config.md``). ``--cost`` defaults to ``files.cost_db``
-of the config.
+of the config; it is a ``cost_db.csv`` (P3.4, ``docs/engines/tvd.md``) and is validated before
+the run (errors stop it; old AutoTVD ``cost_data.csv`` files are converted with
+``scripts/migrate_cost_data.py``).
 
 Output layout under ``--out DIR`` (mirrors the AutoTVD repo layout):
 
@@ -19,6 +21,7 @@ from pathlib import Path
 
 from engines.common.config import validate_config_file
 from engines.tvd.alert import fire_budget_webhook
+from engines.tvd.cost_db import CostDbError
 from engines.tvd.engine import run_files
 from engines.tvd.history import load_history, make_demo_snapshot, save_snapshot
 from engines.tvd.results_writer import save_results_json
@@ -51,7 +54,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--struct", metavar="FILE", required=True,
                         help="Structural take-off CSV (e.g. Structural_Schedule.csv)")
     parser.add_argument("--cost", metavar="FILE",
-                        help="Cost database CSV (AutoTVD cost_data.csv format); "
+                        help="Cost DB CSV (cost_db.csv format, docs/engines/tvd.md); "
                              "default: files.cost_db of the config")
     parser.add_argument("--out", metavar="DIR", required=True,
                         help="Output folder for results/ and the dashboard")
@@ -96,7 +99,12 @@ def main(argv: list[str] | None = None) -> int:
 
     # 1–6. Load data, compute line items and cluster summary
     # (run.notes repeat the target warnings of the config validation printed above.)
-    run = run_files(args.arch, args.struct, cost_path, project)
+    try:
+        run = run_files(args.arch, args.struct, cost_path, project)
+    except CostDbError as exc:
+        parser.error(f"{exc}\nCheck the file with: concho costdb validate {cost_path}")
+    for warning in run.cost_db_validation["warnings"]:
+        print(f"   Cost DB warning: {warning}")
     results, summary, unmapped_count = run.results, run.summary, run.unmapped_count
 
     # 6b. Save structured results JSON (timestamped + latest.json)

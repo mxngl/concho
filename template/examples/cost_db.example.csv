@@ -1,0 +1,15 @@
+# Example cost DB (cost_db.csv format, P3.4). Every value is INVENTED: no RSMeans data, no
+# course data. Copy the header of ../cost_db.csv and fill in your own rows; format reference:
+# docs/engines/tvd.md. Check the file with: concho costdb validate cost_db.csv
+#
+# Row 1: takeoff  - quantity = interior wall area from the Revit takeoff (unit SF)
+# Row 2: mirror   - wall paint takes the same area as the C1010 walls
+# Row 3: count    - one toilet partition per plumbing fixture element (D2010)
+# Row 4: fixed    - lump sum: 1 x unit cost
+# Row 5: percent  - 5 % of the sum of all other lines (unit %, unit_cost left empty)
+cluster,assembly_code,group,description,unit,unit_cost,quantity_rule,quantity_value,qty_reliability,cost_reliability,source,split_keywords,qty_label
+Interiors,C1010,Partitions,Invented gypsum partition,SF,12.50,takeoff,,3,2,invented example,,
+Interiors,C3010,Wall Finishes,Invented wall paint,SF,1.80,mirror:C1010,,3,2,invented example,,
+Interiors,C1030,Fittings,Invented toilet partition,EA,950.00,count_codes:D2010,,2,2,invented example,,
+General Conditions,H4000,General Conditions,Invented site overhead lump sum,LS,250000.00,fixed,1,2,1,invented example,,
+General Conditions,H5000,Contingency,Invented design contingency,%,,pct_of_subtotal,5,1,1,invented example,,

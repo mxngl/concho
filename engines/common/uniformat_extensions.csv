@@ -1,0 +1,13 @@
+# Codes accepted by the cost DB validator beyond NISTIR 6389 levels 1-3 (see uniformat.csv).
+# NOT NIST, NOT COPIED FROM COURSE DATA: the codes are the ones the course TVD structure
+# uses for cluster H (General Conditions), which UNIFORMAT II does not have; the titles are
+# our own generic wording. origin: course = code used by the course TVD structure,
+# concho = code added by Concho. Only add codes that a cost DB actually needs.
+# Course codes of the form X##00 for a NIST level-2 group (e.g. F1000 = F10, B2000 = B20)
+# are accepted by rule and are not listed here.
+code,level,title,origin
+H1000,2,General conditions item 1,course
+H2000,2,General conditions item 2,course
+H3000,2,General conditions item 3,course
+H4000,2,General conditions (supervision and site overhead),course
+H5000,2,Contingency,course
