@@ -1,0 +1,83 @@
+name: Revit add-in release
+
+# P4.2: builds QTO.dll per Revit version and packages
+#   Concho-QTO-Revit<year>-<version>.zip = QTO.dll + QTO.addin + install.ps1 + INSTALL.md
+# On a pushed tag v*, the zips are attached to a GitHub Release for that tag.
+# workflow_dispatch (for testing) only uploads the zips as workflow artifacts.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - config: "Release R25"
+            year: "2025"
+          - config: "Release R26"
+            year: "2026"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Build (Revit ${{ matrix.year }})
+        run: dotnet build revit-addin/Concho.QTO.sln -c "${{ matrix.config }}"
+
+      - name: Package
+        shell: pwsh
+        run: |
+          $version = if ($env:GITHUB_REF_TYPE -eq 'tag') { $env:GITHUB_REF_NAME } else { "dev-$($env:GITHUB_SHA.Substring(0, 7))" }
+          $name = "Concho-QTO-Revit${{ matrix.year }}-$version"
+          $stage = Join-Path $env:RUNNER_TEMP $name
+          New-Item -ItemType Directory -Path $stage | Out-Null
+          Copy-Item "revit-addin/bin/${{ matrix.config }}/QTO.dll" $stage
+          Copy-Item "revit-addin/QTO.addin" $stage
+          Copy-Item "revit-addin/install/INSTALL.md" $stage
+          # Default Revit version of this zip's installer.
+          (Get-Content "revit-addin/install/install.ps1" -Raw).Replace('__REVIT_VERSION__', '${{ matrix.year }}') |
+            Set-Content (Join-Path $stage "install.ps1") -Encoding utf8
+          New-Item -ItemType Directory -Path dist -Force | Out-Null
+          Compress-Archive -Path "$stage/*" -DestinationPath "dist/$name.zip"
+          Get-ChildItem dist
+          "ZIP_NAME=$name" >> $env:GITHUB_ENV
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ZIP_NAME }}
+          path: dist/${{ env.ZIP_NAME }}.zip
+          if-no-files-found: error
+
+  release:
+    if: github.ref_type == 'tag'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Create or update the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          ls -l dist
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$TAG" dist/*.zip --clobber --repo "$GITHUB_REPOSITORY"
+          else
+            gh release create "$TAG" dist/*.zip --title "$TAG" --generate-notes --repo "$GITHUB_REPOSITORY"
+          fi
