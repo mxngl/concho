@@ -119,7 +119,7 @@ are prefixed with the model file name (`<model>_...csv`). P4.3 builds on these c
 
 `Original Category/Family/Type` are filled for Revit parts only (the element the part was cut from).
 
-### `<model>_MEP_TakeOff.csv` (69 columns)
+### `<model>_MEP_TakeOff.csv` (70 columns)
 
 `ElementId`, `Category`, `Family`, `Type`, `Level`, `Mark`, `System Name`, `System Type`,
 `Service Type`, `Classification`, `Size`, `Diameter`, `Width`, `Height`, `Length`, `Area`,
@@ -127,9 +127,11 @@ are prefixed with the model file name (`<model>_...csv`). P4.3 builds on these c
 `Airflow`, `Flow`, `Pressure Drop`, `Cooling Capacity`, `Heating Capacity`, `Power`, `Voltage`,
 `Current`, `Apparent Load`, `Connected Load`, `Connector Count`, `Connector Flow`,
 `Connector Demand`, `Connector Max Diameter (in)`, `Connector Max Width (in)`,
-`Connector Max Height (in)`, *spatial columns*, *room columns*, `Comments`, `Parameter Snapshot`
+`Connector Max Height (in)`, *spatial columns*, *room columns*, `Comments`, `Parameter Snapshot`,
+`Assembly Code`
 
-Note: the MEP export has **no `Assembly Code` column** (the structural and architecture exports do).
+`Assembly Code` was added in P4.3 as the **last** column, so readers that use column positions
+keep working (the STV importer reads by column name and gives identical results).
 
 ### Shared column groups
 
