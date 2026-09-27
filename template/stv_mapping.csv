@@ -1,0 +1,33 @@
+# Default STV mapping table for common Uniformat codes (P3.6). NOT COURSE DATA.
+# Used when a project gives no table (concho-stv --stv-mapping / files.stv_mapping).
+# Names course LCA catalog entries only (no LCA values). Format: docs/engines/stv.md.
+# Reviewed set: only rules whose catalog entry is unambiguous for the code (and, where the
+# material decides, for an explicit product keyword). Not covered on purpose: elements that
+# need a team assumption (steel/timber/glulam members need a density; steel duct 12"/18"D
+# needs a size threshold), windows (pane count and frame are rarely in the export), roof
+# structure (B1020), MEP exports without an Assembly Code column. Copy this file to your
+# project and extend it; unmapped types are listed in mapping_coverage.
+discipline,assembly_code,category,keyword,priority,stv_assembly,stv_material_type,quantity_field,conversion,note
+,A1010,Structural Foundations,,100,Foundation,Strip Foundation (cy),volume,cf_to_cy,standard foundations (wall and column footings)
+,A1020,Structural Foundations,,100,Foundation,Mat and Pile (cy),volume,cf_to_cy,special foundations (piles and mats)
+,A1030,Structural Foundations,,100,Foundation,Concrete Slab (cy),volume,cf_to_cy,slab on grade
+,A1030,Floors,,100,Foundation,Concrete Slab (cy),volume,cf_to_cy,slab on grade modelled as a floor
+,B1010,Floors,wood|timber|clt|glulam,10,Floor,Wood System (sf),area,,
+,B1010,Floors,concrete,20,Floor,Concrete (sf),area,,wood keywords win over concrete (e.g. wood on a concrete topping)
+,B1010,Structural Columns,concrete,100,Columns,Reinforced Concrete Column (cy),volume,cf_to_cy,
+,B1010,Structural Framing,concrete,100,Beams,Reinforced Concrete Beam (cy),volume,cf_to_cy,
+,B2010,Walls,eifs,100,Exterior Wall,EIFS on Metal Stud (sf),area,,
+,B2010,Walls,brick & metal stud|steel stud,100,Exterior Wall,Brick on Metal Stud (sf),area,,
+,B2010,Walls,brick & concrete|cmu|masonry unit,110,Exterior Wall,Brick on Concrete (sf),area,,
+,B2010,Walls,structurally insulated panel,100,Exterior Wall,Structurally Insulated Panels (sf),area,,
+,B3010,Roofs,epdm,100,Roof,EPDM Membrane (sf),area,,
+,B3010,Roofs,green roof|vegetated,90,Roof,Green Roof (sf),area,,a green roof over an EPDM membrane is booked as green roof
+,B3010,Roofs,asphalt shingle,100,Roof,Asphalt Shingle (sf),area,,
+,C1010,Walls,metal stud|steel stud,100,Interior Wall,Steel Studs and Painted Gypsum (sf),area,,
+,C1010,Walls,wood stud|timber stud,100,Interior Wall,Timber Studs and Painted Gypsum (sf),area,,
+,C1010,Walls,curtain wall,90,Interior Wall,Curtain Wall (sf),area,,
+,C3020,Floors,carpet,100,Floor,Carpet (sf),area,,floor finish modelled as its own floor element
+,D2000,Pipes,copper,100,MEP,Copper Pipe (kg),weight,,plumbing pipes; needs Weight in the export
+,D2000,Pipes,stainless,100,MEP,Stainless Steel Pipe (kg),weight,,plumbing pipes; needs Weight in the export
+,D2000,Pipes,hdpe|polyethylene,100,MEP,HDPE Pipe (kg),weight,,plumbing pipes; needs Weight in the export
+,D3000,Ducts,stainless,100,MEP,Stainless Steel Duct (kg),weight,,HVAC ducts; needs Weight in the export

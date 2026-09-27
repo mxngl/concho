@@ -180,6 +180,19 @@ the type; pipe materials also in the parameter snapshot); a stainless duct witho
 zero quantity (the old code fell back to the duct length); the bamboo rules also catch
 bamboo members of other families.
 
+### Default table
+
+`template/stv_mapping.csv`: a small, reviewed set for common Uniformat codes, only where the
+catalog entry is unambiguous for the code (A1010 → Strip Foundation, A1020 → Mat and Pile,
+A1030 → Concrete Slab, all in cy) or for the code plus an explicit product keyword (B1010
+floors wood / concrete, concrete columns and beams; B2010 EIFS, brick on metal stud / on
+concrete, SIP; B3010 EPDM, green roof, asphalt shingle; C1010 metal / wood stud, interior
+curtain wall; C3020 carpet; D20 copper / stainless / HDPE pipes and D30 stainless ducts by
+weight). Left out on purpose: members that need a density (steel, timber, glulam), steel
+ducts (size threshold), windows (pane count and frame are rarely exported), roof structure
+(B1020), and anything without an Assembly Code (e.g. the MEP export). Teams copy it and
+extend it; the coverage report lists what is left.
+
 ## Island 2026 reference result
 
 **The current Island result is 2,517,183.14 kgCO₂e** (28,396,923.44 MJ, 30,026,557.14 kg
