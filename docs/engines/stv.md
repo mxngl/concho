@@ -407,6 +407,29 @@ The panels come in through either
   materials included) and adds them with `origin: "project_config"` on the line item. Other
   Energy items (EV battery, solar water heating, turbines) work the same way.
 
+### Combining results: the use phase is taken once
+
+The use phase (and the config's `stv.construction_items`, e.g. PV) belongs to the project,
+not to a trade. Before P3.8, `--combine-results` summed the use phase of every input, so
+per-trade runs with `--config` counted it once per trade; the workaround was
+`--no-use-phase` on all but one run (P3.2 follow-up). Since P3.8, `STVResults.combine`
+sums the embodied impacts and line items of the inputs and takes the project-level parts
+**once**:
+
+- `concho-stv --combine-results a.json b.json … --config project_config.json`: the use
+  phase and the config items are recomputed from the config (this needs the course
+  workbook); what the inputs carry of them is ignored. This is the recommended way.
+- without `--config`: the inputs that have a non-zero use phase must all have the same one
+  (as per-trade runs of one config do); it is taken once. Config items (line items with
+  `origin: "project_config"`) likewise. Different ones stop the run with an error that asks
+  for `--config`.
+
+`use_phase_status.combined` says which rule applied. **`--no-use-phase` is deprecated, not
+removed:** it is no longer needed, but existing batch scripts that pass it still work (the
+run is construction-only, `use_phase_status.source = "skipped"`) and get a deprecation
+warning; combine such runs with `--config` to add the use phase. Removal is left for P5,
+when the pipeline scripts move into the team template.
+
 ### `use_phase_status` in the results
 
 | Key | Content |

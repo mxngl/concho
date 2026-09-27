@@ -22,7 +22,7 @@ from engines.stv.custom_materials import (
     load_custom_materials,
 )
 from engines.stv.engine import LIFETIME_YEARS
-from engines.stv.models import ImpactVector
+from engines.stv.models import ImpactVector, STVResults
 from engines.stv.project import STVProjectSettings, use_phase_payload
 from engines.stv.reference import STVReferenceData, TeamFactors
 
@@ -349,3 +349,112 @@ def test_config_construction_items_validation(tmp_path, item, message):
 
     with pytest.raises(ConfigError, match=message):
         load_config(_config_with_items(tmp_path, [item]))
+
+
+# ── P3.8: combining per-trade results takes the use phase once ─────────────────
+
+def _trade_run(monkeypatch, tmp_path, reference, name, items, *args) -> Path:
+    template = tmp_path / "course.xlsx"
+    template.write_bytes(b"")
+    monkeypatch.setattr(STVReferenceData, "from_workbook",
+                        staticmethod(lambda path=None: reference))
+    monkeypatch.setenv("COURSE_STV_XLSX", str(template))
+    inputs = tmp_path / f"{name}.json"
+    inputs.write_text(json.dumps({"team": TEAM, "construction_items": items}))
+    out = tmp_path / name
+    monkeypatch.setattr(sys, "argv", ["concho-stv", "--input", str(inputs),
+                                      "--output-dir", str(out), *args])
+    cli.main()
+    return out / "stv_results.json"
+
+
+def _combine(monkeypatch, tmp_path, paths, *args) -> dict:
+    out = tmp_path / "project"
+    monkeypatch.setattr(sys, "argv", ["concho-stv", "--output-dir", str(out),
+                                      "--combine-results", *map(str, paths), *args])
+    cli.main()
+    return json.loads((out / "stv_results.json").read_text())
+
+
+TRADE_ITEMS = {
+    "arch": [{"assembly": "Floor", "material_type": "Test Slab (sf)", "amount": 100.0}],
+    "struct": [{"assembly": "Columns", "material_type": "Test Column (kg)", "amount": 40.0}],
+}
+
+
+@pytest.fixture
+def river_pv(tmp_path, reference_with_river) -> Path:
+    """River config plus an invented PV item (stv.construction_items)."""
+    reference_with_river.materials[("Energy", "Test PV (sf)")] = (
+        reference_with_river.materials[("Floor", "Test Slab (sf)")])
+    reference_with_river.valid_materials["Energy"] = {"Test PV (sf)"}
+    return _config_with_items(tmp_path, [{"assembly": "Energy", "material_type": "Test PV (sf)",
+                                          "amount": 50, "note": "invented PV area"}])
+
+
+def test_combine_takes_use_phase_and_config_items_once(monkeypatch, tmp_path,
+                                                       reference_with_river, river_pv, capsys):
+    trades = [_trade_run(monkeypatch, tmp_path, reference_with_river, name, items,
+                         "--config", str(river_pv)) for name, items in TRADE_ITEMS.items()]
+    single = _trade_run(monkeypatch, tmp_path, reference_with_river, "all",
+                        TRADE_ITEMS["arch"] + TRADE_ITEMS["struct"], "--config", str(river_pv))
+    expected = json.loads(single.read_text())
+    for args in ((), ("--config", str(river_pv))):  # from the inputs / from the config
+        combined = _combine(monkeypatch, tmp_path, trades, *args)
+        for key in ("use_electricity", "use_heating", "use_water", "embodied", "life_cycle"):
+            assert combined["breakdown"][key] == pytest.approx(expected["breakdown"][key]), key
+        pv = [i for i in combined["construction_items"] if i["origin"] == "project_config"]
+        assert len(pv) == 1 and pv[0]["amount"] == 50.0
+        assert combined["use_phase_status"]["modeled"] is True
+        assert "taken once" in combined["use_phase_status"]["combined"]
+    assert "use phase taken once" in capsys.readouterr().err
+
+
+def test_combine_old_no_use_phase_runs_with_config(monkeypatch, tmp_path, reference_with_river,
+                                                   capsys):
+    """Construction-only trade results (e.g. --no-use-phase) get the use phase from --config."""
+    trades = [_trade_run(monkeypatch, tmp_path, reference_with_river, name, items,
+                         "--config", str(RIVER_CONFIG), "--no-use-phase")
+              for name, items in TRADE_ITEMS.items()]
+    assert "--no-use-phase is deprecated" in capsys.readouterr().err
+    without = _combine(monkeypatch, tmp_path, trades)
+    assert without["breakdown"]["use_phase"]["carbon"] == 0.0
+    assert without["use_phase_status"]["modeled"] is False
+    combined = _combine(monkeypatch, tmp_path, trades, "--config", str(RIVER_CONFIG))
+    assert combined["breakdown"]["use_electricity"]["carbon"] == pytest.approx(
+        0.2 * 100_000 * 50)
+    assert combined["use_phase_status"]["source"] == "project_config"
+    assert combined["breakdown"]["embodied"] == without["breakdown"]["embodied"]
+
+
+def test_combine_rejects_different_use_phases(monkeypatch, tmp_path, reference_with_river,
+                                              capsys):
+    river = _trade_run(monkeypatch, tmp_path, reference_with_river, "arch",
+                       TRADE_ITEMS["arch"], "--config", str(RIVER_CONFIG))
+    other = STVResults.from_dict(json.loads(river.read_text()))
+    other.breakdown.use_water = other.breakdown.use_water.scale(2.0)
+    other_path = tmp_path / "other.json"
+    other_path.write_text(json.dumps(other.to_dict()), encoding="utf-8")
+    with pytest.raises(SystemExit):
+        _combine(monkeypatch, tmp_path, [river, other_path])
+    assert "different use phases" in capsys.readouterr().err
+    # With the config, the inputs' use phases are ignored.
+    combined = _combine(monkeypatch, tmp_path, [river, other_path], "--config",
+                        str(RIVER_CONFIG))
+    assert combined["breakdown"]["use_water"] == json.loads(river.read_text())["breakdown"][
+        "use_water"]
+
+
+def test_combine_rejects_different_config_items(reference, tmp_path):
+    from engines.stv.models import CONFIG_ORIGIN
+
+    engine = STVEngine(reference)
+
+    def run(amount):
+        return engine.calculate(STVInputs.from_dict({"team": TEAM, "construction_items": [
+            {"assembly": "Floor", "material_type": "Test Slab (sf)", "amount": amount,
+             "origin": CONFIG_ORIGIN}]}))
+
+    assert len(STVResults.combine([run(5.0), run(5.0)]).construction_items) == 1
+    with pytest.raises(ValueError, match="different stv.construction_items"):
+        STVResults.combine([run(5.0), run(6.0)])

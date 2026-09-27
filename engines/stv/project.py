@@ -17,9 +17,7 @@ from engines.common.config import ProjectConfig, UsePhase
 
 from .custom_materials import CustomMaterials, load_custom_materials
 from .engine import LIFETIME_YEARS
-
-# ConstructionItem.origin of stv.construction_items (P3.8).
-CONFIG_ORIGIN = "project_config"
+from .models import CONFIG_ORIGIN
 
 
 @dataclass

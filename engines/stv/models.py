@@ -305,6 +305,66 @@ class ConstructionImpactResult:
         )
 
 
+# ConstructionItem.origin of the config's stv.construction_items (P3.8).
+CONFIG_ORIGIN = "project_config"
+
+
+def _embodied_breakdown(items: list[ConstructionImpactResult]) -> ImpactBreakdown:
+    out = ImpactBreakdown()
+    for item in items:
+        out.embodied_materials = out.embodied_materials + item.materials
+        out.embodied_transport = out.embodied_transport + item.transport
+        out.embodied_construction = out.embodied_construction + item.construction
+    return out
+
+
+def _single_use_phase(
+    results: list[STVResults],
+) -> tuple[STVResults | None, dict[str, Any] | None]:
+    """The one use phase of the inputs (P3.8): inputs with a non-zero use phase must agree."""
+    with_use = [r for r in results if any(r.breakdown.use_phase.to_dict().values())]
+    if with_use:
+        use = with_use[0].breakdown
+        for other in with_use[1:]:
+            if [v.to_dict() for v in (other.breakdown.use_electricity,
+                                      other.breakdown.use_heating, other.breakdown.use_water)
+                ] != [v.to_dict() for v in (use.use_electricity, use.use_heating,
+                                            use.use_water)]:
+                raise ValueError(
+                    "Cannot combine STV results with different use phases; the use phase "
+                    "belongs to the project, not to a trade. Combine with the project config "
+                    "(concho-stv --combine-results ... --config project_config.json)."
+                )
+        status = dict(with_use[0].use_phase_status or {"modeled": True, "source": "input"})
+        status["combined"] = (f"use phase taken once (found in {len(with_use)} of "
+                              f"{len(results)} inputs)")
+        return with_use[0], status
+    statuses = [r.use_phase_status for r in results if r.use_phase_status]
+    modeled = [s for s in statuses if s.get("modeled")]
+    status = dict((modeled or statuses or [{}])[0])
+    if statuses:
+        status["combined"] = f"no input has a non-zero use phase ({len(results)} inputs)"
+    return None, status or None
+
+
+def _single_config_items(results: list[STVResults]) -> list[ConstructionImpactResult]:
+    """The config items (origin project_config) of the inputs, once (P3.8)."""
+    groups = [[i for i in r.construction_items if i.origin == CONFIG_ORIGIN] for r in results]
+    groups = [g for g in groups if g]
+    if not groups:
+        return []
+
+    def key(group):
+        return sorted((i.assembly, i.material_type, i.amount) for i in group)
+
+    if any(key(g) != key(groups[0]) for g in groups[1:]):
+        raise ValueError(
+            "Cannot combine STV results with different stv.construction_items of the config; "
+            "combine with the project config (concho-stv --combine-results ... --config)."
+        )
+    return groups[0]
+
+
 def _share(part: ImpactVector, whole: ImpactVector) -> dict[str, float | None]:
     return {key: (part.get(key) / whole.get(key) if whole.get(key) else None)
             for key in IMPACT_KEYS}
@@ -437,7 +497,26 @@ class STVResults:
         )
 
     @classmethod
-    def combine(cls, results: list[STVResults], *, team: str | None = None) -> STVResults:
+    def combine(
+        cls,
+        results: list[STVResults],
+        *,
+        team: str | None = None,
+        project: STVResults | None = None,
+    ) -> STVResults:
+        """Combine per-trade (or per-export) results into one project result.
+
+        Embodied impacts and line items are summed. The project-level parts are taken
+        **once**, not summed per input (P3.8): the use phase and the ``stv.construction_items``
+        of the config (line items with ``origin == "project_config"``, e.g. PV panels).
+
+        - ``project`` given (``concho-stv --combine-results --config``): a result computed
+          from the config alone (its use phase and config items); the inputs' use phase and
+          config items are ignored.
+        - otherwise: the inputs that have a use phase must all have the same one, which is
+          taken once; the same holds for their config items. Different ones raise
+          ``ValueError`` (combine with the config instead).
+        """
         if not results:
             raise ValueError("At least one STV result is required to create a project STV.")
 
@@ -448,7 +527,7 @@ class STVResults:
         combined_breakdown = ImpactBreakdown()
         combined_items: list[ConstructionImpactResult] = []
 
-        for result in results:
+        for result in [*results, *([project] if project is not None else [])]:
             if result.team != first.team:
                 raise ValueError(
                     "Cannot combine STV results from different teams: "
@@ -462,8 +541,40 @@ class STVResults:
             if result.targets.to_dict() != combined_targets.to_dict():
                 raise ValueError("Cannot combine STV results with different target values.")
 
-            combined_breakdown = combined_breakdown + result.breakdown
-            combined_items.extend(result.construction_items)
+        for result in results:
+            own = [i for i in result.construction_items if i.origin != CONFIG_ORIGIN]
+            if len(own) == len(result.construction_items):
+                part = result.breakdown
+            else:
+                part = _embodied_breakdown(own)
+            combined_breakdown = combined_breakdown + ImpactBreakdown(
+                embodied_materials=part.embodied_materials,
+                embodied_transport=part.embodied_transport,
+                embodied_construction=part.embodied_construction,
+            )
+            combined_items.extend(own)
+
+        if project is not None:
+            use_source, config_items = project, [
+                i for i in project.construction_items if i.origin == CONFIG_ORIGIN]
+            status = dict(project.use_phase_status or {})
+            status["combined"] = "use phase and config items taken once from the config"
+        else:
+            use_source, status = _single_use_phase(results)
+            config_items = _single_config_items(results)
+        if use_source is not None:
+            combined_breakdown.use_electricity = use_source.breakdown.use_electricity
+            combined_breakdown.use_heating = use_source.breakdown.use_heating
+            combined_breakdown.use_water = use_source.breakdown.use_water
+        if config_items:
+            config_part = _embodied_breakdown(config_items)
+            combined_breakdown.embodied_materials = (combined_breakdown.embodied_materials
+                                                     + config_part.embodied_materials)
+            combined_breakdown.embodied_transport = (combined_breakdown.embodied_transport
+                                                     + config_part.embodied_transport)
+            combined_breakdown.embodied_construction = (
+                combined_breakdown.embodied_construction + config_part.embodied_construction)
+            combined_items.extend(config_items)
 
         coverage_blocks = [r.mapping_coverage for r in results if r.mapping_coverage]
         mapping_coverage = None
@@ -478,4 +589,5 @@ class STVResults:
             construction_items=combined_items,
             lifetime_years=combined_lifetime,
             mapping_coverage=mapping_coverage,
+            use_phase_status=status,
         )
