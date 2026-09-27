@@ -11,6 +11,7 @@ import csv
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
+import pandas as pd
 import pytest
 from mini_project import write_mini_project
 from openpyxl import Workbook
@@ -40,14 +41,14 @@ def _run(*args: object) -> None:
 
 @pytest.fixture(scope="module")
 def pipeline(tmp_path_factory: pytest.TempPathFactory) -> dict[str, Path]:
-    """Run all 14 steps in pipeline order; return the output folders."""
+    """Run all 15 steps in pipeline order; return the output folders."""
     root = tmp_path_factory.mktemp("schedule_pipeline")
     inp = write_mini_project(root)
     tpl = root / "templates"
     tpl.mkdir()
     out = {name: root / "out" / name for name in
-           ["model", "alice", "prefab", "micro", "fuzor", "manufacton", "delivery", "takt",
-            "viewers"]}
+           ["model", "alice", "prefab", "micro", "fuzor", "manufacton", "delivery", "rooms",
+            "takt", "viewers"]}
     model, micro = out["model"], out["micro"]
     bim = model / "central_bim_model_with_takt.csv"
     context = model / "central_bim_model_llm_context.csv"
@@ -69,12 +70,14 @@ def pipeline(tmp_path_factory: pytest.TempPathFactory) -> dict[str, Path]:
          "--crew", inp["crew"], "--equipment", inp["equipment"], "--out-dir", out["fuzor"])
     _run("manufacton-parts",
          "--template", _template(tpl / "parts.xlsx", parts_import.OUTPUT_COLUMNS),
-         "--central-bim-with-takt", bim, "--micro-schedule", micro_csv, "--out-dir", mf)
+         "--central-bim-with-takt", bim, "--micro-schedule", micro_csv,
+         "--prefab-assemblies", inp["prefab_assemblies"], "--out-dir", mf)
     _run("manufacton-assemblies",
          "--template", _template(tpl / "assembly.xlsx", assembly_import.OUTPUT_COLUMNS),
          "--parts-import", mf / "Parts_Import.xlsx", "--parts-summary", mf / "Parts_Summary.csv",
          "--micro-schedule", micro_csv, "--central-bim-with-takt", bim,
-         "--build-code-map", build_codes, "--out-dir", mf)
+         "--build-code-map", build_codes, "--prefab-assemblies", inp["prefab_assemblies"],
+         "--out-dir", mf)
     _run("manufacton-orders",
          "--order-template", _template(tpl / "order.xlsx", kit_import.OUTPUT_COLUMNS, "ORDERS"),
          "--item-template",
@@ -82,14 +85,17 @@ def pipeline(tmp_path_factory: pytest.TempPathFactory) -> dict[str, Path]:
          "--vendors", EXAMPLES / "vendors.csv", "--mapping", inp["build_code_mapping"],
          "--assembly-import", mf / "Assembly_Import.xlsx",
          "--parts-summary", mf / "Parts_Summary.csv", "--build-code-map", build_codes,
-         "--micro-schedule", micro_csv, "--llm-context", context, "--out-dir", mf)
+         "--micro-schedule", micro_csv, "--llm-context", context,
+         "--prefab-assemblies", inp["prefab_assemblies"], "--out-dir", mf)
     _run("delivery-windows", "--micro-schedule", micro_csv, "--llm-context", context,
          "--production-order", mf / "Production_Order.xlsx",
          "--production-order-items", mf / "Production_Order_Items.xlsx",
          "--kit-map", mf / "Revit_Kit_Parameter_Map.csv",
          "--assembly-map", mf / "Revit_Assembly_Id_Map.csv", "--out-dir", out["delivery"])
+    _run("room-takt-zones", "--room-boundaries", inp["room_boundaries"],
+         "--out-dir", out["rooms"])
     _run("takt-plan", "--central-bim", model / "central_bim_model.csv",
-         "--room-takt-zones", inp["room_takt_zones"], "--crew", inp["crew"],
+         "--room-takt-zones", out["rooms"] / "room_takt_zones.csv", "--crew", inp["crew"],
          "--equipment", inp["equipment"], "--out-dir", out["takt"])
     _run("takt-viewer", "--micro-schedule", micro_csv, "--out-dir", out["viewers"])
     _run("spatial-viewer", "--micro-schedule", micro_csv, "--out-dir", out["viewers"])
@@ -100,7 +106,7 @@ def test_cli_lists_every_step(capsys: pytest.CaptureFixture[str]) -> None:
     assert main([]) == 0
     listing = capsys.readouterr().out
     assert all(step in listing for step in STEPS)
-    assert len(STEPS) == 14
+    assert len(STEPS) == 15
 
 
 def test_cli_rejects_unknown_step() -> None:
@@ -118,12 +124,12 @@ def test_takt_zones_assigns_elements_to_zones(pipeline: dict[str, Path]) -> None
     assert not (pipeline["model"] / "takt_zones.json").exists()
 
 
-def test_takt_zone_polygon_drops_last_corner() -> None:
-    """Characterizes a bug kept from the original calibrator (fix in Phase 3B).
+def test_takt_zone_polygon_uses_every_corner() -> None:
+    """P3B.8 fix 1: an open ring of N corners is a polygon with N corners.
 
-    ``assign_takt_ids`` builds ``MplPath(corners, closed=True)``, which uses the last corner
-    as the close code, so an open ring of N corners is treated as N-1 corners. The Island
-    ``takt_zones.json`` stores open rings (see engines/schedule/README.md, "Findings").
+    The original built ``MplPath(corners, closed=True)``, which ignores the last corner (it
+    becomes the close code), so an open ring was tested as N-1 corners. The Island
+    ``takt_zones.json`` stores open rings.
     """
     import pandas as pd
 
@@ -131,16 +137,14 @@ def test_takt_zone_polygon_drops_last_corner() -> None:
 
     square = [[0, 0], [10, 0], [10, 10], [0, 10]]
     elements = pd.DataFrame(
-        {"Level": ["L 1", "L 1"], "Bounding Box Center X (ft)": [8.0, 2.0],
-         "Bounding Box Center Y (ft)": [2.0, 8.0]}
+        {"Level": ["L 1", "L 1", "L 1"], "Bounding Box Center X (ft)": [8.0, 2.0, 12.0],
+         "Bounding Box Center Y (ft)": [2.0, 8.0, 5.0]}
     )
-    open_ring = assign_takt_ids(elements, {"L 1": [{"zone_name": "Z", "corners_model_xy": square}]})
-    # (2, 8) lies in the square but outside the triangle (0,0)-(10,0)-(10,10).
-    assert list(open_ring["takt_id"]) == ["Z", ""]
-    closed = assign_takt_ids(
-        elements, {"L 1": [{"zone_name": "Z", "corners_model_xy": [*square, square[0]]}]}
-    )
-    assert list(closed["takt_id"]) == ["Z", "Z"]
+    # (2, 8) lies in the square but outside the triangle (0,0)-(10,0)-(10,10) that the
+    # original tested; (12, 5) lies outside the square.
+    for ring in (square, [*square, square[0]]):
+        zones = {"L 1": [{"zone_name": "Z", "corners_model_xy": ring}]}
+        assert list(assign_takt_ids(elements, zones)["takt_id"]) == ["Z", "Z", ""]
 
 
 def test_llm_context_derives_disciplines(pipeline: dict[str, Path]) -> None:
@@ -196,12 +200,174 @@ def test_manufacton_outputs(pipeline: dict[str, Path]) -> None:
     assert kits["1001"] == kits["1003"]
 
 
+def test_manufacton_named_prefab_assembly(pipeline: dict[str, Path]) -> None:
+    """P3B.8 fix 5: named prefab assemblies come from --prefab-assemblies, not from code.
+
+    The mini project defines one (MINI-SOUTH-WALL, mapped by host wall 1001); the Island
+    assemblies the original hardcoded (SL1-3R, SL1-2R, SL0W-LNEG1C) must not appear.
+    """
+    mf = pipeline["manufacton"]
+    parts = {row["ID"]: row["NAME"] for row in _rows(mf / "Parts_Import.csv")}
+    assert parts["MINI-SOUTH-GLAZED-PANEL"] == "Mini south part - Curtain Panel Glazed"
+    assert {part_id for part_id in parts if part_id.startswith("MINI-SOUTH-")} == {
+        "MINI-SOUTH-WALL", "MINI-SOUTH-MULLION-L", "MINI-SOUTH-MULLION-B",
+        "MINI-SOUTH-GLAZED-PANEL"}
+    assert not [part_id for part_id in parts if part_id.startswith(("SL1-", "SL0W-"))]
+    assemblies = pd.read_excel(mf / "Assembly_Import.xlsx", dtype=str).fillna("")
+    named = assemblies[assemblies["ID"] == "MINI-SOUTH-WALL"].iloc[0]
+    assert (named["Name"], named["Description"]) == (
+        "Mini south wall", "Mini south wall prefab assembly")
+    assert not assemblies["ID"].str.startswith(("SL1-", "SL0W-")).any()
+    mapped = {row["element_id"]: row["assembly_id"] for row in
+              _rows(mf / "Revit_Assembly_Id_Map.csv")}
+    assert mapped["1001"] == mapped["1003"] == "MINI-SOUTH-WALL"
+
+
+def _prefab_assemblies(tmp_path: Path, *assembly_ids: str) -> Path:
+    path = tmp_path / "prefab_assemblies.csv"
+    rows = [["assembly_id", "assembly_name", "assembly_description", "part_name"]]
+    rows += [[assembly_id, f"{assembly_id} name", f"{assembly_id} desc", f"{assembly_id} part"]
+             for assembly_id in assembly_ids]
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        csv.writer(handle).writerows(rows)
+    return path
+
+
+def test_kit_mapping_assemblies_must_be_defined(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """P3B.8 fix 5: mapping -> prefab_assemblies.csv is an error, the reverse a warning."""
+    mapping = pd.DataFrame([{"build_code": "X", "assembly_id": "A"},
+                            {"build_code": "Y", "assembly_id": "B"}])
+    monkeypatch.setattr(kit_import, "PREFAB_ASSEMBLIES_PATH", _prefab_assemblies(tmp_path, "A"))
+    with pytest.raises(ValueError, match=r"not defined in .*prefab_assemblies.csv: \['B'\]"):
+        kit_import.validate_mapped_assemblies(mapping)
+    monkeypatch.setattr(kit_import, "PREFAB_ASSEMBLIES_PATH", None)
+    with pytest.raises(ValueError, match=r"--prefab-assemblies \(not given\)"):
+        kit_import.validate_mapped_assemblies(mapping)
+
+    monkeypatch.setattr(kit_import, "PREFAB_ASSEMBLIES_PATH",
+                        _prefab_assemblies(tmp_path, "A", "B"))
+    kit_import.validate_mapped_assemblies(mapping)
+    kit_import.warn_unmapped_prefab_assemblies(pd.DataFrame({"assembly_id": ["A"]}))
+    err = capsys.readouterr().err
+    assert "prefab assembly B has no mapped elements" in err
+    assert "prefab assembly A" not in err
+
+
+def test_prefab_assemblies_file_is_validated(tmp_path: Path) -> None:
+    from engines.schedule.adapters.manufacton.prefab_assemblies import load_prefab_assemblies
+
+    assert load_prefab_assemblies(None) == []
+    rows = load_prefab_assemblies(_prefab_assemblies(tmp_path, "SOUTH-WALL", "NORTH"))
+    assert [(row["assembly_id"], row["part_prefix"]) for row in rows] == [
+        ("SOUTH-WALL", "SOUTH"), ("NORTH", "NORTH")]
+    with pytest.raises(ValueError, match="listed twice"):
+        load_prefab_assemblies(_prefab_assemblies(tmp_path, "A", "A"))
+    bad = tmp_path / "bad.csv"
+    bad.write_text("assembly_id,assembly_name\nA,a\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="missing columns"):
+        load_prefab_assemblies(bad)
+
+
+def _build_code_map(groups: dict[str, list[str]]) -> pd.DataFrame:
+    return pd.DataFrame(
+        [{"element_id": element, "build_code": f"Exterior Wall Install | L 1 | {group}"}
+         for group, elements in groups.items() for element in elements]
+    )
+
+
+def test_kit_mapping_shifted_group_id_does_not_map_another_wall(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """P3B.8 fix 3: prefab group ids are sequential and shift when the model changes.
+
+    The mapping was written when host wall 5001 was in group _001. A new wall (4001) now
+    comes first, so 5001 is in _002 and _001 is a different wall. The row must follow its
+    host wall, report the stale build code, and leave the other wall unmapped.
+    """
+    build_df = _build_code_map({"PREFAB_WALL_L1_001": ["4001", "4002"],
+                                "PREFAB_WALL_L1_002": ["5001", "5002"]})
+    mapping = pd.DataFrame([{"build_code": "Exterior Wall Install | L 1 | PREFAB_WALL_L1_001",
+                             "assembly_id": "SOUTH-WALL", "host_wall_element_id": "5001"}])
+    resolved = kit_import.resolve_static_mapping(mapping, build_df)
+    assert resolved.to_dict("records") == [
+        {"build_code": "Exterior Wall Install | L 1 | PREFAB_WALL_L1_002",
+         "assembly_id": "SOUTH-WALL"}]
+    err = capsys.readouterr().err
+    assert "`Exterior Wall Install | L 1 | PREFAB_WALL_L1_001` does not match the model" in err
+
+
+def test_kit_mapping_skips_unscheduled_rows(capsys: pytest.CaptureFixture[str]) -> None:
+    """P3B.8 fix 3: rows whose wall / build code is not scheduled are skipped with a warning
+    (the original raised on the first one); build codes without a host id stay usable."""
+    build_df = _build_code_map({"PREFAB_WALL_L1_001": ["4001"]})
+    mapping = pd.DataFrame([
+        {"build_code": "Exterior Wall Install | L 1 | PREFAB_WALL_L1_001", "assembly_id": "A"},
+        {"build_code": "Exterior Wall Install | L -1 | PREFAB_WALL_LNEG1_001",
+         "assembly_id": "B"},
+        {"build_code": "Exterior Wall Install | L 1 | PREFAB_WALL_L1_003", "assembly_id": ""},
+    ])
+    resolved = kit_import.resolve_static_mapping(mapping, build_df)
+    assert list(resolved["assembly_id"]) == ["A"]
+    err = capsys.readouterr().err
+    assert "PREFAB_WALL_LNEG1_001` -> B: build code is not in the 4D build-code map" in err
+    assert "1 mapping row(s) have no host_wall_element_id" in err
+
+    mapping = pd.DataFrame([{"build_code": "", "assembly_id": "A", "host_wall_element_id": "9"}])
+    assert kit_import.resolve_static_mapping(mapping, build_df).empty
+    assert "host wall 9 -> A: the element is not in the 4D build-code map" in (
+        capsys.readouterr().err)
+
+
+def test_kit_mapping_rejects_two_assemblies_for_one_wall() -> None:
+    build_df = _build_code_map({"PREFAB_WALL_L1_001": ["4001", "4002"]})
+    mapping = pd.DataFrame([
+        {"build_code": "", "assembly_id": "A", "host_wall_element_id": "4001"},
+        {"build_code": "", "assembly_id": "B", "host_wall_element_id": "4002"},
+    ])
+    with pytest.raises(ValueError, match="more than one assembly"):
+        kit_import.resolve_static_mapping(mapping, build_df)
+
+
 def test_delivery_windows(pipeline: dict[str, Path]) -> None:
     metrics = {row["window"] for row in
                _rows(pipeline["delivery"] / "delivery_window_summary_metrics.csv")}
     assert {"1 day", "1 week"} <= metrics
     orders = _rows(pipeline["delivery"] / "production_order_count_by_delivery_window.csv")
     assert {row["window"] for row in orders} == {"1 day", "3 days", "1 week"}
+
+
+def test_room_takt_zones(pipeline: dict[str, Path]) -> None:
+    """P3B.8 fix 2: one row per room of the boundary export, the takt planner's input."""
+    rows = _rows(pipeline["rooms"] / "room_takt_zones.csv")
+    assert [(row["room_takt_id"], row["room_id"], row["boundary_segments"]) for row in rows] == [
+        ("L 1 Room 101", "R1", "4"), ("L 1 Room 102", "R2", "4")]
+    assert rows[1] | {"room_takt_id": "", "boundary_segments": ""} == {
+        "room_takt_id": "", "room_id": "R2", "room_number": "102", "room_name": "Lab",
+        "level": "L 1", "area_sf": "400", "volume_cf": "4800", "location_x_ft": "30",
+        "location_y_ft": "10", "location_z_ft": "0", "boundary_segments": ""}
+
+
+def test_delivery_windows_without_manufacton(
+    pipeline: dict[str, Path], tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """P3B.8 fix 4: runs on the micro schedule alone and skips the production-order parts
+    (the original crashed with KeyError 'source' after writing most outputs)."""
+    micro = pipeline["micro"]
+    capsys.readouterr()
+    _run("delivery-windows", "--micro-schedule", micro / "Micro_Schedule.csv",
+         "--llm-context", pipeline["model"] / "central_bim_model_llm_context.csv",
+         "--out-dir", tmp_path)
+    out = capsys.readouterr().out
+    assert "Manufacton production orders not available (missing: --production-order," in out
+    units = _rows(tmp_path / "delivery_units_by_micro_schedule.csv")
+    assert units and "source" not in units[0]
+    assert {row["window"] for row in _rows(tmp_path / "delivery_window_summary_metrics.csv")} \
+        >= {"1 day", "1 week"}
+    assert not (tmp_path / "production_order_count_by_delivery_window.csv").exists()
+    assert not (tmp_path / "production_order_count_by_delivery_window.png").exists()
+    assert (tmp_path / "delivered_volume_by_takt_zone.png").exists()
 
 
 def test_takt_plan(pipeline: dict[str, Path]) -> None:

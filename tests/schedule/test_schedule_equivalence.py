@@ -8,7 +8,9 @@ that checkout is copied into this repo.
 The original scripts run, in pipeline order, inside a temporary copy of the checkout (they
 write next to themselves). The migrated steps run via ``python -m engines.schedule <step>``
 on the same inputs: raw inputs are read from ``IPD_CHALLENGE_DIR``, intermediate files from
-the previous migrated step. Where the original read a file that is committed in the checkout
+the *original* run (P3B.8: each step is compared in isolation, so an intended fix only
+changes the outputs of the step it fixes; the chained migrated run is covered by
+``test_schedule_golden.py``). Where the original read a file that is committed in the checkout
 but not produced earlier in the chain (``takt_zones.json``, ``room_takt_zones.csv``, the
 takt productivity rates, the previous ``Revit_Assembly_Id_Map.csv``, the Manufacton order
 workbooks), the migrated step gets the committed file too.
@@ -23,12 +25,15 @@ Also checks the reference sha256 values of docs/ROADMAP.md §1 (P0.4).
 
 from __future__ import annotations
 
+import csv
 import hashlib
+import io
 import os
 import re
 import shutil
 import subprocess
 import sys
+from importlib.metadata import version
 from pathlib import Path
 
 import pytest
@@ -41,6 +46,13 @@ FUZOR_OUT = f"{PE}/Fuzor_Mapper/outputs"
 TAKT_OUT = "src/Takt_engine/outputs"
 ZONES_OUT = "outputs/takt_zones"
 DELIVERY_OUT = "outputs/delivery_window_analysis"
+ROOMS_OUT = "outputs/room_boundaries"
+
+# P3B.8 fix 5: the Island prefab assemblies the original hardcoded in the Manufacton steps.
+PREFAB_ASSEMBLIES = (
+    Path(__file__).resolve().parents[2]
+    / "engines" / "schedule" / "examples" / "island" / "prefab_assemblies.csv"
+)
 
 # sha256 of the committed Island reference outputs (docs/ROADMAP.md §1, P0.4).
 REFERENCE_SHA256 = {
@@ -122,6 +134,21 @@ COMPARED_OUTPUTS = [
     ("spatial-viewer", f"{PE}/spatial_visualizer_micro.html", "spatial_visualizer_micro.html"),
 ]
 
+ORDERS_ORIGINAL_ERROR = (
+    "ValueError: Build code not found in 4D build-code map: "
+    "`Exterior Wall Install | L -1 | PREFAB_WALL_LNEG1_001`"
+)
+
+# Outputs that a P3B.8 bug fix changes on purpose (see engines/schedule/README.md, "Fixed in
+# P3B.8"). They are checked by a dedicated function instead of byte equality.
+P3B8_CHANGED_OUTPUTS = {
+    ("takt-zones", "central_bim_model_with_takt.csv"): "_check_takt_ids_fix",
+}
+
+# P3B.8 fix 1 (takt zones keep their last corner): changed takt_id values in the Island model.
+TAKT_FIX_NEWLY_ASSIGNED = 900  # no takt zone before, one now
+TAKT_FIX_MOVED = 1  # other zone (element 1293125, L 1 Zone 5 -> L 1 Zone 1)
+
 _GUID = re.compile(r"\{[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}\}")
 # Takt_Model_Viewer.html links the FBX relative to its own folder, which differs per layout.
 _FBX_PATH = re.compile(r'"[^"\n]*\.fbx"', re.IGNORECASE)
@@ -141,28 +168,46 @@ def _run(args: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
     )
 
 
-def _migrated_args(ipd: Path, new: Path) -> dict[str, list[str]]:
-    """CLI arguments of every migrated step, fed like the original run in the checkout."""
+def _migrated_args(ipd: Path, new: Path, inputs_from: Path | None = None) -> dict[str, list[str]]:
+    """CLI arguments of every migrated step, fed like the original run in the checkout.
+
+    By default each step reads the outputs of the previous *migrated* step (a chained run,
+    used by the golden test). With ``inputs_from`` (the original run's checkout copy), every
+    step reads the intermediate files of the *original* run instead, so each step is
+    compared in isolation and an intended change (P3B.8) only shows in its own outputs.
+    Outputs always go to ``new``.
+    """
     alice, micro, prefab, fuzor = new / "alice", new / "micro", new / "prefab", new / "fuzor"
-    zones = new / "takt_zones"
+    zones, rooms = new / "takt_zones", new / "rooms"
+    if inputs_from is not None:
+        alice, micro, prefab, fuzor = (
+            inputs_from / ALICE_OUT, inputs_from / MICRO_OUT, inputs_from / PREFAB_OUT,
+            inputs_from / FUZOR_OUT,
+        )
+        zones, rooms = inputs_from / ZONES_OUT, inputs_from / ROOMS_OUT
+    out = {
+        "zones": new / "takt_zones", "alice": new / "alice", "prefab": new / "prefab",
+        "micro": new / "micro", "fuzor": new / "fuzor", "rooms": new / "rooms",
+    }
     committed_prefab = ipd / PREFAB_OUT
+    orders = committed_prefab if inputs_from is not None else out["prefab"]
     return {
         "takt-zones": [
             "--schedules-dir", str(ipd / "revit_schedules" / "Current"),
             "--takt-zones", str(ipd / ZONES_OUT / "takt_zones.json"),
-            "--out-dir", str(zones),
+            "--out-dir", str(out["zones"]),
         ],
         "llm-context": [
             "--central-bim-with-takt", str(zones / "central_bim_model_with_takt.csv"),
-            "--out-dir", str(zones),
+            "--out-dir", str(out["zones"]),
         ],
         "alice-inputs": [
             "--workbook", str(ipd / PE / "ALICE_BIM_mapper" / "inputs" / "ALICE_macro.xlsx"),
-            "--out-dir", str(alice),
+            "--out-dir", str(out["alice"]),
         ],
         "prefab-walls": [
             "--central-bim-with-takt", str(zones / "central_bim_model_with_takt.csv"),
-            "--out-dir", str(prefab),
+            "--out-dir", str(out["prefab"]),
         ],
         "micro-schedule": [
             "--macro-schedule", str(alice / "Macro_Schedule.csv"),
@@ -178,26 +223,27 @@ def _migrated_args(ipd: Path, new: Path) -> dict[str, list[str]]:
                 ipd / PE / "Micro_Schedule_Generator" / "inputs" / "micro_schedule_rules.json"
             ),
             "--room-boundaries", str(_room_boundaries(ipd)),
-            "--out-dir", str(micro),
+            "--out-dir", str(out["micro"]),
         ],
         "alice-p6-xml": [
             "--micro-schedule", str(micro / "Micro_Schedule.csv"),
             "--workbook", str(ipd / PE / "ALICE_BIM_mapper" / "inputs" / "ALICE_macro.xlsx"),
-            "--out-dir", str(alice),
+            "--out-dir", str(out["alice"]),
         ],
         "fuzor-xml": [
             "--micro-schedule", str(micro / "Micro_Schedule.csv"),
             "--tasks", str(alice / "Tasks.csv"),
             "--crew", str(alice / "Crew.csv"),
             "--equipment", str(alice / "Equipment.csv"),
-            "--out-dir", str(fuzor),
+            "--out-dir", str(out["fuzor"]),
         ],
         "manufacton-parts": [
             "--template", str(ipd / PE / "Prefab_BIM_Mapper" / "inputs" / "Parts Import.xlsx"),
             "--central-bim-with-takt", str(zones / "central_bim_model_with_takt.csv"),
             "--micro-schedule", str(micro / "Micro_Schedule.csv"),
             "--assembly-id-map", str(committed_prefab / "Revit_Assembly_Id_Map.csv"),
-            "--out-dir", str(prefab),
+            "--prefab-assemblies", str(PREFAB_ASSEMBLIES),
+            "--out-dir", str(out["prefab"]),
         ],
         "manufacton-assemblies": [
             "--template",
@@ -207,7 +253,8 @@ def _migrated_args(ipd: Path, new: Path) -> dict[str, list[str]]:
             "--micro-schedule", str(micro / "Micro_Schedule.csv"),
             "--central-bim-with-takt", str(zones / "central_bim_model_with_takt.csv"),
             "--build-code-map", str(fuzor / "Revit_4D_Build_Code_Map.csv"),
-            "--out-dir", str(prefab),
+            "--prefab-assemblies", str(PREFAB_ASSEMBLIES),
+            "--out-dir", str(out["prefab"]),
         ],
         "manufacton-orders": [
             "--order-template",
@@ -224,23 +271,32 @@ def _migrated_args(ipd: Path, new: Path) -> dict[str, list[str]]:
             "--build-code-map", str(fuzor / "Revit_4D_Build_Code_Map.csv"),
             "--micro-schedule", str(micro / "Micro_Schedule.csv"),
             "--llm-context", str(zones / "central_bim_model_llm_context.csv"),
-            "--out-dir", str(prefab),
+            "--prefab-assemblies", str(PREFAB_ASSEMBLIES),
+            "--out-dir", str(out["prefab"]),
         ],
-        # manufacton-orders fails on this data (see module docstring), so the original
-        # delivery analysis read the committed Manufacton workbooks and maps.
+        # The original manufacton-orders fails on this data (see module docstring), so the
+        # original delivery analysis read the committed Manufacton workbooks and maps; the
+        # isolated comparison does the same. Since P3B.8 fix 3 the chained (golden) run reads
+        # the regenerated ones.
         "delivery-windows": [
             "--micro-schedule", str(micro / "Micro_Schedule.csv"),
             "--llm-context", str(zones / "central_bim_model_llm_context.csv"),
-            "--production-order", str(committed_prefab / "Production_Order.xlsx"),
-            "--production-order-items", str(committed_prefab / "Production_Order_Items.xlsx"),
-            "--kit-map", str(committed_prefab / "Revit_Kit_Parameter_Map.csv"),
-            "--assembly-map", str(committed_prefab / "Revit_Assembly_Id_Map.csv"),
+            "--production-order", str(orders / "Production_Order.xlsx"),
+            "--production-order-items", str(orders / "Production_Order_Items.xlsx"),
+            "--kit-map", str(orders / "Revit_Kit_Parameter_Map.csv"),
+            "--assembly-map", str(orders / "Revit_Assembly_Id_Map.csv"),
             "--out-dir", str(new / "delivery"),
+        ],
+        # P3B.8 fix 2: generator for room_takt_zones.csv (no original script). In the isolated
+        # comparison the takt plan reads the committed file, as the original did.
+        "room-takt-zones": [
+            "--room-boundaries", str(_room_boundaries(ipd)),
+            "--out-dir", str(out["rooms"]),
         ],
         "takt-plan": [
             *TAKT_ARGS,
             "--central-bim", str(zones / "central_bim_model.csv"),
-            "--room-takt-zones", str(ipd / "outputs" / "room_boundaries" / "room_takt_zones.csv"),
+            "--room-takt-zones", str(rooms / "room_takt_zones.csv"),
             "--crew", str(alice / "Crew.csv"),
             "--equipment", str(alice / "Equipment.csv"),
             "--productivity-rates", str(ipd / TAKT_OUT / "Takt_Productivity_Rates.csv"),
@@ -252,7 +308,7 @@ def _migrated_args(ipd: Path, new: Path) -> dict[str, list[str]]:
             "--micro-schedule", str(micro / "Micro_Schedule.csv"),
             "--alice-workbook",
             str(ipd / PE / "ALICE_BIM_mapper" / "inputs" / "ALICE_macro.xlsx"),
-            "--out-dir", str(micro),
+            "--out-dir", str(out["micro"]),
         ],
         "spatial-viewer": [
             "--micro-schedule", str(micro / "Micro_Schedule.csv"),
@@ -287,9 +343,29 @@ MIGRATED_DIRS = {
     "takt-zones": "takt_zones", "llm-context": "takt_zones", "alice-inputs": "alice",
     "prefab-walls": "prefab", "micro-schedule": "micro", "alice-p6-xml": "alice",
     "fuzor-xml": "fuzor", "manufacton-parts": "prefab", "manufacton-assemblies": "prefab",
-    "manufacton-orders": "prefab", "delivery-windows": "delivery", "takt-plan": "takt",
+    "manufacton-orders": "prefab", "delivery-windows": "delivery",
+    "room-takt-zones": "rooms", "takt-plan": "takt",
     "takt-viewer": "micro", "spatial-viewer": "viewers",
 }
+
+
+PANDAS2_REASON = (
+    "original IPD scripts need pandas 2; run with pandas 2.3.3 or rely on the CI reference job"
+)
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _original_scripts_need_pandas2() -> None:
+    """P3B.8: the original micro schedule fails on pandas 3 (the migrated one is fixed).
+
+    Skipped locally on pandas 3; with ``CONCHO_REQUIRE_FIXTURES=1`` (CI job ``reference``)
+    it fails instead, so the equivalence is never skipped silently in CI.
+    """
+    if int(version("pandas").split(".")[0]) < 3:
+        return
+    if os.environ.get("CONCHO_REQUIRE_FIXTURES"):
+        pytest.fail(PANDAS2_REASON)
+    pytest.skip(PANDAS2_REASON)
 
 
 @pytest.fixture(scope="module")
@@ -305,7 +381,7 @@ def runs(
     results: dict[str, dict[str, subprocess.CompletedProcess[str]]] = {"orig": {}, "new": {}}
     for step, script in ORIGINAL_SCRIPTS.items():
         results["orig"][step] = _run(script, cwd=orig)
-    for step, args in _migrated_args(ipd_challenge_dir, new).items():
+    for step, args in _migrated_args(ipd_challenge_dir, new, inputs_from=orig).items():
         results["new"][step] = _run(["-m", "engines.schedule", step, *args], cwd=base)
     return {"orig": orig, "new": new, "ipd": ipd_challenge_dir, "results": results}
 
@@ -329,10 +405,15 @@ def test_step_exit_status_matches(runs: dict[str, object], step: str) -> None:
     orig = runs["results"]["orig"][step]
     new = runs["results"]["new"][step]
     if step == "manufacton-orders":
-        # Known failure of the original on the 989a6b7 data; the migrated step must fail
-        # identically.
-        assert orig.returncode != 0 and new.returncode != 0
-        assert orig.stderr.strip().splitlines()[-1] == new.stderr.strip().splitlines()[-1]
+        # Known failure of the original on the 989a6b7 data. Fixed in P3B.8 (fix 3): with the
+        # same (legacy) mapping CSV, the migrated step skips the 17 stale build codes with a
+        # warning each and writes the workbooks.
+        assert orig.returncode != 0
+        assert orig.stderr.strip().splitlines()[-1] == ORDERS_ORIGINAL_ERROR
+        assert new.returncode == 0, new.stderr[-2000:]
+        skipped = [line for line in new.stderr.splitlines()
+                   if line.startswith("WARNING: mapping row") and line.endswith("skipped")]
+        assert len(skipped) == 17
         return
     assert orig.returncode == 0, orig.stderr[-2000:]
     assert new.returncode == 0, new.stderr[-2000:]
@@ -349,12 +430,37 @@ def test_output_matches_original(
     orig_path = runs["orig"] / original
     new_path = runs["new"] / MIGRATED_DIRS[step] / migrated
     assert new_path.exists(), f"migrated step {step} did not write {migrated}"
+    if (step, migrated) in P3B8_CHANGED_OUTPUTS:
+        check = globals()[P3B8_CHANGED_OUTPUTS[(step, migrated)]]
+        check(*(_normalize(path.read_text(encoding="utf-8"), runs)
+                for path in (orig_path, new_path)))
+        return
     if migrated.endswith(".xlsx"):
         assert _xlsx_values(new_path) == _xlsx_values(orig_path)
         return
     orig_text = _normalize(orig_path.read_text(encoding="utf-8"), runs)
     new_text = _normalize(new_path.read_text(encoding="utf-8"), runs)
     assert new_text == orig_text
+
+
+def _check_takt_ids_fix(orig_text: str, new_text: str) -> None:
+    """P3B.8 fix 1: only ``takt_id`` differs, and only by the complete polygons."""
+    orig_rows = list(csv.DictReader(io.StringIO(orig_text)))
+    new_rows = list(csv.DictReader(io.StringIO(new_text)))
+    assert len(new_rows) == len(orig_rows)
+    newly_assigned = moved = 0
+    for old, new in zip(orig_rows, new_rows, strict=True):
+        assert {k: v for k, v in new.items() if k != "takt_id"} == {
+            k: v for k, v in old.items() if k != "takt_id"
+        }
+        if old["takt_id"] == new["takt_id"]:
+            continue
+        assert new["takt_id"], f"element {old['ElementId']} lost its takt zone"
+        if old["takt_id"]:
+            moved += 1
+        else:
+            newly_assigned += 1
+    assert (newly_assigned, moved) == (TAKT_FIX_NEWLY_ASSIGNED, TAKT_FIX_MOVED)
 
 
 def _sha256(data: bytes) -> str:
@@ -378,10 +484,13 @@ def test_takt_schedule_reproduces_reference_checksum(runs: dict[str, object]) ->
 
 
 def test_central_bim_model_reproduces_reference_checksum(runs: dict[str, object]) -> None:
-    """Identical except for ``source_schedule``, which holds each run's absolute input path.
+    """Identical except for ``source_schedule`` and, since P3B.8 fix 1, ``takt_id``.
 
-    The committed file was written on the author's machine; its folder prefix is read from
-    the committed file itself and substituted for this run's prefix before hashing.
+    ``source_schedule`` holds each run's absolute input path: the committed file was written
+    on the author's machine, so its folder prefix is read from the committed file itself and
+    substituted for this run's prefix before hashing. ``takt_id`` changes on purpose (fix 1,
+    checked by ``_check_takt_ids_fix``); the committed values are put back before hashing,
+    which proves that every other byte is still the reference.
     """
     ipd = runs["ipd"]
     relative = f"{ZONES_OUT}/central_bim_model_with_takt.csv"
@@ -393,7 +502,52 @@ def test_central_bim_model_reproduces_reference_checksum(runs: dict[str, object]
         encoding="utf-8"
     )
     regenerated = regenerated.replace(f"{current_dir}{os.sep}", match.group(1))
+    regenerated = _with_column_from(regenerated, committed, "takt_id")
     assert _sha256(regenerated.encode("utf-8")) == REFERENCE_SHA256[relative]
+
+
+def _with_column_from(text: str, source: str, column: str) -> str:
+    """``text`` (pandas CSV) with ``column`` replaced by the values of ``source``."""
+    rows = list(csv.reader(io.StringIO(text)))
+    source_rows = list(csv.reader(io.StringIO(source)))
+    index = rows[0].index(column)
+    assert source_rows[0].index(column) == index and len(source_rows) == len(rows)
+    for row, source_row in zip(rows[1:], source_rows[1:], strict=True):
+        row[index] = source_row[index]
+    out = io.StringIO()
+    csv.writer(out, lineterminator="\n").writerows(rows)
+    return out.getvalue()
+
+
+# P3B.8 fix 2: the committed room_takt_zones.csv was made from an earlier export of the room
+# boundaries than the committed one (both in IPD commit c071034). (room_id, column) ->
+# (committed, regenerated); every other value is identical.
+ROOM_TAKT_ZONES_NEWER_EXPORT = {
+    ("1440376", "area_sf"): ("5587.212", "5587.307"),  # L 1 Room 150
+    ("1440376", "boundary_segments"): ("223", "241"),
+    ("1440382", "boundary_segments"): ("4", "5"),  # L 1 Room 156
+    ("1440384", "boundary_segments"): ("4", "6"),  # L 1 Room 158
+    ("1440385", "boundary_segments"): ("4", "5"),  # L 1 Room 159
+}
+
+
+def test_room_takt_zones_reproduces_committed_file(runs: dict[str, object]) -> None:
+    """The new generator rebuilds IPD's committed room_takt_zones.csv from the export."""
+    committed = list(csv.DictReader(
+        (runs["ipd"] / ROOMS_OUT / "room_takt_zones.csv").open(encoding="utf-8", newline="")
+    ))
+    generated = list(csv.DictReader(
+        (runs["new"] / "rooms" / "room_takt_zones.csv").open(encoding="utf-8", newline="")
+    ))
+    assert [row["room_takt_id"] for row in generated] == [
+        row["room_takt_id"] for row in committed]
+    differences = {
+        (old["room_id"], column): (old[column], new[column])
+        for old, new in zip(committed, generated, strict=True)
+        for column in old
+        if old[column] != new[column]
+    }
+    assert differences == ROOM_TAKT_ZONES_NEWER_EXPORT
 
 
 @pytest.mark.xfail(

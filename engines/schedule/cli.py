@@ -57,6 +57,10 @@ STEPS: dict[str, tuple[str, str]] = {
         "engines.schedule.core.delivery_windows",
         "daily vs. 3-day vs. weekly delivery analysis",
     ),
+    "room-takt-zones": (
+        "engines.schedule.core.room_takt_zones",
+        "Revit room boundaries -> room_takt_zones.csv (one row per room)",
+    ),
     "takt-plan": (
         "engines.schedule.core.takt_planner",
         "room-zone takt plan for one level (CSV, report, HTML)",

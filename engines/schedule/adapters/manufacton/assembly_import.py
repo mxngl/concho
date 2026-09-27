@@ -9,6 +9,8 @@ never committed).
 Migrated from IPD_Challenge@989a6b7
 ``src/Planning_engine/Prefab_BIM_Mapper/generate_assembly_import.py`` (P1.7): logic
 unchanged, the repo-relative paths became CLI arguments.
+
+P3B.8 fix 5: the named prefab assemblies come from ``--prefab-assemblies``.
 """
 
 from __future__ import annotations
@@ -18,6 +20,8 @@ import hashlib
 from pathlib import Path
 
 import pandas as pd
+
+from engines.schedule.adapters.manufacton.prefab_assemblies import load_prefab_assemblies
 
 
 # P1.7: set by configure() (was derived from the IPD_Challenge repo layout).
@@ -29,6 +33,9 @@ OUTPUT_XLSX_PATH: Path
 MICRO_SCHEDULE_PATH: Path
 CENTRAL_BIM_PATH: Path
 BUILD_CODE_MAP_PATH: Path
+# P3B.8 fix 5: named prefab assemblies (--prefab-assemblies; None = none). The original
+# hardcoded the three Island assemblies here (ASSEMBLIES).
+PREFAB_ASSEMBLIES_PATH: Path | None
 
 OUTPUT_COLUMNS = [
     "ID",
@@ -45,27 +52,6 @@ OUTPUT_COLUMNS = [
     "Assembly Notes",
     "Attribute Name",
     "Attribute Value",
-]
-
-ASSEMBLIES = [
-    {
-        "assembly_code": "SL1-3R-WALL",
-        "assembly_name": "South-L1-3 rooms wall",
-        "description": "South-L1-3 rooms wall prefab assembly",
-        "part_prefix": "SL1-3R",
-    },
-    {
-        "assembly_code": "SL1-2R-WALL",
-        "assembly_name": "South-L1-2 rooms wall",
-        "description": "South-L1-2 rooms wall prefab assembly",
-        "part_prefix": "SL1-2R",
-    },
-    {
-        "assembly_code": "SL0W-LNEG1C-WALL",
-        "assembly_name": "South-L0-Workshop wall part & South-L-1-Classrooms wall",
-        "description": "South-L0-Workshop wall part & South-L-1-Classrooms wall prefab assembly",
-        "part_prefix": "SL0W-LNEG1C",
-    },
 ]
 
 PART_CODES = [
@@ -353,7 +339,7 @@ def load_structural_parts() -> pd.DataFrame:
 def build_assembly_import(part_catalog_ids: dict[str, str]) -> pd.DataFrame:
     rows: list[dict[str, object]] = []
 
-    for assembly in ASSEMBLIES:
+    for assembly in load_prefab_assemblies(PREFAB_ASSEMBLIES_PATH):
         for part_index, part_code in enumerate(PART_CODES):
             part_id = f"{assembly['part_prefix']}-{part_code}"
             part_catalog_id = part_catalog_ids.get(part_id, "")
@@ -362,10 +348,10 @@ def build_assembly_import(part_catalog_ids: dict[str, str]) -> pd.DataFrame:
 
             rows.append(
                 {
-                    "ID": assembly["assembly_code"] if part_index == 0 else "",
+                    "ID": assembly["assembly_id"] if part_index == 0 else "",
                     "Name": assembly["assembly_name"] if part_index == 0 else "",
-                    "Catalog Id": catalog_id("ASM", assembly["assembly_code"]) if part_index == 0 else "",
-                    "Description": assembly["description"] if part_index == 0 else "",
+                    "Catalog Id": catalog_id("ASM", assembly["assembly_id"]) if part_index == 0 else "",
+                    "Description": assembly["assembly_description"] if part_index == 0 else "",
                     "Category": "Assemblies" if part_index == 0 else "",
                     "Sub Category": "Prefab Envelope" if part_index == 0 else "",
                     "Part CatId": part_catalog_id,
@@ -453,10 +439,12 @@ def configure(
     central_bim_with_takt: Path,
     build_code_map: Path,
     out_dir: Path,
+    prefab_assemblies: Path | None = None,
 ) -> None:
     """Set the input/output paths used by the functions of this module."""
     global INPUT_TEMPLATE_PATH, OUTPUTS_DIR, PARTS_IMPORT_PATH, PARTS_SUMMARY_PATH
     global OUTPUT_XLSX_PATH, MICRO_SCHEDULE_PATH, CENTRAL_BIM_PATH, BUILD_CODE_MAP_PATH
+    global PREFAB_ASSEMBLIES_PATH
     INPUT_TEMPLATE_PATH = Path(template)
     OUTPUTS_DIR = Path(out_dir)
     PARTS_IMPORT_PATH = Path(parts_import)
@@ -465,6 +453,7 @@ def configure(
     MICRO_SCHEDULE_PATH = Path(micro_schedule)
     CENTRAL_BIM_PATH = Path(central_bim_with_takt)
     BUILD_CODE_MAP_PATH = Path(build_code_map)
+    PREFAB_ASSEMBLIES_PATH = Path(prefab_assemblies) if prefab_assemblies else None
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -484,6 +473,9 @@ def build_parser() -> argparse.ArgumentParser:
                         help="central_bim_model_with_takt.csv (step takt-zones)")
     parser.add_argument("--build-code-map", type=Path, required=True, metavar="CSV",
                         help="Revit_4D_Build_Code_Map.csv (step fuzor-xml)")
+    parser.add_argument("--prefab-assemblies", type=Path, metavar="CSV",
+                        help="optional: named prefab envelope assemblies (same file as "
+                             "manufacton-parts --prefab-assemblies)")
     parser.add_argument("--out-dir", type=Path, required=True, metavar="DIR",
                         help="output folder")
     return parser
@@ -499,6 +491,7 @@ def main(argv: list[str] | None = None) -> None:
         central_bim_with_takt=args.central_bim_with_takt,
         build_code_map=args.build_code_map,
         out_dir=args.out_dir,
+        prefab_assemblies=args.prefab_assemblies,
     )
     OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
 

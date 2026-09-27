@@ -10,7 +10,9 @@ comments and formatting are ignored) with the migrated module. Allowed differenc
   ``BACKGROUND_BY_LEVEL`` (repo-relative paths replaced by ``configure()``);
 - the functions listed in ``CHANGED_FUNCTIONS`` (path lookups, ``None`` guards for optional
   inputs, ``main``);
-- new CLI helpers (``configure``, ``build_parser``, ``main``, ``parse_floor_plan``).
+- new CLI helpers (``configure``, ``build_parser``, ``main``, ``parse_floor_plan``);
+- the P3B.8 bug fixes listed in ``P3B8_CHANGED_FUNCTIONS``, ``P3B8_NEW_FUNCTIONS`` and
+  ``P3B8_REMOVED_CONSTANTS``.
 
 Everything else (rules, constants, task logic) must be identical.
 """
@@ -70,6 +72,33 @@ CHANGED_FUNCTIONS = {
     "viewers/takt_viewer.py": {"load_wbs_by_task_id", "main"},
 }
 
+# P3B.8 bug fixes to the original code, per migrated module (see engines/schedule/README.md,
+# "Fixed in P3B.8"): functions whose body changed on purpose, and new helper functions.
+P3B8_CHANGED_FUNCTIONS = {
+    "core/takt_zones.py": {"assign_takt_ids"},  # fix 1: keep the last polygon corner
+    # fix 3: resolve the static 4D mapping against the current model
+    "adapters/manufacton/kit_import.py": {"load_mapping", "load_dynamic_mapping"},
+    # fix 4: run without the Manufacton outputs
+    "core/delivery_windows.py": {"load_production_delivery_units"},
+    # fix 6: pandas 3 (upcast the room columns before writing strings into them)
+    "core/micro_schedule.py": {"assign_room_takt_ids"},
+    # fix 5: named prefab assemblies from --prefab-assemblies instead of ASSEMBLIES
+    "adapters/manufacton/parts_import.py": {"build_parts_import"},
+    "adapters/manufacton/assembly_import.py": {"build_assembly_import"},
+}
+P3B8_NEW_FUNCTIONS: dict[str, set[str]] = {
+    "adapters/manufacton/kit_import.py": {
+        "resolve_static_mapping", "warn", "validate_mapped_assemblies",
+        "warn_unmapped_prefab_assemblies",
+    },
+    "core/delivery_windows.py": {"missing_production_order_inputs"},
+}
+# fix 5: the hardcoded Island assemblies, now examples/island/prefab_assemblies.csv
+P3B8_REMOVED_CONSTANTS = {
+    "adapters/manufacton/parts_import.py": {"ASSEMBLIES"},
+    "adapters/manufacton/assembly_import.py": {"ASSEMBLIES"},
+}
+
 NEW_FUNCTIONS = {"configure", "build_parser", "main", "parse_floor_plan"}
 PATH_CONSTANT = re.compile(r"(_PATH|_PATHS|_DIR|_GLOB)$|^(ROOT|BACKGROUND_BY_LEVEL)$")
 
@@ -100,14 +129,23 @@ def test_only_paths_and_cli_changed(ipd_challenge_dir: Path, original: str) -> N
     added = set(new) - set(old)
 
     constants = {name[1:] for name in changed | removed | added if name.startswith("=")}
+    constants -= {name for name in P3B8_REMOVED_CONSTANTS.get(migrated, set())
+                  if f"={name}" in removed}
     assert all(PATH_CONSTANT.search(name) for name in constants), sorted(
         name for name in constants if not PATH_CONSTANT.search(name)
     )
     assert {name for name in changed if not name.startswith("=")} == CHANGED_FUNCTIONS.get(
         migrated, set()
-    )
+    ) | P3B8_CHANGED_FUNCTIONS.get(migrated, set())
     assert not {name for name in removed if not name.startswith("=")}
-    assert {name for name in added if not name.startswith("=")} <= NEW_FUNCTIONS
+    assert {name for name in added if not name.startswith("=")} <= NEW_FUNCTIONS | (
+        P3B8_NEW_FUNCTIONS.get(migrated, set())
+    )
+
+
+# Modules without an original script (P3B.8 fix 2: IPD_Challenge has no generator for
+# room_takt_zones.csv; fix 5: shared loader of the prefab assembly CSV).
+NEW_MODULES = {"core/room_takt_zones.py", "adapters/manufacton/prefab_assemblies.py"}
 
 
 def test_every_migrated_module_is_covered() -> None:
@@ -116,4 +154,4 @@ def test_every_migrated_module_is_covered() -> None:
         for path in SCHEDULE.rglob("*.py")
         if path.name not in {"__init__.py", "__main__.py", "cli.py"}
     }
-    assert migrated == set(MODULES.values())
+    assert migrated == set(MODULES.values()) | NEW_MODULES
