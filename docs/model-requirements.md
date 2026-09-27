@@ -184,9 +184,9 @@ by its parts).
 | 9 | `Mark` | text | BIP `ALL_MODEL_MARK`, `Mark` | optional (`DNC` marker) | TVD, Schedule |
 | 10 | `Assembly Code` | Uniformat code | BIP `UNIFORMAT_CODE` / `ASSEMBLY_CODE` (2026), `Assembly Code`; parts: of the source element | **required** | TVD, STV, Schedule |
 | 11 | `Assembly Description` | text | BIP `UNIFORMAT_DESCRIPTION` / `ASSEMBLY_DESCRIPTION` (2026), `Assembly Description` | recommended | STV, Schedule |
-| 12 | `Length` | ft | BIP `DPART_LENGTH_COMPUTED`, `CURVE_ELEM_LENGTH`, `Length`; BIP `STRUCTURAL_FRAME_CUT_LENGTH`, `Cut Length`; `Span`; else the length of the element's location curve | required for LF-priced codes | TVD, STV, Schedule |
-| 13 | `Width` | ft | BIP `WALL_ATTR_WIDTH_PARAM`, `CURTAIN_WALL_PANELS_WIDTH`, `STAIRS_RUN_ACTUAL_RUN_WIDTH`, `DOOR_WIDTH`, `WINDOW_WIDTH`, `FAMILY_WIDTH_PARAM`, `Width`; `Actual Width` | optional | STV, Schedule |
-| 14 | `Depth` | ft | `Depth`; BIP `DPART_LAYER_WIDTH`, `FLOOR_ATTR_THICKNESS_PARAM`, `CEILING_THICKNESS`, `ROOF_ATTR_THICKNESS_PARAM`, `Thickness`; `Structural Depth` | optional | Schedule |
+| 12 | `Length` | ft | BIP `DPART_LENGTH_COMPUTED`, `CURVE_ELEM_LENGTH`, `STRUCTURAL_FOUNDATION_LENGTH`, `CONTINUOUS_FOOTING_LENGTH`, `Length`; BIP `STRUCTURAL_FRAME_CUT_LENGTH`, `Cut Length`; `Span`; BIP `INSTANCE_LENGTH_PARAM`, `System Length` (structural columns); else the length of the element's location curve | required for LF-priced codes | TVD, STV, Schedule |
+| 13 | `Width` | ft | BIP `WALL_ATTR_WIDTH_PARAM`, `CURTAIN_WALL_PANELS_WIDTH`, `STAIRS_RUN_ACTUAL_RUN_WIDTH`, `STRUCTURAL_FOUNDATION_WIDTH`, `CONTINUOUS_FOOTING_WIDTH`, `DOOR_WIDTH`, `WINDOW_WIDTH`, `FAMILY_WIDTH_PARAM`, `Width`; `Actual Width` | optional | STV, Schedule |
+| 14 | `Depth` | ft | `Depth`; BIP `DPART_LAYER_WIDTH`, `STRUCTURAL_FOUNDATION_THICKNESS`, `FLOOR_ATTR_THICKNESS_PARAM`, `CEILING_THICKNESS`, `ROOF_ATTR_THICKNESS_PARAM`, `Thickness`; `Structural Depth` | optional | Schedule |
 | 15 | `Height` | ft | BIP `DPART_HEIGHT_COMPUTED`, `CURTAIN_WALL_PANELS_HEIGHT`, `DOOR_HEIGHT`, `WINDOW_HEIGHT`, `FAMILY_HEIGHT_PARAM`, `Height`; thickness as in `Depth` | optional | STV, Schedule |
 | 16 | `Area` | SF | BIP `DPART_AREA_COMPUTED`, `HOST_AREA_COMPUTED`, `Area`; `Host Area Computed`; `Computed Area` | required for SF-priced codes | TVD, STV, Schedule |
 | 17 | `Volume` | CF | BIP `DPART_VOLUME_COMPUTED`, `HOST_VOLUME_COMPUTED`, `Volume`; `Host Volume Computed` | required for CY/CF-priced codes | TVD, STV, Schedule |
@@ -212,9 +212,10 @@ P4.5 these are decimal feet (`12`) instead of `12' - 0"`.
 
 ### Quantity coverage by category (P4.5 item 6)
 
-Which categories have `Length` / `Area` / `Volume` at all, from the English Architecture export
-of `04_Island_ARCH_Concept2` (1,965 elements; 849 / 42 / 117 without Length / Area / Volume, the
-same Area/Volume gaps as in the German Revit test), and what covers them in a localized Revit:
+Which categories have `Length` / `Area` / `Volume` at all, from the English Island exports
+(Architecture export of `04_Island_ARCH_Concept2`: 1,965 elements, 849 / 42 / 117 without
+Length / Area / Volume), compared with Max's test in a German Revit 2026 (empty quantities by
+category, add-in build before this table), and what covers them in any language:
 
 | Category | Length | Area | Volume | Source in any language |
 |---|---|---|---|---|
@@ -225,11 +226,20 @@ same Area/Volume gaps as in the German Revit test), and what covers them in a lo
 | Doors, Windows, Curtain Panels, Generic Models, Plumbing Fixtures, Casework | family `Length` only (windows, casework) | all but 1–2 | all but 1–2 | `HOST_*_COMPUTED`; family parameters such as `Length` are named by the family author and not localized, so the name lookup finds them in any language; panels also `CURTAIN_WALL_PANELS_WIDTH/HEIGHT` |
 | Furniture | 68 of 370 (family `Length`) | 349 | 349 | as above; 21 furniture families have no geometry-based area/volume |
 | Stairs, Runs, Landings | none | none | none | Revit has no computed length/area/volume for them; runs get `Width` from `STAIRS_RUN_ACTUAL_RUN_WIDTH`. Priced by count (`EA`/`FLIGHT`) |
+| Parts (structural, 166) | none | all | all | German test: all empty → `DPART_*_COMPUTED` (fixed) |
+| Structural Columns (134) | none in English; German test: 135 empty | none | all | column length is only in `System Length` (`INSTANCE_LENGTH_PARAM`), now read (P4.5) |
+| Structural Framing (162) | all | none (German: 113 empty) | all | framing has no area in Revit: genuinely none |
+| Structural Foundations (36) | all in English; German test: 37 empty | all | all | `STRUCTURAL_FOUNDATION_LENGTH` / `CONTINUOUS_FOOTING_LENGTH` (label "Length"), now read (P4.5) |
+| MEP Air Terminals (200) | 74 (family parameter) | 126 | all | German test: 126 without Length, 74 without Area: the same gaps as in English, genuinely none |
+| MEP Electrical Fixtures (61) | none | all | all | German test: 61 without Length: genuinely none |
 
-**Genuinely without a quantity** (no built-in parameter exists): `Length` for area/volume
-elements (floors, ceilings, roofs, panels, doors, furniture, generic models, parts without a
-computed length), all three for stairs/runs/landings, `Volume` for curtain/storefront walls, and
-area/volume for families without solid geometry (some furniture). The summary dialog lists the
+**Genuinely without a quantity** (no built-in parameter exists; same gaps in English and
+German): `Length` for area/volume elements (floors, ceilings, roofs, panels, doors, furniture,
+generic models, electrical fixtures, most air terminals, parts without a computed length), all
+three for stairs/runs/landings, `Area` for structural framing and some air terminals, `Volume`
+for curtain/storefront walls (76 in the German test, 76 in English), and area/volume for
+families without solid geometry (some furniture). German-only gaps in Max's test (parts,
+structural columns, foundations) are covered by the built-in parameters above. The summary dialog lists the
 top categories per missing quantity, so a model can be checked against this table.
 
 ## `<model>_MEP_TakeOff.csv` (71 columns)

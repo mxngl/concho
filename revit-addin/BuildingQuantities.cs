@@ -14,6 +14,7 @@ namespace QTO
             new ParamCandidate(
                 "Thickness",
                 BuiltInParameter.DPART_LAYER_WIDTH,
+                BuiltInParameter.STRUCTURAL_FOUNDATION_THICKNESS,
                 BuiltInParameter.FLOOR_ATTR_THICKNESS_PARAM,
                 BuiltInParameter.CEILING_THICKNESS,
                 BuiltInParameter.ROOF_ATTR_THICKNESS_PARAM
@@ -41,10 +42,14 @@ namespace QTO
                              new ParamCandidate(
                                  "Length",
                                  BuiltInParameter.DPART_LENGTH_COMPUTED,
-                                 BuiltInParameter.CURVE_ELEM_LENGTH
+                                 BuiltInParameter.CURVE_ELEM_LENGTH,
+                                 BuiltInParameter.STRUCTURAL_FOUNDATION_LENGTH,
+                                 BuiltInParameter.CONTINUOUS_FOOTING_LENGTH
                              ),
                              new ParamCandidate("Cut Length", BuiltInParameter.STRUCTURAL_FRAME_CUT_LENGTH),
-                             "Span")
+                             "Span",
+                             // Structural columns: their length is only in "System Length".
+                             new ParamCandidate("System Length", BuiltInParameter.INSTANCE_LENGTH_PARAM))
                          ?? ParameterReader.LocationCurveLengthFeet(elem),
                 Width = ParameterReader.Number(doc, elem, ParameterReader.Feet,
                     new ParamCandidate(
@@ -52,6 +57,8 @@ namespace QTO
                         BuiltInParameter.WALL_ATTR_WIDTH_PARAM,
                         BuiltInParameter.CURTAIN_WALL_PANELS_WIDTH,
                         BuiltInParameter.STAIRS_RUN_ACTUAL_RUN_WIDTH,
+                        BuiltInParameter.STRUCTURAL_FOUNDATION_WIDTH,
+                        BuiltInParameter.CONTINUOUS_FOOTING_WIDTH,
                         BuiltInParameter.DOOR_WIDTH,
                         BuiltInParameter.WINDOW_WIDTH,
                         BuiltInParameter.FAMILY_WIDTH_PARAM
