@@ -17,6 +17,12 @@ project/team names added in P3.2, the ``target_consistency`` block added in P3.3
 history snapshot (except its date) and the dashboard HTML (with timestamps and data source
 masked).
 
+P3.11: the new engine runs with the hidden flag ``--legacy-length-parsing`` (AutoTVD's quantity
+parser, which reads ``9' - 7 3/4"`` as 9 ft), so this test still proves the byte-identical
+migration. The engine default is the tolerant parser (``engines/common/quantities.py``); its
+Island run is pinned separately in ``test_island_corrected_golden`` (the submitted Island value
+16,065,644.29 is now the *legacy* reference).
+
 Intended differences since P3.2, normalised/masked here:
 
 - the cluster name "Special Contruction" (typo in the AutoTVD cost DB, kept by the original)
@@ -106,6 +112,8 @@ def _strip_meta(payload: dict) -> dict:
     payload.pop("target_consistency", None)
     # P3.4: new block, not in the original; tested in test_island_cost_db_validation.
     payload.pop("cost_db_validation", None)
+    # P3.11: new block, not in the original; tested in test_island_legacy_parser_block.
+    payload.pop("quantity_parse_warnings", None)
     for key in ("generated_at", "date", "label", "data_source", "project_name", "team_name"):
         payload["meta"].pop(key, None)
     return payload
@@ -136,8 +144,13 @@ def outputs(tmp_path_factory, autotvd_dir) -> dict[str, Path]:
     assert db is not None and db.ok, migration.errors + (db.errors if db else [])
     flags[flags.index("--cost") + 1] = str(cost_db)
     _run([sys.executable, "-m", "engines.tvd", "--ci", "--snapshot", SNAPSHOT_LABEL, *flags,
-          "--config", str(ISLAND_CONFIG), "--out", str(new)], new)
-    return {"orig": orig, "new": new}
+          "--config", str(ISLAND_CONFIG), "--out", str(new), "--legacy-length-parsing"], new)
+
+    # P3.11: the engine default (tolerant parser) on the same inputs.
+    corrected = tmp_path_factory.mktemp("corrected")
+    _run([sys.executable, "-m", "engines.tvd", "--ci", *flags,
+          "--config", str(ISLAND_CONFIG), "--out", str(corrected)], corrected)
+    return {"orig": orig, "new": new, "corrected": corrected}
 
 
 def _load(path: Path) -> dict:
@@ -180,11 +193,15 @@ def test_dashboard_html_identical(outputs):
     assert normalise(outputs["new"]) == normalise(outputs["orig"])
 
 
-def test_island_golden_numbers(outputs, autotvd_dir):
-    base = autotvd_dir
+def _skip_unless_reference_inputs(base: Path) -> None:
     for rel, digest in REFERENCE_SHA256.items():
         if hashlib.sha256((base / rel).read_bytes()).hexdigest() != digest:
             pytest.skip(f"{rel} differs from the island-2026-final reference input")
+
+
+def test_island_golden_numbers(outputs, autotvd_dir):
+    """Legacy reference: the submitted Island value (AutoTVD parser, P3.11)."""
+    _skip_unless_reference_inputs(autotvd_dir)
     new = _load(outputs["new"] / "results" / "latest.json")
     assert new["financials"]["grand_total"] == 16_065_644.29
     assert new["meta"]["unmapped_count"] == 1693
@@ -274,3 +291,50 @@ def test_island_tracking(outputs):
             "estimate": 16_065_644.29, "delta": 634_355.71, "current": True,
         }],
     }
+
+
+# P3.11: the legacy run says so in its results JSON; AutoTVD's parser reports no issues.
+def test_island_legacy_parser_block(outputs):
+    new = _load(outputs["new"] / "results" / "latest.json")
+    assert new["quantity_parse_warnings"] == {"parser": "legacy", "total": 0, "columns": {}}
+    assert "quantity_parse_warnings" not in _load(outputs["orig"] / "results" / "latest.json")
+
+
+# P3.11: Island with the tolerant parser (engine default). Only C1010 (interior partitions,
+# priced per LF) changes: its length was read without the fractional inches. Before/after
+# table: docs/engines/tvd.md, "Quantity parsing".
+ISLAND_CORRECTED_CLUSTERS = {
+    "Substructure": 466_690.00,
+    "Shell": 4_430_372.01,
+    "Interiors": 1_553_243.15,  # legacy 1,537,403.04
+    "Services": 5_175_000.00,
+    "Equipment and Furnishings": 234_080.72,
+    "Special Construction": 217_825.00,
+    "Building Sitework": 598_273.52,
+    "General Conditions": 3_006_000.00,
+    "Equipment Rental": 400_000.00,
+}
+
+
+def test_island_corrected_golden(outputs, autotvd_dir):
+    _skip_unless_reference_inputs(autotvd_dir)
+    corrected = _load(outputs["corrected"] / "results" / "latest.json")
+    legacy = _load(outputs["new"] / "results" / "latest.json")
+    assert corrected["financials"]["grand_total"] == 16_081_484.40
+    assert corrected["meta"]["unmapped_count"] == 1693
+    assert corrected["meta"]["dnc_count"] == 75
+    assert {r["cluster"]: r["estimate"] for r in corrected["cluster_summary"]} == (
+        ISLAND_CORRECTED_CLUSTERS)
+    assert corrected["quantity_parse_warnings"] == {
+        "parser": "tolerant", "total": 0, "columns": {}}
+
+    # Exactly one line differs from the legacy run: C1010, 782.58 → 820.63 LF.
+    changed = [
+        (new_line["ac"], new_line["unit"], old_line["qty"], new_line["qty"])
+        for cluster, lines in corrected["line_items"].items()
+        for new_line, old_line in zip(lines, legacy["line_items"][cluster], strict=True)
+        if new_line != old_line
+    ]
+    assert changed == [("C1010", "LF", 782.58, 820.63)]
+    delta = corrected["financials"]["grand_total"] - legacy["financials"]["grand_total"]
+    assert delta == pytest.approx(15_840.11, abs=0.005)

@@ -13,6 +13,7 @@ area, the LF line the whole A2020 length), as in AutoTVD.
 from collections import defaultdict
 from collections.abc import Iterable
 
+from engines.common.quantities import AREA, LENGTH, VOLUME, QuantityParseLog
 from engines.common.uniformat import base_code
 from engines.tvd.cost_db import FALLBACK_KEYWORD, TAKEOFF_UNITS, CostDbRow, Rule
 from engines.tvd.loading import parse_qty_str
@@ -26,6 +27,10 @@ _UNMAPPED_EXPORT_COLS = [
     "ElementId", "Category", "Family", "Type", "Level", "Mark",
     "Area", "Length", "Volume", "Material", "Comments",
 ]
+
+# (results field, export column, quantity kind)
+_QTY_COLUMNS = (("area_sf", "Area", AREA), ("length_lf", "Length", LENGTH),
+                ("volume_cf", "Volume", VOLUME))
 
 _FIELD_WORD = {"area_sf": "area", "length_lf": "length", "count": "count",
                "volume_cf": "volume"}
@@ -59,6 +64,8 @@ def aggregate_quantities(
     *,
     ac_keyword_split: dict[str, list[tuple[list[str], str]]] | None = None,
     dnc_marker: str = DNC_MARKER,
+    parse_log: QuantityParseLog | None = None,
+    legacy_length_parsing: bool = False,
 ) -> tuple[dict, int, dict, list[dict], int]:
     """
     Aggregate per Assembly Code for non-excluded categories:
@@ -70,7 +77,14 @@ def aggregate_quantities(
     Returns (code_qtys, unmapped_count, all_ac_counts, unmapped_rows, dnc_count).
     unmapped_rows = non-excluded rows with no Assembly Code, trimmed to export columns.
     dnc_count     = elements skipped because they carry the DNC marker.
+
+    Quantities are read with the tolerant parser :mod:`engines.common.quantities` (P3.11);
+    its issues go to ``parse_log`` (per column, only for the rows that are aggregated).
+    ``legacy_length_parsing=True`` uses AutoTVD's parser :func:`parse_qty_str` instead
+    (fractional inches dropped); only for the AutoTVD equivalence test.
     """
+    if parse_log is None:
+        parse_log = QuantityParseLog()
     ac_keyword_split = ac_keyword_split or {}
     code_qtys: dict[str, dict] = defaultdict(
         lambda: {"area_sf": 0.0, "length_lf": 0.0, "volume_cf": 0.0, "count": 0}
@@ -119,10 +133,11 @@ def aggregate_quantities(
             continue
 
         q = code_qtys[ac]
-        q["area_sf"]   += parse_qty_str(row.get("Area", ""))
-        q["length_lf"] += parse_qty_str(row.get("Length", ""))
-        q["volume_cf"] += parse_qty_str(row.get("Volume", ""))
-        q["count"]     += 1
+        for key, column, kind in _QTY_COLUMNS:
+            raw = row.get(column, "")
+            q[key] += (parse_qty_str(raw) if legacy_length_parsing
+                       else parse_log.parse(raw, kind, column))
+        q["count"] += 1
 
     return dict(code_qtys), unmapped, dict(all_ac_counts), unmapped_rows, dnc_count
 

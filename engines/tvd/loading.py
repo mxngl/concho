@@ -17,7 +17,12 @@ def _fix_bom(fieldnames):
 
 
 def parse_qty_str(val: str) -> float:
-    """Parse quantity strings like '6590 SF', '136\\' - 0\\"', '42.75 CF'."""
+    """AutoTVD's quantity parser, kept as the **legacy** mode (``--legacy-length-parsing``).
+
+    Parses '6590 SF', '136\\' - 0\\"', '42.75 CF', but reads '9\\' - 7 3/4"' as 9 ft (the
+    fraction is not matched, so it falls back to the first number). The engine default is
+    :func:`engines.common.quantities.parse_quantity` (P3.11).
+    """
     if not val or not val.strip():
         return 0.0
     ft_in = re.match(r"(-?\d+)'\s*-\s*(\d+(?:\.\d+)?)\s*\"", val.strip())
