@@ -4,9 +4,12 @@ With ``--config project_config.json`` (P3.2) the course team, the building lifet
 use-phase inputs come from the config (``stv`` section); ``--team`` overrides the team.
 Without ``--config`` the team comes from ``--team`` or the input JSON, as before.
 
-The config use phase is added to single runs. ``--combine-results`` sums the use phase of
-all inputs, so per-trade runs that are combined later should use ``--no-use-phase`` (all
-but one). ``--architecture-history-dir`` runs stay construction-only, as before.
+The config use phase (and ``stv.construction_items``) is added to single runs.
+``--combine-results`` sums the embodied impacts of the inputs but takes the use phase and the
+config items **once** (P3.8): from ``--config`` when given (recomputed, needs the workbook),
+else from the inputs, which must agree. ``--no-use-phase`` is deprecated (no longer needed for
+per-trade runs; kept, with a warning, for existing scripts). ``--architecture-history-dir``
+runs stay construction-only, as before.
 
 Revit exports are mapped with the STV mapping table (P3.6): ``--stv-mapping``, else
 ``files.stv_mapping`` of ``--config``, else the default table ``template/stv_mapping.csv``
@@ -27,7 +30,7 @@ from engines.common.config import validate_config_file
 
 from .central_bim import load_central_bim_model
 from .coverage import build_mapping_coverage
-from .custom_materials import CustomMaterialsError
+from .custom_materials import CustomMaterialsError, load_custom_materials
 from .engine import LIFETIME_YEARS, STVEngine
 from .mapping import (
     DEFAULT_MAPPING_PATH,
@@ -136,6 +139,7 @@ def _item_dicts(items) -> list[dict[str, object]]:
             "material_type": item.material_type,
             "amount": item.amount,
             "estimated_amount": item.estimated_amount,
+            "proxy_amount": item.proxy_amount,
         }
         for item in items
     ]
@@ -168,6 +172,65 @@ def _load_mapping(
     for warning in mapping.warnings:
         print(f"warning: {path}: {warning}", file=sys.stderr)
     return mapping
+
+
+def _add_custom_materials(
+    parser: argparse.ArgumentParser,
+    path_arg: str | None,
+    settings: STVProjectSettings | None,
+    reference_data: STVReferenceData,
+) -> None:
+    """--custom-materials, else the custom materials of --config: validate them against the
+    course catalog and add them to the reference data (P3.7)."""
+    if path_arg:
+        path = Path(path_arg)
+    elif settings is not None and settings.custom_materials is not None:
+        path = settings.custom_materials.path
+    else:
+        return
+    try:
+        custom = load_custom_materials(path, catalog=reference_data)
+        reference_data.add_custom_materials(custom)
+    except (CustomMaterialsError, ValueError) as exc:
+        parser.error(str(exc))
+    for warning in custom.warnings:
+        print(f"warning: {path}: {warning}", file=sys.stderr)
+    names = ", ".join(r.material_type for r in custom.records) or "none"
+    print(
+        f"note: custom materials from {path} (team data, not course data): {names}; results "
+        "that rest on them are flagged (data_flags).",
+        file=sys.stderr,
+    )
+
+
+def _config_items(
+    parser: argparse.ArgumentParser,
+    settings: STVProjectSettings,
+    reference_data: STVReferenceData,
+) -> list[dict[str, object]]:
+    """stv.construction_items of --config, checked against the catalog (P3.8)."""
+    for n, item in enumerate(settings.construction_items):
+        try:
+            reference_data.validate_item(item["assembly"], item["material_type"])
+        except ValueError as exc:
+            parser.error(f"stv.construction_items[{n}] of --config: {exc}")
+    return list(settings.construction_items)
+
+
+def _project_level_result(
+    parser: argparse.ArgumentParser,
+    settings: STVProjectSettings,
+    team: str,
+    reference_data: STVReferenceData,
+    lifetime_years: int,
+) -> STVResults:
+    """Use phase and config items of --config alone, taken once by --combine-results."""
+    payload = {"construction_items": _config_items(parser, settings, reference_data),
+               "use_phase": settings.use_phase}
+    result = _run_stv(payload, team=team, template_path="", lifetime_years=lifetime_years,
+                      reference_data=reference_data)
+    result.use_phase_status.update(settings.use_phase_status())
+    return result
 
 
 def _schedule_report_dict(reports: list[ScheduleReport]) -> dict[str, object]:
@@ -236,6 +299,9 @@ def _run_architecture_history(
             reference_data=reference_data,
         )
         results.mapping_coverage = build_mapping_coverage([report], mapping, results)
+        results.use_phase_status.update(
+            source="none", not_modeled_reason="--architecture-history-dir runs are "
+            "construction only")
         timestamp = _parse_schedule_timestamp(schedule_path).isoformat()
         history.append(
             _history_entry(
@@ -302,8 +368,16 @@ def build_parser() -> argparse.ArgumentParser:
         "--no-use-phase",
         action="store_true",
         help=(
-            "Construction only: ignore stv.use_phase of --config (e.g. for per-trade runs "
-            "that are combined later with --combine-results)."
+            "Deprecated (P3.8): construction only, ignore stv.use_phase of --config. Not "
+            "needed for per-trade runs any more: --combine-results takes the use phase once."
+        ),
+    )
+    parser.add_argument(
+        "--custom-materials",
+        help=(
+            "custom_materials.csv (P3.7, docs/engines/stv.md): EPD-based materials used like "
+            "catalog entries (default: stv.custom_materials_file / files.custom_materials of "
+            "--config)."
         ),
     )
     parser.add_argument(
@@ -372,7 +446,15 @@ def main() -> None:
     settings = _load_settings(parser, args.config)
     lifetime_years = settings.lifetime_years if settings else LIFETIME_YEARS
 
-    if not args.combine_results:
+    if args.no_use_phase:
+        print(
+            "warning: --no-use-phase is deprecated (P3.8): --combine-results now takes the "
+            "use phase once (from --config, else from the inputs), so per-trade runs do not "
+            "need it. It still makes this run construction-only.",
+            file=sys.stderr,
+        )
+    # --combine-results needs the workbook only to recompute the use phase from --config.
+    if not args.combine_results or settings is not None:
         try:
             args.template = str(resolve_template_path(args.template))
         except FileNotFoundError as exc:
@@ -399,17 +481,17 @@ def main() -> None:
             for path in result_paths
         ]
         team = args.team or (settings.team if settings else None)
-        with_use_phase = [
-            str(path) for path, result in zip(result_paths, loaded_results, strict=True)
-            if any(result.breakdown.use_phase.to_dict().values())
-        ]
-        if len(with_use_phase) > 1:
-            print(
-                "warning: the use phase is summed over "
-                f"{len(with_use_phase)} inputs: {', '.join(with_use_phase)}",
-                file=sys.stderr,
-            )
-        combined_results = STVResults.combine(loaded_results, team=team)
+        project = None
+        if settings is not None:
+            reference_data = STVReferenceData.from_workbook(args.template)
+            _add_custom_materials(parser, args.custom_materials, settings, reference_data)
+            project = _project_level_result(parser, settings, team or settings.team,
+                                            reference_data, lifetime_years)
+        try:
+            combined_results = STVResults.combine(loaded_results, team=team, project=project)
+        except ValueError as exc:
+            parser.error(str(exc))
+        print(f"note: {combined_results.use_phase_status.get('combined')}", file=sys.stderr)
 
         results_path.write_text(
             json.dumps(combined_results.to_dict(), indent=2),
@@ -439,6 +521,7 @@ def main() -> None:
                 "Provide a team with --team or --config when using --architecture-history-dir."
             )
         reference_data = STVReferenceData.from_workbook(args.template)
+        _add_custom_materials(parser, args.custom_materials, settings, reference_data)
         response = _run_architecture_history(
             Path(args.architecture_history_dir),
             team=team,
@@ -467,6 +550,7 @@ def main() -> None:
             payload["team"] = workbook_payload["team"]
 
     reference_data = STVReferenceData.from_workbook(args.template)
+    _add_custom_materials(parser, args.custom_materials, settings, reference_data)
     exports = [
         ("structural", args.structural_schedule or [], load_structural_schedule),
         ("mep", args.mep_schedule or [], load_mep_schedule),
@@ -505,6 +589,9 @@ def main() -> None:
     except StvMappingTieError as exc:
         parser.error(str(exc))
 
+    if settings is not None and settings.construction_items:
+        payload["construction_items"] = (list(payload.get("construction_items", []))
+                                         + _config_items(parser, settings, reference_data))
     if settings is not None and not args.no_use_phase:
         if payload.get("use_phase"):
             print(
@@ -520,6 +607,14 @@ def main() -> None:
         payload, team=team, template_path=args.template, lifetime_years=lifetime_years,
         reference_data=reference_data,
     )
+    status = results.use_phase_status
+    if settings is not None and not args.no_use_phase:
+        status.update(settings.use_phase_status())
+    elif args.no_use_phase:
+        status.update(modeled=False, source="skipped",
+                      not_modeled_reason="--no-use-phase: construction-only run")
+    elif args.stv_workbook_input:
+        status["source"] = "stv_workbook_input"
     if mapping is not None:
         results.mapping_coverage = build_mapping_coverage(mapped_reports, mapping, results)
 

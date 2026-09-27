@@ -31,3 +31,5 @@ discipline,assembly_code,category,keyword,priority,stv_assembly,stv_material_typ
 ,D2000,Pipes,stainless,100,MEP,Stainless Steel Pipe (kg),weight,,plumbing pipes; needs Weight in the export
 ,D2000,Pipes,hdpe|polyethylene,100,MEP,HDPE Pipe (kg),weight,,plumbing pipes; needs Weight in the export
 ,D3000,Ducts,stainless,100,MEP,Stainless Steel Duct (kg),weight,,HVAC ducts; needs Weight in the export
+,D5090,Electrical Equipment,photovoltaic|solar panel|pv panel|pv module,100,Energy,Photovoltaics (sf),area,,"PV panels by panel area (course: Photovoltaics (sf), P3.8); code D5090 Other Electrical Systems as assigned by the team; needs Area in the export"
+,D5090,Generic Models,photovoltaic|solar panel|pv panel|pv module,100,Energy,Photovoltaics (sf),area,,"PV panels modelled as generic models (P3.8); needs Area in the export"

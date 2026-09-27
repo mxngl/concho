@@ -65,7 +65,7 @@ file line numbers. JSON Schema of one row: [`docs/schema/stv_mapping.schema.json
 | `stv_material_type` | yes | material type of that assembly in the catalog (`Concrete Cladding (sf)`) |
 | `quantity_field` | yes | `area` (SF), `volume` (CF), `length` (FT), `count` (1 per element), `weight` (kg: `Weight`, else `Unit Weight`), `airflow` (m³/s: `Airflow`/`Flow`, the snapshot flows, else `Connector Flow`) |
 | `conversion` | – | named conversion, see "Conversions"; empty = the quantity as read |
-| `note` | yes (may be empty) | free text: why the rule exists, proxies (`proxy, see P3.7`) |
+| `note` | yes (may be empty) | free text: why the rule exists. A note with the word `proxy` marks a **proxy rule** (a catalog entry standing in for a material the catalog lacks): its quantities are flagged in the results (P3.7, `data_flags`) |
 
 A rule needs a `category` or an `assembly_code`; a `keyword` needs a `category`.
 
@@ -163,7 +163,7 @@ Assembly Code and the MEP export has no Assembly Code column, so the Island rule
 category and keyword (only the exterior walls use `B2000`). The file makes the implicit
 choices explicit (note column):
 
-- **bamboo → glulam proxy** (`proxy, see P3.7`): structural rules with keyword
+- **bamboo → glulam proxy** (note `proxy (bamboo, P3.7 …)`, flagged in `data_flags`): structural rules with keyword
   `structural bamboo` book the Island bamboo columns (99) and beams (113) as Glulam Column /
   Beam (kg) at 19.43 kg/cf; the architecture rules book the bamboo floors as Concrete (sf) and
   the bamboo walls as Steel Studs and Painted Gypsum (sf), as the old default rules did.
@@ -188,7 +188,8 @@ A1030 → Concrete Slab, all in cy) or for the code plus an explicit product key
 floors wood / concrete, concrete columns and beams; B2010 EIFS, brick on metal stud / on
 concrete, SIP; B3010 EPDM, green roof, asphalt shingle; C1010 metal / wood stud, interior
 curtain wall; C3020 carpet; D20 copper / stainless / HDPE pipes and D30 stainless ducts by
-weight). Left out on purpose: members that need a density (steel, timber, glulam), steel
+weight; D5090 PV panels (Electrical Equipment or Generic Models with a photovoltaic / solar
+panel keyword) by area as Energy / Photovoltaics (sf), P3.8). Left out on purpose: members that need a density (steel, timber, glulam), steel
 ducts (size threshold), windows (pane count and frame are rarely exported), roof structure
 (B1020), and anything without an Assembly Code (e.g. the MEP export). Teams copy it and
 extend it; the coverage report lists what is left.
@@ -228,6 +229,275 @@ Unmapped/zero quantity = the rows skipped before P3.6 (655 / 167 / 170). Structu
 grilles without airflow. 35 ElementIds appear in two disciplines, among them the floors
 1241457 (architecture: 6,848 sf Concrete; structural: unmapped), 1789623 and 1789655 (both
 mapped in both).
+
+## Custom materials: `custom_materials.csv` (P3.7)
+
+A custom material is a material the course LCA catalog does not have, with values from an
+EPD. It is **team data, not course data**. The file is named by `stv.custom_materials_file`
+(or `files.custom_materials`) of `project_config`, or `--custom-materials` of `concho-stv`.
+It is validated before the run (errors stop it). Template: `template/custom_materials.csv`
+(header only). JSON Schema of one row:
+[`docs/schema/custom_materials.schema.json`](../schema/custom_materials.schema.json)
+(`concho custmat schema`).
+
+One CSV row per material, UTF-8, comma-separated, header row with these names (order free).
+Lines starting with `#` are comments; blank lines are skipped. The columns are those of a
+course `LCA Data` row (B–T) plus `source` and `is_course_data`; all values are **per unit of
+`material_type`**, like the course catalog.
+
+| Column | Course `LCA Data` | Content |
+|---|---|---|
+| `assembly` | B | course assembly: `Foundation`, `Interior Wall`, `Exterior Wall`, `Floor`, `Roof`, `Window`, `Columns`, `Beams`, `MEP`, `Energy`, `Misc` (`Column` / `Beam` as in `LCA Data` are accepted) |
+| `material_type` | C | a new name ending with its unit in brackets, like the course names (`Bamboo Beam (kg)`); the unit is what the mapping table's unit check uses |
+| `embodied_gwp_kgco2e`, `embodied_energy_mj`, `embodied_water_kg`, `embodied_odp_kgcfc11e` | D–G "Embodied" | must equal materials + transport + construction |
+| `materials_…` (same four) | H–K "Materials" | EN 15804 modules A1–A3 |
+| `transport_…` | L–O "Transport" | A4 |
+| `construction_…` | P–S "Construction" | A5 |
+| `life_units` | T "Life Units No." | unit multiplier over the building life (1 = no replacement; the course uses e.g. 2 for carpet) |
+| `source` | – | EPD reference: document, registration number, page, declared unit and the conversion to the unit of `material_type` (e.g. per m³ ÷ density) |
+| `is_course_data` | – | always `false` |
+
+Energy is primary energy in MJ, water in kg (m³ × 1000), ODP in kg CFC-11e, as in the
+course. The course catalog comes from SimaPro / ReCiPe Midpoint (H); EPD values (EN 15804,
+usually CML / EF) are not the same method, so a custom material is never fully comparable
+with a catalog entry. That is why results that rest on custom materials are flagged (below).
+
+### Validation (`concho custmat validate`)
+
+```bash
+concho custmat validate custom_materials.csv [--template CEE_222_STV_V12.xlsx]  # 0 = valid, 1 = errors
+concho custmat schema                                                         # JSON Schema of one row
+```
+
+| Check | Result |
+|---|---|
+| missing, unknown or duplicated column; empty file; more cells than columns | error |
+| `assembly` not a course assembly | error |
+| `material_type` empty, without a `(unit)` at the end, or used twice | error |
+| `material_type` is a course catalog name (any assembly, case and spacing ignored) | error |
+| `source` empty | error |
+| `is_course_data` not `false` | error |
+| a value not a plain number; energy, water or ODP negative (GWP may be negative, e.g. biogenic carbon); `life_units` ≤ 0 | error |
+| `embodied_*` ≠ materials + transport + construction (relative 1e-6) | error |
+| no course workbook given (names not checked against the catalog) | warning |
+| no materials in the file | warning |
+
+From Python: `engines.stv.custom_materials.validate_custom_materials_file(path,
+catalog=reference_data)` or `load_custom_materials(path, catalog=...)` (raises
+`CustomMaterialsError`).
+
+### How the engine uses them
+
+`concho-stv` validates the file against the course catalog of the workbook it runs on and adds
+the materials to the reference data (`STVReferenceData.add_custom_materials`): the mapping
+table and the input JSON (`construction_items`) can then name them like catalog entries,
+under their assembly. The calculation is the course
+formula (amount × value × `life_units`); nothing else changes.
+
+### Flags: custom materials and proxies (`data_flags`)
+
+Two kinds of results do not rest on the course catalog as it is meant:
+
+- **custom material:** the item's material comes from `custom_materials.csv` (EPD values,
+  not course data);
+- **proxy:** the item was mapped by a mapping rule whose `note` contains the word `proxy`
+  (case-insensitive), i.e. a catalog entry stands in for a material the catalog lacks (Island:
+  bamboo booked as glulam, concrete floor and steel-stud walls).
+
+Every line item of `construction_items` carries `custom_material` (true/false),
+`custom_material_source` (the EPD reference or `null`), `proxy` (true/false) and
+`proxy_amount` (the part of `amount` mapped by proxy rules; items are summed per material, so
+an item can be part proxy). The results JSON gets a `data_flags` block:
+
+| Key | Content |
+|---|---|
+| `custom_material`, `proxy` | total flags: true if any item relies on a custom material / a proxy |
+| `custom_materials.embodied` | kgCO₂e, MJ, kg water, kg CFC-11e that rest on custom materials |
+| `custom_materials.share_of_embodied`, `share_of_life_cycle` | the same as fractions of the embodied and the life-cycle totals |
+| `custom_materials.materials` | each custom material used: assembly, material type, source, amount, embodied impacts |
+| `proxies.embodied`, `share_of_embodied`, `share_of_life_cycle` | the same for proxies (item impacts × `proxy_amount` / `amount`) |
+| `proxies.items` | each item with a proxy part: amount, `proxy_amount`, embodied impacts of the proxy part |
+| `by_assembly.<assembly>` | `custom_material`, `proxy` (flags), `embodied`, `custom_material_embodied`, `proxy_embodied` |
+
+The use phase never rests on custom materials or proxies. `--combine-results` keeps the item
+fields, so the block of a combined result is recomputed from all items. The mapping coverage
+lists each rule with `proxy: true/false`.
+
+Island (all six Current exports, reference config): no custom material; **570,612.51 kgCO₂e
+(22.7 % of embodied carbon) rest on proxies**: bamboo floors as Concrete (sf) 349,607.17,
+bamboo walls as Steel Studs and Painted Gypsum (sf) 123,625.98, bamboo beams as Glulam Beam
+(kg) 72,139.44, bamboo columns as Glulam Column (kg) 25,239.92 (energy 6,025,597 MJ = 21.2 %,
+water 6,832,138 kg = 22.8 %).
+
+### Engineered bamboo (P3.7): still a proxy
+
+Bamboo is not in the course catalog. P3.7 looked for a public EPD whose values can be
+expressed in the course's units per the course's functional unit (per kg for the glulam
+entries the Island bamboo columns and beams stand in for). **No bamboo custom material was
+added; the Island keeps the proxies**, now flagged as such (`data_flags`, above), and the
+Island reference result stays **2,517,183.14 kgCO₂e**.
+
+What was found (2026-09-27; registry listings and search results only, **the EPD documents
+themselves could not be read**, because the network policy of the Claude Code session that
+did P3.7 blocks environdec.com, epd-australasia.com and the manufacturers' sites):
+
+- best candidate: **GREEZU Structural Glued Laminated Bamboo** (Sentai Bamboo & Wood),
+  EPD International **EPD-IES-0025126:001**, PCR 2019:14 (EN 15804+A2), published
+  2025-09-26, valid to 2030-09-25; declared per m³ according to the listing
+  (<https://environdec.com/library/epd25126>). Siblings from the same manufacturer: laminated
+  bamboo EPD-IES-0025124:001, strand woven bamboo EPD-IES-0020939:001;
+- older MOSO result summaries (EN 15804+A1, 2017; decking and panels, not structural members).
+
+**Missing before a `custom_materials.csv` row can be written** (none of it may be guessed):
+
+1. the results table of the EPD (document page) for modules A1–A3, A4 and A5: GWP-total (and
+   how biogenic carbon is reported; A1–A3 may be negative), PERT + PENRT (MJ), FW (m³ →
+   kg), ODP (kg CFC-11e);
+2. the density (kg/m³) stated in the EPD, to convert per m³ to per kg (the course's glulam
+   unit), or a per-m² product with thickness and density for the bamboo floors and walls;
+3. whether A4 and A5 are declared or "MND" (many bamboo EPDs are cradle-to-gate + C + D;
+   then transport and construction are unknown and the row cannot mirror the course's
+   Transport / Construction columns without further assumptions to be agreed);
+4. an agreed note on the method gap: the course catalog is SimaPro / ReCiPe Midpoint (H), EPDs
+   are EN 15804 (EF / CML), so a bamboo row is never fully comparable with the glulam row.
+
+With these, the switch is: one row in a team `custom_materials.csv` (e.g. `Beams, Engineered
+Bamboo Beam (kg), …, source = "GREEZU EPD-IES-0025126:001, p. …, declared unit 1 m³, ÷ … kg/m³"`),
+`files.custom_materials` in a copy of the config, and the bamboo rules of a copy of the
+mapping file pointed at the new names. The Island reference config and mapping file keep the
+glulam proxy by default.
+
+The architecture bamboo proxies are the larger part: bamboo floors booked as Concrete (sf)
+349,607 kgCO₂e and bamboo walls as Steel Studs and Painted Gypsum (sf) 123,626 kgCO₂e, against
+97,379 kgCO₂e for the glulam columns and beams.
+
+## Use phase (P3.8)
+
+### Required inputs
+
+`stv.use_phase` of `project_config` must state the use phase explicitly (validated by
+`concho config validate` and by `concho-stv --config`):
+
+- either **every value**: `grid_kwh`, `onsite_renewable_kwh`, `natural_gas_m3`,
+  `cogeneration` (`null` = none), and all of `water` (`urinal_gpf: null` = no urinals, decision
+  D11); 0 is allowed but must be written;
+- or `not_modeled: true` **with a `not_modeled_reason`** (error without one).
+
+Warnings: `not_modeled: true`; all values 0 (stated as modeled, but nothing in it);
+`not_modeled_reason` while `not_modeled` is false.
+
+### PV and other items outside the Revit exports
+
+The course books on-site PV twice, and the engine does the same:
+
+- **construction:** the panels are a construction item, Energy / `Photovoltaics (sf)` (panel
+  area), in "Construction and Materials";
+- **use phase:** the PV output goes into "On-site Renewable Electricity" (`onsite_renewable_kwh`),
+  which the course books at **zero impact** (`Use Phase` F20:I20 = 0 × D20) and does **not**
+  subtract from the grid. The team enters the grid draw that remains (`grid_kwh`) itself.
+
+The panels come in through either
+
+- the **mapping table**, when the model has them: the default table maps D5090 Electrical
+  Equipment / Generic Models with `photovoltaic|solar panel|pv panel|pv module` by area; or
+- **`stv.construction_items`** of `project_config`, for items that are not in the Revit
+  exports (as the course types them into "Construction and Materials"): `assembly`,
+  `material_type`, `amount` (in the unit of the material) and a required `note` saying where
+  the amount comes from. `concho-stv --config` checks them against the catalog (custom
+  materials included) and adds them with `origin: "project_config"` on the line item. Other
+  Energy items (EV battery, solar water heating, turbines) work the same way.
+
+### Combining results: the use phase is taken once
+
+The use phase (and the config's `stv.construction_items`, e.g. PV) belongs to the project,
+not to a trade. Before P3.8, `--combine-results` summed the use phase of every input, so
+per-trade runs with `--config` counted it once per trade; the workaround was
+`--no-use-phase` on all but one run (P3.2 follow-up). Since P3.8, `STVResults.combine`
+sums the embodied impacts and line items of the inputs and takes the project-level parts
+**once**:
+
+- `concho-stv --combine-results a.json b.json … --config project_config.json`: the use
+  phase and the config items are recomputed from the config (this needs the course
+  workbook); what the inputs carry of them is ignored. This is the recommended way.
+- without `--config`: the inputs that have a non-zero use phase must all have the same one
+  (as per-trade runs of one config do); it is taken once. Config items (line items with
+  `origin: "project_config"`) likewise. Different ones stop the run with an error that asks
+  for `--config`.
+
+`use_phase_status.combined` says which rule applied. **`--no-use-phase` is deprecated, not
+removed:** it is no longer needed, but existing batch scripts that pass it still work (the
+run is construction-only, `use_phase_status.source = "skipped"`) and get a deprecation
+warning; combine such runs with `--config` to add the use phase. Removal is left for P5,
+when the pipeline scripts move into the team template.
+
+### `use_phase_status` in the results
+
+| Key | Content |
+|---|---|
+| `modeled` | true/false: is the use phase part of this result |
+| `source` | `project_config` (`--config`), `input` (input JSON or none), `stv_workbook_input`, `skipped` (`--no-use-phase`), `none` (`--architecture-history-dir`) |
+| `not_modeled_reason` | the config's reason, or why the run has none; `null` when modeled |
+| `all_zero` | true if every use-phase input is 0 |
+| `inputs` | the annual inputs the engine used (grid, renewables, gas, cogeneration, water) |
+
+Without `--config`, `modeled` is true when any input is non-zero (a stated urinal flow rate
+counts, decision D11).
+
+## Island use-phase example (P3.8)
+
+`engines/common/examples/island_2026_use_phase.project_config.json` is the Island config with
+the use phase stated; everything outside `stv` equals the reference config, which stays
+"not modeled" (golden 2,517,183.14 kgCO₂e unchanged). Values from the Island slides and, where
+the slides give no course input, the team's own workbook `STV_LAMARCASINA_BAMBOO.xlsx` (IPD_
+Challenge `STV_Template/`; **team input, not course data**).
+
+### Slide values → course inputs
+
+| Slide | Course input (`Use Phase` / `Construction and Materials`) | Config value | Assumption |
+|---|---|---|---|
+| 162,000 kWh/yr electricity use | D19 Electricity Drawn from Grid | `grid_kwh: 0` | **annual netting**: grid = max(0, 162,000 − 216,992) = 0. Assumes storage or net metering over the year; the surplus of 54,992 kWh/yr gets no credit (the course has no export row). Same as the team workbook (D19 blank). |
+| 216,992 kWh/yr PV | D20 On-site Renewable Electricity | `onsite_renewable_kwh: 216992` | the course books it at zero impact and does not subtract it from the grid |
+| (PV panels) | C&M row: Energy / `Photovoltaics (sf)` | `stv.construction_items`: 5,000 sf | team input (team workbook). **Mismatch**: ~5.5 kWh/m²/day (San Juan) × ~20 % module efficiency × ~0.8 performance ratio gives ~150,000 kWh/yr for 5,000 sf; 216,992 kWh/yr would need ~7,000–7,500 sf |
+| – | D29 Natural Gas, D22 Cogeneration | `natural_gas_m3: 0`, `cogeneration: null` | all-electric building (no gas or cogeneration in the slides or the team workbook) |
+| 187,000 gal/yr water | D32–D37 fixture flow rates (course: 900 occupants × 250 days, fixed) | toilet 1.0 gpf, `urinal_gpf: null` (no urinals → toilet factor 1.0), WC sink 0.2 gpm, lab sink 0.3 gpm, kitchen sink 0, shower 0 | the team's fixture inputs as they are (team workbook D32–D37); not back-calculated to 187,000 |
+| – | D38 Landscaping | `landscaping_gal: 0` | team workbook: none |
+| 12,610 SF collection area | D40 Rainwater Collection (gal/yr) | `rainwater_gal: 396183` | team workbook value; it corresponds to 12,610 SF × ~56 in/yr × 0.623 gal/(sf·in) × 0.9 runoff. The credit is capped by the course at toilet + urinal + landscaping water (675,000 gal/yr here), so it is fully credited |
+
+Course water for these inputs: toilet 675,000 + WC sink 67,500 + lab sink 13,500 =
+**756,000 gal/yr gross (+304 % vs. the slide's 187,000)**; minus 396,183 rainwater =
+**359,817 gal/yr net (+92 %)**. The difference comes from the course's fixed occupancy
+(900 people × 250 days), which the slide figure evidently does not use.
+
+### Result (six Current exports, one run; reference workbook `STV_ConceptA_Bambo.xlsx`, same with the course workbook)
+
+| | Carbon kgCO₂e | Energy MJ | Water kg |
+|---|---|---|---|
+| Construction (reference C) | 2,517,183.14 | 28,396,923.44 | 30,026,557.14 |
+| + PV panels 5,000 sf | 206,969.00 | 2,678,270.49 | 3,809,140.52 |
+| **Construction total** | **2,724,152.14** | **31,075,193.93** | **33,835,697.66** |
+| Use phase, 50 years (water only; grid 0) | 45,414.05 | 506,239.08 | 145,234,734.80 |
+| **Construction + 50 years use** | **2,769,566.19** | **31,581,433.01** | **179,070,432.45** |
+| Island target | 7,396,873.85 | 155,969,076.59 | 271,387,397.26 |
+| **% of target** | **37.4 %** | **20.2 %** | **66.0 %** |
+
+The use phase equals the team workbook's own cached `Use Phase` F13:I13 (the same inputs in
+the course formulas; pinned in `tests/stv/test_golden_stv.py`). The PV panels add 8.2 % to
+the construction carbon.
+
+**Sensitivity of the grid assumption** (added to the totals above; Island grid factors):
+
+| Grid kWh/yr | Carbon kgCO₂e (% of target) | Energy MJ (%) | Water kg (%) |
+|---|---|---|---|
+| 0 (annual netting, example) | 2,769,566.19 (37.4 %) | 31,581,433.01 (20.2 %) | 179,070,432.45 (66.0 %) |
+| 12,000 (PV only ~150,000 kWh/yr, from 5,000 sf) | 3,284,366.19 (44.4 %) | 38,393,554.22 (24.6 %) | 180,717,216.45 (66.6 %) |
+| 162,000 (gross, PV not netted) | 9,719,366.19 (131.4 %) | 123,545,069.34 (79.2 %) | 201,302,016.45 (74.2 %) |
+
+**Open data questions for Max/Ash:** (1) PV area vs. output: 5,000 sf vs. ~7,000–7,500 sf
+for 216,992 kWh/yr; (2) water: the course formula gives 756,000 gal/yr gross / 359,817 net
+for the team's fixture rates, the slides 187,000 gal/yr; (3) whether annual netting of PV
+is the intended reading (the gross case exceeds the carbon target); (4) the other Energy /
+MEP items of the team workbook (EV battery 1,200 kWh, integrated solar water heating 100
+sf, rainwater tank 5,000 gal) are not in the example.
 
 ## Island 2026 reference result
 
@@ -320,11 +590,13 @@ rule 4).
   `Glulam-Western Species` and `Timber-Column`, so the importer books it as
   **Glulam Beam (kg)** / **Glulam Column (kg)** at 19.43 kg/cf (`GLULAM_KG_PER_CF`). In C
   that is 81,954 kg of beams and 33,932 kg of columns. Undocumented in the original; since
-  P3.6 explicit proxy rules in the Island mapping file (note "proxy, see P3.7"); an explicit
-  custom material follows in P3.7.
+  P3.6 explicit proxy rules in the Island mapping file; since P3.7 flagged as proxies in the
+  results (`data_flags`). No custom bamboo material yet: see "Engineered bamboo" above.
 - **Use phase = 0.** A and C contain no use-phase inputs (no kWh, gas, water or PV), while
   the target covers construction + 50 years of operation. So C is embodied only and its
-  % of target is not comparable with the target's scope. Only B has use-phase inputs (P3.8).
+  % of target is not comparable with the target's scope. Only B has use-phase inputs. Since
+  P3.8 the reference config says so explicitly (`not_modeled` with a reason), and the
+  second example adds the use phase (see "Island use-phase example" above).
 - **Unmapped Parts.** In C, 166 structural `Parts` rows (plus 1 floor) are skipped by the
   structural importer, and 96 `Parts` rows by the architecture importer (together with 370
   furniture, 118 generic models, 32 plumbing fixtures, …; 655 skipped architecture rows).

@@ -17,12 +17,12 @@ from conftest import TEAM
 from engines.common.config import UsePhase, load_config
 from engines.stv import STVEngine, STVInputs, cli
 from engines.stv.custom_materials import (
-    REQUIRED_COLUMNS,
+    COLUMNS,
     CustomMaterialsError,
     load_custom_materials,
 )
 from engines.stv.engine import LIFETIME_YEARS
-from engines.stv.models import ImpactVector
+from engines.stv.models import ImpactVector, STVResults
 from engines.stv.project import STVProjectSettings, use_phase_payload
 from engines.stv.reference import STVReferenceData, TeamFactors
 
@@ -151,21 +151,21 @@ def test_river_config_changes_team_targets_and_use_phase(reference_with_river):
     assert river.breakdown.use_water.water > 0
 
 
-# ── custom materials (load + validate only, P3.7 uses them) ─────────────────
+# ── custom materials (format: tests/stv/test_stv_custom_materials.py) ────────
 
 def _write_materials(path: Path, rows: list[dict]) -> Path:
-    lines = [",".join(REQUIRED_COLUMNS)]
+    lines = [",".join(COLUMNS)]
     for row in rows:
-        lines.append(",".join(str(row.get(c, "")) for c in REQUIRED_COLUMNS))
+        lines.append(",".join(str(row.get(c, "")) for c in COLUMNS))
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return path
 
 
 def _material(**overrides) -> dict:
-    row = {c: 1.0 for c in REQUIRED_COLUMNS}
-    row.update({f"total_{k}": 3.0 for k in ("carbon", "energy", "water", "ozone")})
+    row = {c: 1.0 for c in COLUMNS}
+    row.update({c: 3.0 for c in COLUMNS if c.startswith("embodied_")})
     row.update(assembly="Floor", material_type="Engineered Bamboo (cf)",
-               source="Invented EPD 123", is_course_data="false", unit_multiplier=1)
+               source="Invented EPD 123", is_course_data="false", life_units=1)
     row.update(overrides)
     return row
 
@@ -176,35 +176,12 @@ def test_custom_materials_load(tmp_path):
     (record,) = loaded.records
     assert record.material_type == "Engineered Bamboo (cf)"
     assert record.embodied_total.carbon == 3.0 and record.materials.carbon == 1.0
-    assert loaded.warnings == []
 
 
 def test_custom_materials_errors(tmp_path):
-    path = _write_materials(tmp_path / "custom.csv", [
-        _material(assembly="Spaceship"),
-        _material(is_course_data="true", source=""),
-        _material(total_carbon="1.5 kg"),
-        _material(material_type="Dup"), _material(material_type="Dup"),
-    ])
-    with pytest.raises(CustomMaterialsError) as exc:
+    path = _write_materials(tmp_path / "custom.csv", [_material(assembly="Spaceship")])
+    with pytest.raises(CustomMaterialsError, match="unknown assembly 'Spaceship'"):
         load_custom_materials(path)
-    text = "\n".join(exc.value.errors)
-    assert "unknown assembly 'Spaceship'" in text
-    assert "is_course_data must be false" in text and "source is empty" in text
-    assert "total_carbon is not a plain number" in text
-    assert "duplicate material Floor / Dup" in text
-
-
-def test_custom_materials_missing_columns(tmp_path):
-    path = tmp_path / "custom.csv"
-    path.write_text("assembly,material_type\nFloor,X\n", encoding="utf-8")
-    with pytest.raises(CustomMaterialsError, match="missing columns: total_carbon"):
-        load_custom_materials(path)
-
-
-def test_custom_materials_sum_warning(tmp_path):
-    path = _write_materials(tmp_path / "custom.csv", [_material(total_water=5.0)])
-    assert "total_water (5) is not materials" in load_custom_materials(path).warnings[0]
 
 
 def test_custom_materials_from_config(tmp_path, reference_with_river):
@@ -218,11 +195,7 @@ def test_custom_materials_from_config(tmp_path, reference_with_river):
 
     settings = STVProjectSettings.from_config(load_config(config_path), tmp_path)
     assert len(settings.custom_materials.records) == 1
-    assert any("not used in the calculation yet (P3.7)" in w for w in settings.warnings)
-    # Not used in the calculation: same result as without the file.
-    without = STVProjectSettings.from_config(load_config(RIVER_CONFIG))
-    assert (_calculate(reference_with_river, settings).to_dict()
-            == _calculate(reference_with_river, without).to_dict())
+    assert settings.custom_materials.path == tmp_path / "custom.csv"
 
 
 # ── CLI ─────────────────────────────────────────────────────────────────────
@@ -276,3 +249,232 @@ def test_cli_invalid_config(monkeypatch, tmp_path, reference, capsys):
     with pytest.raises(SystemExit):
         _cli(monkeypatch, tmp_path, reference, "--config", str(bad))
     assert "invalid project_config" in capsys.readouterr().err
+
+
+# ── P3.8: use_phase_status in the results ───────────────────────────────────
+
+def test_status_from_inputs(reference):
+    engine = STVEngine(reference)
+    empty = engine.calculate(STVInputs.from_dict({"team": TEAM, "construction_items": ITEMS}))
+    assert empty.to_dict()["use_phase_status"] == {
+        **empty.use_phase_status, "modeled": False, "source": "input", "all_zero": True,
+        "not_modeled_reason": "no use-phase inputs given"}
+    # A stated urinal flow rate is an input, even 0 (decision D11).
+    urinal = engine.calculate(STVInputs.from_dict({
+        "team": TEAM, "construction_items": [], "use_phase": {"water_use": {"urinal_gpf": 0}}}))
+    assert urinal.use_phase_status["modeled"] is True
+    grid = engine.calculate(STVInputs.from_dict({
+        "team": TEAM, "construction_items": [],
+        "use_phase": {"electricity_from_grid_kwh": 10.0}}))
+    assert grid.use_phase_status["inputs"]["electricity_from_grid_kwh"] == 10.0
+    assert grid.use_phase_status["all_zero"] is False
+
+
+def test_cli_status_config(monkeypatch, tmp_path, reference_with_river):
+    river = _cli(monkeypatch, tmp_path, reference_with_river, "--config", str(RIVER_CONFIG))
+    status = river["use_phase_status"]
+    assert (status["modeled"], status["source"], status["not_modeled_reason"],
+            status["all_zero"]) == (True, "project_config", None, False)
+    assert status["inputs"]["electricity_from_grid_kwh"] == 100_000
+
+
+def test_cli_status_not_modeled(monkeypatch, tmp_path, reference_with_river):
+    island = _cli(monkeypatch, tmp_path, reference_with_river,
+                  "--config", str(ISLAND_CONFIG), "--team", TEAM)
+    status = island["use_phase_status"]
+    assert (status["modeled"], status["source"]) == (False, "project_config")
+    assert status["not_modeled_reason"].startswith("Island 2026 reference result C")
+
+
+def test_cli_status_all_zero_warns(monkeypatch, tmp_path, reference_with_river, capsys):
+    data = json.loads(RIVER_CONFIG.read_text(encoding="utf-8"))
+    data.pop("$schema")
+    data["files"] = {}
+    up = data["stv"]["use_phase"]
+    up.update(grid_kwh=0, onsite_renewable_kwh=0, natural_gas_m3=0, cogeneration=None)
+    up["water"] = {k: (None if k == "urinal_gpf" else 0) for k in up["water"]}
+    config = tmp_path / "zero.json"
+    config.write_text(json.dumps(data), encoding="utf-8")
+    result = _cli(monkeypatch, tmp_path, reference_with_river, "--config", str(config))
+    assert result["use_phase_status"]["modeled"] is True
+    assert result["use_phase_status"]["all_zero"] is True
+    assert "all use-phase values are 0" in capsys.readouterr().err
+
+
+# ── P3.8: stv.construction_items (e.g. PV as an Energy item) ─────────────────
+
+def _config_with_items(tmp_path, items) -> Path:
+    data = json.loads(RIVER_CONFIG.read_text(encoding="utf-8"))
+    data.pop("$schema")
+    data["files"] = {}
+    data["stv"]["construction_items"] = items
+    path = tmp_path / "items.json"
+    path.write_text(json.dumps(data), encoding="utf-8")
+    return path
+
+
+def test_config_construction_items(monkeypatch, tmp_path, reference_with_river):
+    reference_with_river.materials[("Energy", "Test PV (sf)")] = (
+        reference_with_river.materials[("Floor", "Test Slab (sf)")])
+    reference_with_river.valid_materials["Energy"] = {"Test PV (sf)"}
+    config = _config_with_items(tmp_path, [{"assembly": "Energy", "material_type": "Test PV (sf)",
+                                            "amount": 500, "note": "invented PV area"}])
+    settings = STVProjectSettings.from_config(load_config(config), tmp_path)
+    assert settings.construction_items == [{"assembly": "Energy", "material_type": "Test PV (sf)",
+                                            "amount": 500.0, "origin": "project_config"}]
+    result = _cli(monkeypatch, tmp_path, reference_with_river, "--config", str(config))
+    pv = result["construction_items"][-1]
+    assert (pv["assembly"], pv["material_type"], pv["amount"], pv["origin"]) == (
+        "Energy", "Test PV (sf)", 500.0, "project_config")
+    assert result["construction_items"][0]["origin"] == "input"
+    assert pv["embodied_total"]["carbon"] == pytest.approx(500 * 2.75)
+
+
+def test_config_construction_items_checked(monkeypatch, tmp_path, reference_with_river, capsys):
+    config = _config_with_items(tmp_path, [{"assembly": "Energy", "material_type": "Nope (sf)",
+                                            "amount": 1, "note": "x"}])
+    with pytest.raises(SystemExit):
+        _cli(monkeypatch, tmp_path, reference_with_river, "--config", str(config))
+    assert "stv.construction_items[0] of --config: Unknown assembly 'Energy'" in (
+        capsys.readouterr().err)
+
+
+@pytest.mark.parametrize("item, message", [
+    ({"assembly": "Energy", "material_type": "PV (sf)", "amount": 1}, "note"),
+    ({"assembly": "Energy", "material_type": "PV (sf)", "amount": -1, "note": "x"}, "amount"),
+    ({"assembly": "", "material_type": "PV (sf)", "amount": 1, "note": "x"}, "assembly"),
+])
+def test_config_construction_items_validation(tmp_path, item, message):
+    from engines.common.config import ConfigError
+
+    with pytest.raises(ConfigError, match=message):
+        load_config(_config_with_items(tmp_path, [item]))
+
+
+# ── P3.8: combining per-trade results takes the use phase once ─────────────────
+
+def _trade_run(monkeypatch, tmp_path, reference, name, items, *args) -> Path:
+    template = tmp_path / "course.xlsx"
+    template.write_bytes(b"")
+    monkeypatch.setattr(STVReferenceData, "from_workbook",
+                        staticmethod(lambda path=None: reference))
+    monkeypatch.setenv("COURSE_STV_XLSX", str(template))
+    inputs = tmp_path / f"{name}.json"
+    inputs.write_text(json.dumps({"team": TEAM, "construction_items": items}))
+    out = tmp_path / name
+    monkeypatch.setattr(sys, "argv", ["concho-stv", "--input", str(inputs),
+                                      "--output-dir", str(out), *args])
+    cli.main()
+    return out / "stv_results.json"
+
+
+def _combine(monkeypatch, tmp_path, paths, *args) -> dict:
+    out = tmp_path / "project"
+    monkeypatch.setattr(sys, "argv", ["concho-stv", "--output-dir", str(out),
+                                      "--combine-results", *map(str, paths), *args])
+    cli.main()
+    return json.loads((out / "stv_results.json").read_text())
+
+
+TRADE_ITEMS = {
+    "arch": [{"assembly": "Floor", "material_type": "Test Slab (sf)", "amount": 100.0}],
+    "struct": [{"assembly": "Columns", "material_type": "Test Column (kg)", "amount": 40.0}],
+}
+
+
+@pytest.fixture
+def river_pv(tmp_path, reference_with_river) -> Path:
+    """River config plus an invented PV item (stv.construction_items)."""
+    reference_with_river.materials[("Energy", "Test PV (sf)")] = (
+        reference_with_river.materials[("Floor", "Test Slab (sf)")])
+    reference_with_river.valid_materials["Energy"] = {"Test PV (sf)"}
+    return _config_with_items(tmp_path, [{"assembly": "Energy", "material_type": "Test PV (sf)",
+                                          "amount": 50, "note": "invented PV area"}])
+
+
+def test_combine_takes_use_phase_and_config_items_once(monkeypatch, tmp_path,
+                                                       reference_with_river, river_pv, capsys):
+    trades = [_trade_run(monkeypatch, tmp_path, reference_with_river, name, items,
+                         "--config", str(river_pv)) for name, items in TRADE_ITEMS.items()]
+    single = _trade_run(monkeypatch, tmp_path, reference_with_river, "all",
+                        TRADE_ITEMS["arch"] + TRADE_ITEMS["struct"], "--config", str(river_pv))
+    expected = json.loads(single.read_text())
+    for args in ((), ("--config", str(river_pv))):  # from the inputs / from the config
+        combined = _combine(monkeypatch, tmp_path, trades, *args)
+        for key in ("use_electricity", "use_heating", "use_water", "embodied", "life_cycle"):
+            assert combined["breakdown"][key] == pytest.approx(expected["breakdown"][key]), key
+        pv = [i for i in combined["construction_items"] if i["origin"] == "project_config"]
+        assert len(pv) == 1 and pv[0]["amount"] == 50.0
+        assert combined["use_phase_status"]["modeled"] is True
+        assert "taken once" in combined["use_phase_status"]["combined"]
+    assert "use phase taken once" in capsys.readouterr().err
+
+
+def test_combine_old_no_use_phase_runs_with_config(monkeypatch, tmp_path, reference_with_river,
+                                                   capsys):
+    """Construction-only trade results (e.g. --no-use-phase) get the use phase from --config."""
+    trades = [_trade_run(monkeypatch, tmp_path, reference_with_river, name, items,
+                         "--config", str(RIVER_CONFIG), "--no-use-phase")
+              for name, items in TRADE_ITEMS.items()]
+    assert "--no-use-phase is deprecated" in capsys.readouterr().err
+    without = _combine(monkeypatch, tmp_path, trades)
+    assert without["breakdown"]["use_phase"]["carbon"] == 0.0
+    assert without["use_phase_status"]["modeled"] is False
+    combined = _combine(monkeypatch, tmp_path, trades, "--config", str(RIVER_CONFIG))
+    assert combined["breakdown"]["use_electricity"]["carbon"] == pytest.approx(
+        0.2 * 100_000 * 50)
+    assert combined["use_phase_status"]["source"] == "project_config"
+    assert combined["breakdown"]["embodied"] == without["breakdown"]["embodied"]
+
+
+def test_combine_rejects_different_use_phases(monkeypatch, tmp_path, reference_with_river,
+                                              capsys):
+    river = _trade_run(monkeypatch, tmp_path, reference_with_river, "arch",
+                       TRADE_ITEMS["arch"], "--config", str(RIVER_CONFIG))
+    other = STVResults.from_dict(json.loads(river.read_text()))
+    other.breakdown.use_water = other.breakdown.use_water.scale(2.0)
+    other_path = tmp_path / "other.json"
+    other_path.write_text(json.dumps(other.to_dict()), encoding="utf-8")
+    with pytest.raises(SystemExit):
+        _combine(monkeypatch, tmp_path, [river, other_path])
+    assert "different use phases" in capsys.readouterr().err
+    # With the config, the inputs' use phases are ignored.
+    combined = _combine(monkeypatch, tmp_path, [river, other_path], "--config",
+                        str(RIVER_CONFIG))
+    assert combined["breakdown"]["use_water"] == json.loads(river.read_text())["breakdown"][
+        "use_water"]
+
+
+def test_combine_rejects_different_config_items(reference, tmp_path):
+    from engines.stv.models import CONFIG_ORIGIN
+
+    engine = STVEngine(reference)
+
+    def run(amount):
+        return engine.calculate(STVInputs.from_dict({"team": TEAM, "construction_items": [
+            {"assembly": "Floor", "material_type": "Test Slab (sf)", "amount": amount,
+             "origin": CONFIG_ORIGIN}]}))
+
+    assert len(STVResults.combine([run(5.0), run(5.0)]).construction_items) == 1
+    with pytest.raises(ValueError, match="different stv.construction_items"):
+        STVResults.combine([run(5.0), run(6.0)])
+
+
+def test_island_use_phase_example_config():
+    """P3.8: the second Island example states the use phase (slide values, team inputs)."""
+    path = ISLAND_CONFIG.with_name("island_2026_use_phase.project_config.json")
+    settings = STVProjectSettings.from_config(load_config(path), path.parent)
+    assert settings.use_phase_modeled and not settings.use_phase_all_zero
+    assert settings.use_phase["electricity_from_grid_kwh"] == 0  # 162,000 - 216,992 < 0
+    assert settings.use_phase["onsite_renewable_kwh"] == 216_992
+    assert settings.use_phase["water_use"]["urinal_gpf"] is None
+    assert settings.use_phase["water_use"]["rainwater_collection_gal"] == 396_183
+    assert settings.construction_items == [{"assembly": "Energy",
+                                            "material_type": "Photovoltaics (sf)",
+                                            "amount": 5000.0, "origin": "project_config"}]
+    # Everything but the stv section equals the reference config.
+    ref = json.loads(ISLAND_CONFIG.read_text(encoding="utf-8"))
+    ex = json.loads(path.read_text(encoding="utf-8"))
+    assert {k: v for k, v in ex.items() if k != "stv"} == {
+        k: v for k, v in ref.items() if k != "stv"}
+    assert ref["stv"]["use_phase"]["not_modeled"] is True

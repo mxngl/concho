@@ -47,6 +47,10 @@ class STVEngine:
                 transport=transport,
                 construction=construction,
                 estimated_amount=item.estimated_amount,
+                proxy_amount=item.proxy_amount,
+                origin=item.origin,
+                custom_material_source=self.reference_data.custom_source(
+                    item.assembly, item.material_type),
             )
             construction_results.append(construction_result)
             breakdown.embodied_materials = breakdown.embodied_materials + materials
@@ -72,6 +76,7 @@ class STVEngine:
             breakdown=breakdown,
             construction_items=construction_results,
             lifetime_years=self.lifetime_years,
+            use_phase_status=inputs.use_phase_status(),
         )
 
     def _calculate_annual_electricity(self, inputs: STVInputs) -> ImpactVector:

@@ -16,6 +16,10 @@ Subcommands:
   With Revit exports, every element is matched and ties are reported as errors. Exit code 0
   when valid (warnings allowed), 1 on any error.
 - ``concho stvmap schema``: print the JSON Schema of one mapping row.
+- ``concho custmat validate FILE [--template XLSX]`` (P3.7): validate a custom materials file
+  (``custom_materials.csv``); with the course workbook, names are checked against the course
+  catalog (a custom material may not reuse a course name).
+- ``concho custmat schema``: print the JSON Schema of one custom material row.
 
 The engine CLIs stay separate for now (``concho-tvd``, ``concho-stv``, ``concho-schedule``).
 """
@@ -27,6 +31,7 @@ import os
 import sys
 
 from engines.common.config import json_schema_text, validate_config_file
+from engines.stv import custom_materials
 from engines.stv import mapping as stv_mapping
 from engines.tvd import cost_db
 
@@ -76,6 +81,17 @@ def build_parser() -> argparse.ArgumentParser:
                                help=f"Revit {discipline} export(s): report ties on their "
                                     "elements")
     stvmap_sub.add_parser("schema", help="print the JSON Schema of one mapping row")
+
+    custmat = sub.add_parser("custmat", help="STV custom materials tools")
+    custmat_sub = custmat.add_subparsers(dest="custmat_command", required=True,
+                                         parser_class=_Parser)
+    mvalidate = custmat_sub.add_parser("validate",
+                                       help="validate a custom_materials.csv file")
+    mvalidate.add_argument("file", help="path to the custom_materials.csv file")
+    mvalidate.add_argument("--template", metavar="XLSX",
+                           help="course STV workbook for the catalog name check "
+                                "(default: $COURSE_STV_XLSX)")
+    custmat_sub.add_parser("schema", help="print the JSON Schema of one custom material row")
     return parser
 
 
@@ -108,16 +124,37 @@ def _validate_costdb(path: str, config_path: str | None) -> int:
     return _print_report(path, cost_db.validate_cost_db_file(path, custom_clusters=custom))
 
 
-def _validate_stvmap(args) -> int:
+class _CatalogError(Exception):
+    pass
+
+
+def _course_catalog(template: str | None):
+    """Course LCA catalog of --template / $COURSE_STV_XLSX; None if neither is given."""
     from engines.stv.reference import TEMPLATE_ENV_VAR, STVReferenceData, resolve_template_path
 
-    catalog = None
     try:
-        catalog = STVReferenceData.from_workbook(resolve_template_path(args.template))
+        return STVReferenceData.from_workbook(resolve_template_path(template))
     except FileNotFoundError as exc:
-        if args.template or os.environ.get(TEMPLATE_ENV_VAR):
+        if template or os.environ.get(TEMPLATE_ENV_VAR):
             print(f"error: {exc}")
-            return 1
+            raise _CatalogError from exc
+    return None
+
+
+def _validate_custmat(args) -> int:
+    try:
+        catalog = _course_catalog(args.template)
+    except _CatalogError:
+        return 1
+    report = custom_materials.validate_custom_materials_file(args.file, catalog=catalog)
+    return _print_report(args.file, report)
+
+
+def _validate_stvmap(args) -> int:
+    try:
+        catalog = _course_catalog(args.template)
+    except _CatalogError:
+        return 1
     report = stv_mapping.validate_stv_mapping_file(args.file, catalog=catalog)
     exports = [(d, path) for d in stv_mapping.DISCIPLINES for path in getattr(args, d)]
     if report.ok and exports:
@@ -147,6 +184,12 @@ def main(argv: list[str] | None = None) -> int:
             return _validate_stvmap(args)
         if args.stvmap_command == "schema":
             sys.stdout.write(stv_mapping.json_schema_text())
+            return 0
+    if args.command == "custmat":
+        if args.custmat_command == "validate":
+            return _validate_custmat(args)
+        if args.custmat_command == "schema":
+            sys.stdout.write(custom_materials.json_schema_text())
             return 0
     return 1  # pragma: no cover (argparse enforces the subcommands)
 

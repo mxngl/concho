@@ -6,7 +6,9 @@ Writes
 - ``docs/schema/cost_db.schema.json`` (P3.4: one ``cost_db.csv`` row, from
   ``engines.tvd.cost_db``), and
 - ``docs/schema/stv_mapping.schema.json`` (P3.6: one ``stv_mapping.csv`` row, from
-  ``engines.stv.mapping``).
+  ``engines.stv.mapping``), and
+- ``docs/schema/custom_materials.schema.json`` (P3.7: one ``custom_materials.csv`` row, from
+  ``engines.stv.custom_materials``).
 
 Usage:
     python scripts/export_config_schema.py          # regenerate all
@@ -26,12 +28,14 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from engines.common.config import json_schema, json_schema_text  # noqa: E402
+from engines.stv import custom_materials  # noqa: E402
 from engines.stv import mapping as stv_mapping  # noqa: E402
 from engines.tvd import cost_db  # noqa: E402
 
 SCHEMA_PATH = REPO_ROOT / "docs" / "schema" / "project_config.schema.json"
 COST_DB_SCHEMA_PATH = REPO_ROOT / "docs" / "schema" / "cost_db.schema.json"
 STV_MAPPING_SCHEMA_PATH = REPO_ROOT / "docs" / "schema" / "stv_mapping.schema.json"
+CUSTOM_MATERIALS_SCHEMA_PATH = REPO_ROOT / "docs" / "schema" / "custom_materials.schema.json"
 DOC_PATH = REPO_ROOT / "docs" / "config.md"
 BEGIN = "<!-- BEGIN GENERATED: field reference (python scripts/export_config_schema.py) -->"
 END = "<!-- END GENERATED -->"
@@ -163,11 +167,15 @@ def main(argv: list[str] | None = None) -> int:
     stv_text = stv_mapping.json_schema_text()
     stv_current = (STV_MAPPING_SCHEMA_PATH.read_text(encoding="utf-8")
                    if STV_MAPPING_SCHEMA_PATH.exists() else "")
+    cm_text = custom_materials.json_schema_text()
+    cm_current = (CUSTOM_MATERIALS_SCHEMA_PATH.read_text(encoding="utf-8")
+                  if CUSTOM_MATERIALS_SCHEMA_PATH.exists() else "")
 
     stale = [p for p, new, old in ((SCHEMA_PATH, schema_text, schema_current),
                                    (DOC_PATH, doc_text, doc_current),
                                    (COST_DB_SCHEMA_PATH, cost_text, cost_current),
-                                   (STV_MAPPING_SCHEMA_PATH, stv_text, stv_current))
+                                   (STV_MAPPING_SCHEMA_PATH, stv_text, stv_current),
+                                   (CUSTOM_MATERIALS_SCHEMA_PATH, cm_text, cm_current))
              if new != old]
     if args.check:
         for p in stale:
@@ -175,8 +183,8 @@ def main(argv: list[str] | None = None) -> int:
         if stale:
             print("Run: python scripts/export_config_schema.py", file=sys.stderr)
             return 1
-        print("project_config schema, field reference, cost_db and stv_mapping schemas are "
-              "up to date.")
+        print("project_config schema, field reference, cost_db, stv_mapping and "
+              "custom_materials schemas are up to date.")
         return 0
 
     SCHEMA_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -184,6 +192,7 @@ def main(argv: list[str] | None = None) -> int:
     DOC_PATH.write_text(doc_text, encoding="utf-8")
     COST_DB_SCHEMA_PATH.write_text(cost_text, encoding="utf-8")
     STV_MAPPING_SCHEMA_PATH.write_text(stv_text, encoding="utf-8")
+    CUSTOM_MATERIALS_SCHEMA_PATH.write_text(cm_text, encoding="utf-8")
     for p in stale:
         print(f"updated: {p.relative_to(REPO_ROOT)}")
     return 0

@@ -61,6 +61,11 @@ DEFAULT_PRIORITY = 100
 DEFAULT_MAPPING_PATH = Path(__file__).resolve().parents[2] / "template" / "stv_mapping.csv"
 
 
+# P3.7: a rule whose note contains the word "proxy" books its elements as a stand-in
+# material; the results flag those quantities (ConstructionItem.proxy_amount).
+PROXY_RE = re.compile(r"\bproxy\b", re.IGNORECASE)
+
+
 class Discipline(StrEnum):
     ARCHITECTURE = "architecture"
     STRUCTURAL = "structural"
@@ -169,7 +174,12 @@ class StvMappingRow(BaseModel):
             for c in conversions.CONVERSIONS.values()
         ) + ". One-parameter conversions may be written name=value. Empty = none.",
     )
-    note: str = Field(default="", description="Free text (why this rule, proxies, ...).")
+    note: str = Field(
+        default="",
+        description="Free text (why this rule, proxies, ...). A note containing the word "
+                    "'proxy' marks a proxy rule (P3.7): its quantities are flagged in the "
+                    "results (data_flags).",
+    )
 
 
 def json_schema() -> dict[str, Any]:
@@ -271,6 +281,8 @@ def parse_keyword(spec: str) -> Keyword:
 
 @dataclass(frozen=True)
 class MappingRule:
+    """One validated rule. ``is_proxy``: the note contains the word "proxy" (P3.7)."""
+
     row: int
     discipline: str
     assembly_code: str
@@ -308,6 +320,10 @@ class MappingRule:
     def unit(self) -> str:
         return conversions.output_unit(self.quantity_field, self.conversion)
 
+    @property
+    def is_proxy(self) -> bool:
+        return bool(PROXY_RE.search(self.note))
+
     def label(self) -> str:
         parts = [f"row {self.row}"]
         if self.discipline:
@@ -330,6 +346,7 @@ class MappingRule:
             "stv_material_type": self.stv_material_type,
             "quantity_field": self.quantity_field,
             "conversion": self.conversion_text,
+            "proxy": self.is_proxy,
         }
 
 
@@ -810,6 +827,7 @@ class ScheduleReport:
                     "material_type": item.material_type,
                     "amount": item.amount,
                     "estimated_amount": item.estimated_amount,
+                    "proxy_amount": item.proxy_amount,
                 }
                 for item in self.construction_items
             ],
@@ -822,6 +840,7 @@ def map_elements(
     """Map elements; raise :class:`StvMappingTieError` listing every tie."""
     totals: dict[tuple[str, str], float] = defaultdict(float)
     estimated: dict[tuple[str, str], float] = defaultdict(float)
+    proxy: dict[tuple[str, str], float] = defaultdict(float)
     mapped: list[MappedElement] = []
     ties: list[str] = []
     for element in elements:
@@ -840,6 +859,8 @@ def map_elements(
                 totals[key] += result.amount
                 if result.estimated:
                     estimated[key] += result.amount
+                if match.rule.is_proxy:
+                    proxy[key] += result.amount
         mapped.append(result)
     if ties:
         raise StvMappingTieError(
@@ -848,7 +869,8 @@ def map_elements(
         )
     items = [
         ConstructionItem(assembly=assembly, material_type=material_type, amount=amount,
-                         estimated_amount=estimated.get((assembly, material_type), 0.0))
+                         estimated_amount=estimated.get((assembly, material_type), 0.0),
+                         proxy_amount=proxy.get((assembly, material_type), 0.0))
         for (assembly, material_type), amount in sorted(totals.items())
         if amount > 0
     ]

@@ -232,3 +232,18 @@ def test_shipped_tables_match_the_course_catalog(path):
     catalog = STVReferenceData.from_workbook(os.environ[TEMPLATE_ENV_VAR])
     mapping = load_stv_mapping(path, catalog=catalog)
     assert mapping.warnings == []
+
+
+def test_pv_panels_map_to_energy_photovoltaics(default_reference, tmp_path):
+    """P3.8: PV panels (D5090, keyword) become the course Energy item 'Photovoltaics (sf)'."""
+    mapping = load_stv_mapping(DEFAULT_MAPPING_PATH, catalog=default_reference)
+    export = _write(tmp_path / "pv.csv", [
+        ("301", "Electrical Equipment", "PV Array", "Photovoltaic panel 400W", "Glass", "D5090",
+         "2500 SF", ""),
+        ("302", "Generic Models", "Roof Solar Panel", "Mono", "Glass", "D5090", "1500 SF", ""),
+        ("303", "Electrical Equipment", "Switchboard", "400A", "Steel", "D5090", "20 SF", ""),
+    ])
+    report = load_architecture_schedule(export, mapping)
+    assert [(i.assembly, i.material_type, i.amount) for i in report.construction_items] == [
+        ("Energy", "Photovoltaics (sf)", 4000.0)]
+    assert [row["element_id"] for row in report.skipped_rows] == ["303"]

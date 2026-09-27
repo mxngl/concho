@@ -2,8 +2,9 @@
 
 ``stv.course_team``, ``stv.lifetime_years`` and ``stv.use_phase`` of the config become the
 engine inputs; ``stv.custom_materials_file`` (or ``files.custom_materials``) is loaded and
-validated only (used in the calculation from P3.7). ``files.stv_mapping`` (P3.6) is the STV
-mapping table for Revit exports (resolved relative to the config file).
+validated here; ``concho-stv`` checks it again against the course catalog and adds it to the
+reference data (P3.7, ``STVReferenceData.add_custom_materials``). ``files.stv_mapping``
+(P3.6) is the STV mapping table for Revit exports (resolved relative to the config file).
 """
 
 from __future__ import annotations
@@ -16,6 +17,7 @@ from engines.common.config import ProjectConfig, UsePhase
 
 from .custom_materials import CustomMaterials, load_custom_materials
 from .engine import LIFETIME_YEARS
+from .models import CONFIG_ORIGIN
 
 
 @dataclass
@@ -24,9 +26,13 @@ class STVProjectSettings:
     lifetime_years: int
     use_phase: dict[str, Any]
     use_phase_modeled: bool
+    not_modeled_reason: str | None = None
+    use_phase_all_zero: bool = False
     custom_materials: CustomMaterials | None = None
     warnings: list[str] = field(default_factory=list)
     stv_mapping: Path | None = None
+    # P3.8: stv.construction_items in the STVInputs.from_dict format (origin project_config).
+    construction_items: list[dict[str, Any]] = field(default_factory=list)
 
     @classmethod
     def from_config(
@@ -47,17 +53,13 @@ class STVProjectSettings:
                 "covers construction only."
             )
         elif stv.use_phase.all_zero():
-            warnings.append("stv.use_phase: all use-phase values are 0.")
+            warnings.append("stv.use_phase: all use-phase values are 0 (stated as modeled; "
+                            "if it is not modeled, set not_modeled: true with a reason).")
 
         custom = None
         rel = stv.custom_materials_file or config.files.custom_materials
         if rel is not None:
             custom = load_custom_materials(Path(config_dir) / rel)
-            warnings += custom.warnings
-            warnings.append(
-                f"custom materials file {rel}: {len(custom.records)} valid material(s), not "
-                "used in the calculation yet (P3.7)."
-            )
 
         mapping = config.files.stv_mapping
         return cls(
@@ -65,10 +67,28 @@ class STVProjectSettings:
             lifetime_years=stv.lifetime_years,
             use_phase=use_phase_payload(stv.use_phase) if modeled else {},
             use_phase_modeled=modeled,
+            not_modeled_reason=None if modeled else stv.use_phase.not_modeled_reason,
+            use_phase_all_zero=modeled and stv.use_phase.all_zero(),
             custom_materials=custom,
             warnings=warnings,
             stv_mapping=None if mapping is None else Path(config_dir) / mapping,
+            construction_items=[
+                {"assembly": i.assembly, "material_type": i.material_type,
+                 "amount": i.amount, "origin": CONFIG_ORIGIN}
+                for i in stv.construction_items
+            ],
         )
+
+
+    def use_phase_status(self) -> dict[str, Any]:
+        """P3.8: ``use_phase_status`` of the results for a run with this config (without the
+        ``inputs``, which the engine adds)."""
+        return {
+            "modeled": self.use_phase_modeled,
+            "source": "project_config",
+            "not_modeled_reason": self.not_modeled_reason,
+            "all_zero": self.use_phase_all_zero or not self.use_phase_modeled,
+        }
 
 
 def use_phase_payload(use_phase: UsePhase) -> dict[str, Any]:

@@ -18,6 +18,13 @@ The embodied equivalence uses reference data read from a recalculated copy of th
 template: the workbook as supplied carries stale cached values in some LCA component
 cells (see ``test_embodied_odp_from_supplied_workbook_differs``).
 
+P3.7 / P3.8 (``test_config_use_phase_with_pv_matches_course``,
+``test_custom_material_matches_course``): a use phase with every field filled, incl. PV as an
+Energy construction item, taken through ``project_config`` (``STVProjectSettings``), and a
+custom material from a ``custom_materials.csv`` text, which the workbook expresses as an extra
+``LCA Data`` row (written over the unreferenced catalog row ``CUSTOM_LCA_ROW`` of the copy; the
+course sheet looks materials up by name). Both inputs are invented.
+
 Known differences between the engine and the course (engine left unchanged, see the
 ``test_*_differs`` test): the stale cached LCA component values of the supplied workbook.
 Fixed in P3.10 and now compared like the main cases: the cogeneration water/ODP columns
@@ -27,6 +34,7 @@ and the toilet factor with a urinal cell of 0 (``test_toilet_factor_matches_cour
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import subprocess
@@ -42,7 +50,11 @@ pytestmark = pytest.mark.skipif(
 
 openpyxl = pytest.importorskip("openpyxl")
 
+from engines.common.config import load_config  # noqa: E402
 from engines.stv import STVEngine, STVInputs  # noqa: E402
+from engines.stv.custom_materials import COLUMNS as CUSTOM_COLUMNS  # noqa: E402
+from engines.stv.custom_materials import validate_custom_materials_text  # noqa: E402
+from engines.stv.project import STVProjectSettings  # noqa: E402
 from engines.stv.reference import STVReferenceData  # noqa: E402
 
 REL = 1e-6
@@ -89,6 +101,8 @@ class Case:
     use_phase: dict = field(default_factory=dict)
     # True: leave the urinal cell D33 blank (the template ships it as 0).
     urinal_blank: bool = False
+    # P3.7: a custom material (custom_materials.csv row) written into 'LCA Data'.
+    custom_row: dict | None = None
 
     def engine_inputs(self) -> STVInputs:
         # The engine gets what the course sheet holds in D33 (decision D11): blank -> None
@@ -259,6 +273,75 @@ COGEN_ONLY = Case(
 )
 EDGE_CASES = [TOILET_URINAL_ZERO, TOILET_URINAL_BLANK, RAINWATER_ABOVE_COURSE_CAP, COGEN_ONLY]
 
+# --- P3.8: filled use phase incl. PV, through project_config ---------------------------
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+TEMPLATE_CONFIG = REPO_ROOT / "template" / "project_config.example.json"
+FILLED_USE_PHASE = {  # every field stated and non-zero (invented)
+    "not_modeled": False,
+    "grid_kwh": 85_000,
+    "onsite_renewable_kwh": 120_000,
+    "natural_gas_m3": 1_500,
+    "cogeneration": {"fuel_type": "Natural Gas", "electricity_kwh": 40_000,
+                     "heating_mj": 90_000, "cooling_kwh": 15_000,
+                     "splits": {"electricity": 0.5, "heating": 0.3, "cooling": 0.2}},
+    "water": {"toilet_gpf": 1.1, "urinal_gpf": 0.125, "wc_sink_gpm": 0.5,
+              "lab_sink_gpm": 0.8, "kitchen_sink_gpm": 1.5, "shower_gpm": 1.8,
+              "landscaping_gal": 30_000, "rainwater_gal": 250_000},
+}
+CONFIG_ITEMS = [  # PV panels and an EV battery as config construction items (invented)
+    {"assembly": "Energy", "material_type": "Photovoltaics (sf)", "amount": 4_200,
+     "note": "invented PV area"},
+    {"assembly": "Energy", "material_type": "EV Battery (kWh)", "amount": 300,
+     "note": "invented battery"},
+]
+
+
+def _config_case(tmp_dir: Path) -> Case:
+    """The case as concho-stv --config builds it: STVProjectSettings of a project_config."""
+    data = json.loads(TEMPLATE_CONFIG.read_text(encoding="utf-8"))
+    data.pop("$schema")
+    data["files"] = {}
+    data["stv"].update(course_team="Island", use_phase=FILLED_USE_PHASE,
+                       construction_items=CONFIG_ITEMS)
+    path = tmp_dir / "project_config.json"
+    path.write_text(json.dumps(data), encoding="utf-8")
+    settings = STVProjectSettings.from_config(load_config(path), tmp_dir)
+    items = [("Floor", "Wood System (sf)", 12_000.0)] + [
+        (i["assembly"], i["material_type"], i["amount"]) for i in settings.construction_items]
+    return Case(id="config_use_phase_pv", team=settings.team, items=items,
+                use_phase=settings.use_phase)
+
+
+# --- P3.7: a custom material path ------------------------------------------------------
+
+# 'LCA Data' row of the copy that takes the custom material: QR5 (Turbine), which no formula
+# references and no case uses.
+CUSTOM_LCA_ROW = 102
+CUSTOM_NAME = "Invented Bamboo Beam (kg)"
+_CUSTOM_PARTS = {"materials": (-0.35, 11.0, 28.0, 1.2e-8), "transport": (0.12, 1.6, 0.6, 2e-9),
+                 "construction": (0.04, 0.45, 1.8, 7e-10)}
+_IND = ("gwp_kgco2e", "energy_mj", "water_kg", "odp_kgcfc11e")
+CUSTOM_ROW = {
+    "assembly": "Beams", "material_type": CUSTOM_NAME, "life_units": "1",
+    "source": "invented test EPD, not real data", "is_course_data": "false",
+    **{f"{p}_{i}": repr(v[n]) for p, v in _CUSTOM_PARTS.items() for n, i in enumerate(_IND)},
+    **{f"embodied_{i}": repr(sum(v[n] for v in _CUSTOM_PARTS.values()))
+       for n, i in enumerate(_IND)},
+}
+CUSTOM_CASE = Case(
+    id="custom_material",
+    team="Island",
+    items=[("Beams", CUSTOM_NAME, 25_000.0), ("Beams", "Glulam Beam (kg)", 10_000.0),
+           ("Floor", "Concrete (sf)", 8_000.0)],
+    custom_row=CUSTOM_ROW,
+)
+
+
+def _custom_csv() -> str:
+    return (",".join(CUSTOM_COLUMNS) + "\n"
+            + ",".join(f'"{CUSTOM_ROW[c]}"' for c in CUSTOM_COLUMNS) + "\n")
+
 
 # --- workbook helpers -----------------------------------------------------------------
 
@@ -287,6 +370,16 @@ def _write_case(template: Path, case: Case, dest: Path) -> None:
         up[cell] = float(water.get(key) or 0.0)
     if case.urinal_blank:
         up["D33"] = None
+    if case.custom_row is not None:
+        lca, r, row = wb["LCA Data"], CUSTOM_LCA_ROW, case.custom_row
+        lca[f"B{r}"] = {"Beams": "Beam", "Columns": "Column"}.get(row["assembly"],
+                                                                 row["assembly"])
+        lca[f"C{r}"] = row["material_type"]
+        columns = [f"{p}_{i}" for p in ("embodied", "materials", "transport", "construction")
+                   for i in _IND]
+        for letter, column in zip("DEFGHIJKLMNOPQRS", columns, strict=True):
+            lca[f"{letter}{r}"] = float(row[column])
+        lca[f"T{r}"] = float(row["life_units"])
     wb.save(dest)
 
 
@@ -322,6 +415,10 @@ def _max_rel_err(course: tuple[float, ...], engine: tuple[float, ...]) -> float:
     return max((abs(c - e) / abs(c) if c else abs(e)) for c, e in zip(course, engine, strict=True))
 
 
+def p37_p38_cases(base: Path) -> list[Case]:
+    return [CUSTOM_CASE, _config_case(base)]
+
+
 @pytest.fixture(scope="module")
 def template() -> Path:
     return Path(os.environ["COURSE_STV_XLSX"])
@@ -343,7 +440,7 @@ def recalculated(template, tmp_path_factory) -> Path:
     # openpyxl drops all cached formula values on save, so LibreOffice recomputes every cell.
     openpyxl.load_workbook(template).save(src_dir / f"{TEMPLATE_ID}.xlsx")
     sources = [src_dir / f"{TEMPLATE_ID}.xlsx"]
-    for case in [*CASES, *EDGE_CASES]:
+    for case in [*CASES, *EDGE_CASES, *p37_p38_cases(base)]:
         path = src_dir / f"{case.id}.xlsx"
         _write_case(template, case, path)
         sources.append(path)
@@ -361,7 +458,7 @@ def engine_recalculated(recalculated) -> STVEngine:
 def course(recalculated) -> dict[str, dict]:
     """Course results per case id, read from the recalculated copies."""
     results = {}
-    for case in [*CASES, *EDGE_CASES]:
+    for case in [*CASES, *EDGE_CASES, CUSTOM_CASE, _config_case(recalculated.parent)]:
         wb = openpyxl.load_workbook(recalculated / f"{case.id}.xlsx", data_only=True)
         results[case.id] = {
             "targets": _cells(wb[CM], TARGET_CELLS),
@@ -487,3 +584,50 @@ def test_embodied_odp_from_supplied_workbook_differs(engine, engine_recalculated
         assert supplied[:3] == pytest.approx(expected[:3], rel=REL)
         assert fresh[3] == pytest.approx(expected[3], rel=REL)
         assert supplied[3] < expected[3]
+
+
+# --- P3.7 / P3.8 ----------------------------------------------------------------------
+
+
+def test_config_use_phase_with_pv_matches_course(engine_recalculated, course, recalculated):
+    """P3.8: every use-phase field filled (cogeneration, gas, all water incl. rainwater) and
+    PV + EV battery as Energy construction items, all through project_config: embodied, use
+    phase and targets match the course sheets."""
+    case = _config_case(recalculated.parent)
+    got = engine_recalculated.calculate(case.engine_inputs())
+    expected = course[case.id]
+    assert _vector(got.breakdown.embodied) == pytest.approx(expected["embodied"], rel=REL)
+    assert _vector(got.breakdown.use_phase) == pytest.approx(expected["use_phase"], rel=REL)
+    assert _vector(got.targets)[:3] == pytest.approx(expected["targets"], rel=REL)
+    assert all(v != 0 for v in expected["use_phase"])
+    print(f"config use phase + PV: use phase max rel err "
+          f"{_max_rel_err(expected['use_phase'], _vector(got.breakdown.use_phase)):.3e}")
+
+
+def test_custom_material_matches_course(recalculated, course):
+    """P3.7: a custom material from custom_materials.csv, used like a catalog entry, gives
+    the embodied impacts the course sheet computes for the same values in 'LCA Data'."""
+    reference = STVReferenceData.from_workbook(recalculated / f"{TEMPLATE_ID}.xlsx")
+    custom = validate_custom_materials_text(_custom_csv(), catalog=reference)
+    assert custom.ok, custom.errors
+    reference.add_custom_materials(custom)
+    got = STVEngine(reference).calculate(CUSTOM_CASE.engine_inputs())
+    expected = course[CUSTOM_CASE.id]["embodied"]
+    print(f"custom material: embodied max rel err "
+          f"{_max_rel_err(expected, _vector(got.breakdown.embodied)):.3e}")
+    assert _vector(got.breakdown.embodied) == pytest.approx(expected, rel=REL)
+    flags = got.to_dict()["data_flags"]
+    assert flags["custom_material"] and flags["by_assembly"]["Beams"]["custom_material"]
+    assert not flags["by_assembly"]["Floor"]["custom_material"]
+
+
+@pytest.mark.parametrize("path", [
+    TEMPLATE_CONFIG,
+    REPO_ROOT / "engines/common/examples/island_2026_use_phase.project_config.json",
+], ids=["template", "island_use_phase"])
+def test_config_construction_items_are_course_catalog_entries(engine, path):
+    """P3.8: the shipped configs' construction items (PV) name course catalog entries."""
+    settings = STVProjectSettings.from_config(load_config(path), path.parent)
+    assert settings.construction_items
+    for item in settings.construction_items:
+        engine.reference_data.validate_item(item["assembly"], item["material_type"])

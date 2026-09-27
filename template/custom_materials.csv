@@ -1,0 +1,6 @@
+# Custom materials (P3.7): team data from EPDs, not course data. One row per material,
+# values per unit of material_type (its unit in brackets at the end of the name), columns as a
+# course 'LCA Data' row plus source (EPD reference: document, page, declared unit, conversion)
+# and is_course_data (always false). Format: docs/engines/stv.md. Check with
+#   concho custmat validate custom_materials.csv   (with $COURSE_STV_XLSX set)
+assembly,material_type,embodied_gwp_kgco2e,embodied_energy_mj,embodied_water_kg,embodied_odp_kgcfc11e,materials_gwp_kgco2e,materials_energy_mj,materials_water_kg,materials_odp_kgcfc11e,transport_gwp_kgco2e,transport_energy_mj,transport_water_kg,transport_odp_kgcfc11e,construction_gwp_kgco2e,construction_energy_mj,construction_water_kg,construction_odp_kgcfc11e,life_units,source,is_course_data
