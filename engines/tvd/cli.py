@@ -56,7 +56,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--event", metavar="LABEL",
                         help='Tracking event of this run (course "TVD Tracking" column EVENT), '
-                             'e.g. "Winter presentation"; stored in the snapshot and the '
+                             'e.g. "Design review 1"; stored in the snapshot and the '
                              "results JSON tracking table")
     parser.add_argument("--note", metavar="TEXT",
                         help="Free-text note for this run (stored like --event)")

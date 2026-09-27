@@ -296,7 +296,7 @@ every run can carry an event label and a note:
 
 ```bash
 concho-tvd --config … --arch … --struct … --out out \
-           --snapshot "Week 12" --event "Winter presentation" --note "after the facade VE"
+           --snapshot "Week 12" --event "Design review 1" --note "after the facade VE"
 ```
 
 - `--event` / `--note` are stored in the history snapshot (keys `event`, `note`, written

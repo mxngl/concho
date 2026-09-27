@@ -283,9 +283,9 @@ def _summary(total):
 
 def test_snapshot_stores_event_and_note(tmp_path):
     path = save_snapshot(str(tmp_path), "Week 3", [], _summary(95.0), 0,
-                         event="Winter presentation", note="after VE")
+                         event="Design review 1", note="after VE")
     data = json.loads(Path(path).read_text(encoding="utf-8"))
-    assert data["event"] == "Winter presentation" and data["note"] == "after VE"
+    assert data["event"] == "Design review 1" and data["note"] == "after VE"
     plain = save_snapshot(str(tmp_path / "b"), "Week 4", [], _summary(95.0), 0)
     assert set(json.loads(Path(plain).read_text(encoding="utf-8"))) == {
         "label", "date", "results", "summary", "unmapped_count"}  # format unchanged
@@ -295,7 +295,7 @@ def test_old_snapshots_without_event_still_load(tmp_path):
     old = {"label": "Old run", "date": "2026-04-01", "results": [], "summary": _summary(120.0),
            "unmapped_count": 3}
     (tmp_path / "20260401_000000_old_run.json").write_text(json.dumps(old), encoding="utf-8")
-    save_snapshot(str(tmp_path), "New run", [], _summary(90.0), 0, event="Fish bowl")
+    save_snapshot(str(tmp_path), "New run", [], _summary(90.0), 0, event="Owner workshop")
     history = load_history(str(tmp_path))
     assert [v["label"] for v in history] == ["Old run", "New run"]
 
@@ -304,7 +304,7 @@ def test_old_snapshots_without_event_still_load(tmp_path):
     old_row, new_row = table["rows"]
     assert old_row == {"date": "2026-04-01", "label": "Old run", "event": None, "note": None,
                        "estimate": 120.0, "delta": -20.0, "current": False}
-    assert new_row["event"] == "Fish bowl" and new_row["delta"] == 10.0
+    assert new_row["event"] == "Owner workshop" and new_row["delta"] == 10.0
     assert new_row["current"] is True  # no extra row: the run is the last snapshot
 
 
@@ -315,12 +315,12 @@ def test_cli_event_and_note(tmp_path, synthetic_paths, monkeypatch):
               "--cost", synthetic_paths["cost"], "--config", str(RIVER_CONFIG),
               "--out", str(out)]
     assert main([*common, "--snapshot", "Week 1", "--event", "Kick-off"]) == 0
-    assert main([*common, "--event", "Fish bowl", "--note", "no snapshot"]) == 0
+    assert main([*common, "--event", "Owner workshop", "--note", "no snapshot"]) == 0
     latest = json.loads((out / "results" / "latest.json").read_text(encoding="utf-8"))
     rows = latest["tracking"]["rows"]
     assert [(r["label"], r["event"], r["note"], r["current"]) for r in rows] == [
         ("Week 1", "Kick-off", None, False),
-        (latest["meta"]["label"], "Fish bowl", "no snapshot", True),
+        (latest["meta"]["label"], "Owner workshop", "no snapshot", True),
     ]
     grand_total = latest["financials"]["grand_total"]
     assert rows[-1]["estimate"] == grand_total
