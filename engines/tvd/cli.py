@@ -129,6 +129,9 @@ def main(argv: list[str] | None = None) -> int:
         marker = " ◄" if r["cluster"] == "GRAND TOTAL" else ""
         print(f"  {r['cluster']:<35} {fmt_usd(r['total']):>14}{marker}")
     print(f"\n  Unmapped elements: {unmapped_count} (no Assembly Code)")
+    overall = run.reliability["totals"]["overall"]
+    print("  Reliability (overall): " + ", ".join(
+        f"{level.replace('_', ' ')} {fmt_usd(amount)}" for level, amount in overall.items()))
 
     # 8. Save explicit snapshot if requested, then load history
     if args.snapshot:

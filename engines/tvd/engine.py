@@ -13,6 +13,7 @@ from engines.common.config import ProjectConfig
 from engines.tvd.cost_db import CostDb, Rule, load_cost_db
 from engines.tvd.loading import load_csv_file, merge_takeoffs, source_label
 from engines.tvd.quantities import aggregate_quantities, calculate_costs, split_rules
+from engines.tvd.reliability import reliability_summary
 from engines.tvd.results_writer import build_results_payload
 from engines.tvd.rules import EXCLUDE_CATEGORIES
 from engines.tvd.summary import build_cluster_summary
@@ -34,6 +35,7 @@ class TvdRun:
     project: ProjectTargets
     notes: list[str] = field(default_factory=list)
     cost_db_validation: dict | None = None
+    reliability: dict | None = None
 
     @property
     def targets(self) -> dict[str, float]:
@@ -61,6 +63,7 @@ class TvdRun:
             ),
             target_consistency=self.project.target_consistency(),
             cost_db_validation=self.cost_db_validation,
+            reliability=self.reliability,
         )
 
 
@@ -125,6 +128,7 @@ def compute(
         project=project,
         notes=notes,
         cost_db_validation=cost_db.validation_block(),
+        reliability=reliability_summary(lines, results),
     )
 
 

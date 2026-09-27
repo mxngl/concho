@@ -256,6 +256,39 @@ Shares are rounded to 10 decimals, amounts to cents.
 For an explicit split with `basis: amount`, `final_share` = amount / `course_cluster_base`
 (Island 2026: the shares sum to 1.00035, the 5,852 gap of `target_consistency`).
 
+## Reliability summary (P3.5)
+
+`engines/tvd/reliability.py` sums the line estimates by reliability, like the course
+cluster sheets (rows below the line items, e.g. `'A Substructure'!K26:P28`: labels
+High/Medium/Low in K, ratings 1/2/3 in M, `SUMIF` over the ratings in N = quantity,
+O = cost data, P = overall) and the **TVD Reliability** sheet (per cluster and totals).
+
+- Scale: **1 = High, 2 = Medium, 3 = Low** (`qty_reliability`, `cost_reliability` of the
+  cost DB).
+- **Overall** of a line = the worse of its two ratings (course column P = `MAX(N:O)`); a
+  line with only one rating takes that one (`MAX` ignores blanks); a line with none is
+  `not_rated`.
+- Unrated lines are summed as `not_rated`, so high + medium + low + not_rated = the
+  cluster estimate in every category.
+
+Results JSON `reliability` (after `cost_db_validation`):
+
+| Key | Meaning |
+|---|---|
+| `scale` | `{"1": "high", "2": "medium", "3": "low"}` |
+| `clusters` | per cluster of the run (course clusters and custom clusters): `quantity`, `cost`, `overall`, each `{high, medium, low, not_rated}` in $, plus `estimate` (the cluster total) |
+| `totals` | the same over all clusters (`estimate` = grand total) |
+| `totals_a_to_h` | the same over the course clusters A–H only (the scope of the course sheet) |
+
+**Course sheet errors, not copied:** in **TVD Reliability**, E14 (quantity HIGH of
+H General Conditions) points to `'H Gen. Cond.'!W30` (the target column) instead of N30,
+and the LOW totals C6 (quantity) and C18 (cost) are `SUM(C7:C13)` / `SUM(C19:C25)`, which
+leave out the H row. The engine sums all clusters A–H. To be reported to the course with the
+`TVD Summary` C25 bug (P3.10 item 6).
+
+Island 2026 is not rated (the migrated cost DB has empty reliability columns), so its whole
+estimate is `not_rated` in all three categories.
+
 ## Cent rounding of line totals (P3.10 item 4)
 
 The engine rounds each **line total to cents when it computes it**, and every sum is built

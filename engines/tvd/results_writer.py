@@ -23,6 +23,7 @@ def build_results_payload(
     target_derivation: dict | None = None,
     target_consistency: dict | None = None,
     cost_db_validation: dict | None = None,
+    reliability: dict | None = None,
 ) -> dict:
     """
     Build the structured results dict of a run.
@@ -47,6 +48,9 @@ def build_results_payload(
     cost_db_validation – cost DB validation result (P3.4; only if given): status
                         (ok | warnings), rows, error_count, warning_count, warnings,
                         unpriced [{row, cluster, assembly_code}], not_rated {column: count}
+    reliability       – estimate $ per cluster by reliability level (P3.5; only if given):
+                        scale, clusters {name: {quantity, cost, overall: {high, medium,
+                        low, not_rated}, estimate}}, totals, totals_a_to_h
     line_items        – dict of cluster → list of full line-item rows
     """
     ts       = ts or datetime.now()
@@ -118,6 +122,8 @@ def build_results_payload(
         payload["target_consistency"] = target_consistency
     if cost_db_validation is not None:
         payload["cost_db_validation"] = cost_db_validation
+    if reliability is not None:
+        payload["reliability"] = reliability
     payload["line_items"] = grouped
     return payload
 

@@ -174,9 +174,9 @@ def test_cluster_summary_and_payload(run):
     payload = run.results_payload()
     assert set(payload) == {
         "meta", "financials", "cluster_targets", "cluster_summary", "target_derivation",
-        "target_consistency", "cost_db_validation", "line_items",
+        "target_consistency", "cost_db_validation", "reliability", "line_items",
     }
-    assert list(payload)[-2:] == ["cost_db_validation", "line_items"]
+    assert list(payload)[-3:] == ["cost_db_validation", "reliability", "line_items"]
     assert payload["cost_db_validation"]["error_count"] == 0
     assert payload["cost_db_validation"]["unpriced"] == [
         {"row": 6, "cluster": "Shell", "assembly_code": "B1010"}
