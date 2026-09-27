@@ -3,12 +3,18 @@ name: Revit add-in release
 # P4.2: builds QTO.dll per Revit version and packages
 #   Concho-QTO-Revit<year>-<version>.zip = QTO.dll + QTO.addin + install.ps1 + INSTALL.md
 # On a pushed tag v*, the zips are attached to a GitHub Release for that tag.
-# workflow_dispatch (for testing) only uploads the zips as workflow artifacts.
+# workflow_dispatch (for testing) and pull requests that touch the add-in only upload the zips as
+# workflow artifacts (GitHub can only dispatch workflows that exist on the default branch, so the
+# pull_request trigger is what tests this workflow before it is merged).
 
 on:
   push:
     tags: ["v*"]
   workflow_dispatch:
+  pull_request:
+    paths:
+      - "revit-addin/**"
+      - ".github/workflows/revit-addin-release.yml"
 
 permissions:
   contents: read
@@ -36,8 +42,11 @@ jobs:
 
       - name: Package
         shell: pwsh
+        env:
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
-          $version = if ($env:GITHUB_REF_TYPE -eq 'tag') { $env:GITHUB_REF_NAME } else { "dev-$($env:GITHUB_SHA.Substring(0, 7))" }
+          $sha = if ($env:PR_HEAD_SHA) { $env:PR_HEAD_SHA } else { $env:GITHUB_SHA }
+          $version = if ($env:GITHUB_REF_TYPE -eq 'tag') { $env:GITHUB_REF_NAME } else { "dev-$($sha.Substring(0, 7))" }
           $name = "Concho-QTO-Revit${{ matrix.year }}-$version"
           $stage = Join-Path $env:RUNNER_TEMP $name
           New-Item -ItemType Directory -Path $stage | Out-Null
