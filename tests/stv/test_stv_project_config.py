@@ -17,7 +17,7 @@ from conftest import TEAM
 from engines.common.config import UsePhase, load_config
 from engines.stv import STVEngine, STVInputs, cli
 from engines.stv.custom_materials import (
-    REQUIRED_COLUMNS,
+    COLUMNS,
     CustomMaterialsError,
     load_custom_materials,
 )
@@ -151,21 +151,21 @@ def test_river_config_changes_team_targets_and_use_phase(reference_with_river):
     assert river.breakdown.use_water.water > 0
 
 
-# ── custom materials (load + validate only, P3.7 uses them) ─────────────────
+# ── custom materials (format: tests/stv/test_stv_custom_materials.py) ────────
 
 def _write_materials(path: Path, rows: list[dict]) -> Path:
-    lines = [",".join(REQUIRED_COLUMNS)]
+    lines = [",".join(COLUMNS)]
     for row in rows:
-        lines.append(",".join(str(row.get(c, "")) for c in REQUIRED_COLUMNS))
+        lines.append(",".join(str(row.get(c, "")) for c in COLUMNS))
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return path
 
 
 def _material(**overrides) -> dict:
-    row = {c: 1.0 for c in REQUIRED_COLUMNS}
-    row.update({f"total_{k}": 3.0 for k in ("carbon", "energy", "water", "ozone")})
+    row = {c: 1.0 for c in COLUMNS}
+    row.update({c: 3.0 for c in COLUMNS if c.startswith("embodied_")})
     row.update(assembly="Floor", material_type="Engineered Bamboo (cf)",
-               source="Invented EPD 123", is_course_data="false", unit_multiplier=1)
+               source="Invented EPD 123", is_course_data="false", life_units=1)
     row.update(overrides)
     return row
 
@@ -176,35 +176,12 @@ def test_custom_materials_load(tmp_path):
     (record,) = loaded.records
     assert record.material_type == "Engineered Bamboo (cf)"
     assert record.embodied_total.carbon == 3.0 and record.materials.carbon == 1.0
-    assert loaded.warnings == []
 
 
 def test_custom_materials_errors(tmp_path):
-    path = _write_materials(tmp_path / "custom.csv", [
-        _material(assembly="Spaceship"),
-        _material(is_course_data="true", source=""),
-        _material(total_carbon="1.5 kg"),
-        _material(material_type="Dup"), _material(material_type="Dup"),
-    ])
-    with pytest.raises(CustomMaterialsError) as exc:
+    path = _write_materials(tmp_path / "custom.csv", [_material(assembly="Spaceship")])
+    with pytest.raises(CustomMaterialsError, match="unknown assembly 'Spaceship'"):
         load_custom_materials(path)
-    text = "\n".join(exc.value.errors)
-    assert "unknown assembly 'Spaceship'" in text
-    assert "is_course_data must be false" in text and "source is empty" in text
-    assert "total_carbon is not a plain number" in text
-    assert "duplicate material Floor / Dup" in text
-
-
-def test_custom_materials_missing_columns(tmp_path):
-    path = tmp_path / "custom.csv"
-    path.write_text("assembly,material_type\nFloor,X\n", encoding="utf-8")
-    with pytest.raises(CustomMaterialsError, match="missing columns: total_carbon"):
-        load_custom_materials(path)
-
-
-def test_custom_materials_sum_warning(tmp_path):
-    path = _write_materials(tmp_path / "custom.csv", [_material(total_water=5.0)])
-    assert "total_water (5) is not materials" in load_custom_materials(path).warnings[0]
 
 
 def test_custom_materials_from_config(tmp_path, reference_with_river):

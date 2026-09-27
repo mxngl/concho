@@ -529,7 +529,7 @@
             }
           ],
           "default": null,
-          "description": "Custom materials CSV (P3.7).",
+          "description": "STV custom materials (custom_materials.csv format, P3.7; see docs/engines/stv.md): EPD-based materials the course catalog lacks, used like catalog entries; results that rest on them are flagged.",
           "title": "Custom Materials"
         },
         "macro_schedule": {
@@ -775,7 +775,7 @@
             }
           ],
           "default": null,
-          "description": "Optional custom materials CSV (P3.7). Same as files.custom_materials; if both are set they must be the same path.",
+          "description": "Optional custom materials CSV (custom_materials.csv format, P3.7). Same as files.custom_materials; if both are set they must be the same path.",
           "title": "Custom Materials File"
         }
       },

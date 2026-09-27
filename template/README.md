@@ -3,7 +3,8 @@
 The per-team data repo template (project config, cost DB, STV mapping, custom materials, macro schedule, exports, pipeline workflow). Ships without any course or RSMeans data.
 
 Filled by: Phase 5 (P5.1, P5.2). Already here: `project_config.example.json` (P3.1),
-`cost_db.csv` and `examples/cost_db.example.csv` (P3.4), `stv_mapping.csv` (P3.6).
+`cost_db.csv` and `examples/cost_db.example.csv` (P3.4), `stv_mapping.csv` (P3.6),
+`custom_materials.csv` (P3.7).
 
 ## `cost_db.csv`
 
@@ -22,6 +23,15 @@ common Uniformat codes, a small reviewed set (names only, no LCA values; not cou
 your categories and keywords (format: [`docs/engines/stv.md`](../docs/engines/stv.md)) and
 check it with `concho stvmap validate stv_mapping.csv` (with `$COURSE_STV_XLSX` set for the
 catalog check). The `mapping_coverage` block of the results lists what is still unmapped.
+
+## `custom_materials.csv`
+
+STV custom materials (P3.7), shipped **empty** (header only). One row per material that is not
+in the course LCA catalog, with its values from an EPD per unit of the material (columns of a
+course `LCA Data` row plus `source` and `is_course_data: false`; format:
+[`docs/engines/stv.md`](../docs/engines/stv.md#custom-materials-custom_materialscsv-p37)).
+Set `files.custom_materials` in the config and check it with `concho custmat validate
+custom_materials.csv` (with `$COURSE_STV_XLSX` set, so names are checked against the catalog).
 
 ## `project_config.example.json`
 

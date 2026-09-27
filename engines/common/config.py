@@ -669,8 +669,8 @@ class STVSection(_Model):
     custom_materials_file: RelPath | None = Field(
         default=None,
         description=(
-            "Optional custom materials CSV (P3.7). Same as files.custom_materials; if both "
-            "are set they must be the same path."
+            "Optional custom materials CSV (custom_materials.csv format, P3.7). Same as "
+            "files.custom_materials; if both are set they must be the same path."
         ),
     )
 
@@ -822,7 +822,10 @@ class FilesSection(_Model):
                     "template/stv_mapping.csv.",
     )
     custom_materials: RelPath | None = Field(
-        default=None, description="Custom materials CSV (P3.7)."
+        default=None,
+        description="STV custom materials (custom_materials.csv format, P3.7; see "
+                    "docs/engines/stv.md): EPD-based materials the course catalog lacks, used "
+                    "like catalog entries; results that rest on them are flagged.",
     )
     macro_schedule: RelPath | None = Field(
         default=None, description="Macro schedule CSV (P3B.1)."

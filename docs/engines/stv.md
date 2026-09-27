@@ -229,6 +229,62 @@ grilles without airflow. 35 ElementIds appear in two disciplines, among them the
 1241457 (architecture: 6,848 sf Concrete; structural: unmapped), 1789623 and 1789655 (both
 mapped in both).
 
+## Custom materials: `custom_materials.csv` (P3.7)
+
+A custom material is a material the course LCA catalog does not have, with values from an
+EPD. It is **team data, not course data**. The file is named by `stv.custom_materials_file`
+(or `files.custom_materials`) of `project_config`, or `--custom-materials` of `concho-stv`.
+It is validated before the run (errors stop it). Template: `template/custom_materials.csv`
+(header only). JSON Schema of one row:
+[`docs/schema/custom_materials.schema.json`](../schema/custom_materials.schema.json)
+(`concho custmat schema`).
+
+One CSV row per material, UTF-8, comma-separated, header row with these names (order free).
+Lines starting with `#` are comments; blank lines are skipped. The columns are those of a
+course `LCA Data` row (B–T) plus `source` and `is_course_data`; all values are **per unit of
+`material_type`**, like the course catalog.
+
+| Column | Course `LCA Data` | Content |
+|---|---|---|
+| `assembly` | B | course assembly: `Foundation`, `Interior Wall`, `Exterior Wall`, `Floor`, `Roof`, `Window`, `Columns`, `Beams`, `MEP`, `Energy`, `Misc` (`Column` / `Beam` as in `LCA Data` are accepted) |
+| `material_type` | C | a new name ending with its unit in brackets, like the course names (`Bamboo Beam (kg)`); the unit is what the mapping table's unit check uses |
+| `embodied_gwp_kgco2e`, `embodied_energy_mj`, `embodied_water_kg`, `embodied_odp_kgcfc11e` | D–G "Embodied" | must equal materials + transport + construction |
+| `materials_…` (same four) | H–K "Materials" | EN 15804 modules A1–A3 |
+| `transport_…` | L–O "Transport" | A4 |
+| `construction_…` | P–S "Construction" | A5 |
+| `life_units` | T "Life Units No." | unit multiplier over the building life (1 = no replacement; the course uses e.g. 2 for carpet) |
+| `source` | – | EPD reference: document, registration number, page, declared unit and the conversion to the unit of `material_type` (e.g. per m³ ÷ density) |
+| `is_course_data` | – | always `false` |
+
+Energy is primary energy in MJ, water in kg (m³ × 1000), ODP in kg CFC-11e, as in the
+course. The course catalog comes from SimaPro / ReCiPe Midpoint (H); EPD values (EN 15804,
+usually CML / EF) are not the same method, so a custom material is never fully comparable
+with a catalog entry. That is why results that rest on custom materials are flagged (below).
+
+### Validation (`concho custmat validate`)
+
+```bash
+concho custmat validate custom_materials.csv [--template CEE_222_STV_V12.xlsx]  # 0 = valid, 1 = errors
+concho custmat schema                                                         # JSON Schema of one row
+```
+
+| Check | Result |
+|---|---|
+| missing, unknown or duplicated column; empty file; more cells than columns | error |
+| `assembly` not a course assembly | error |
+| `material_type` empty, without a `(unit)` at the end, or used twice | error |
+| `material_type` is a course catalog name (any assembly, case and spacing ignored) | error |
+| `source` empty | error |
+| `is_course_data` not `false` | error |
+| a value not a plain number; energy, water or ODP negative (GWP may be negative, e.g. biogenic carbon); `life_units` ≤ 0 | error |
+| `embodied_*` ≠ materials + transport + construction (relative 1e-6) | error |
+| no course workbook given (names not checked against the catalog) | warning |
+| no materials in the file | warning |
+
+From Python: `engines.stv.custom_materials.validate_custom_materials_file(path,
+catalog=reference_data)` or `load_custom_materials(path, catalog=...)` (raises
+`CustomMaterialsError`).
+
 ## Island 2026 reference result
 
 **The current Island result is 2,517,183.14 kgCO₂e** (28,396,923.44 MJ, 30,026,557.14 kg

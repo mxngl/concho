@@ -213,7 +213,7 @@ Generated from `docs/schema/project_config.schema.json`; do not edit by hand.
 | `stv.use_phase.water.shower_gpm` | number \| null |  | `null` | Shower (gal/min). (≥ 0) |
 | `stv.use_phase.water.landscaping_gal` | number \| null |  | `null` | Landscaping water per year (gal). (≥ 0) |
 | `stv.use_phase.water.rainwater_gal` | number \| null |  | `null` | Rainwater collected per year (gal). (≥ 0) |
-| `stv.custom_materials_file` | string \| null |  | `null` | Optional custom materials CSV (P3.7). Same as files.custom_materials; if both are set they must be the same path. |
+| `stv.custom_materials_file` | string \| null |  | `null` | Optional custom materials CSV (custom_materials.csv format, P3.7). Same as files.custom_materials; if both are set they must be the same path. |
 | `schedule` | object | yes |  | Schedule inputs (P3B.7). |
 | `schedule.start_date` | string (date) | yes |  | Construction start. |
 | `schedule.calendar` | object |  |  | Work calendar. |
@@ -246,7 +246,7 @@ Generated from `docs/schema/project_config.schema.json`; do not edit by hand.
 | `files` | object |  |  | Input files and the exports directory, relative to this config file. `cost_db` and `macro_schedule` are needed by the engines (error if set but missing, warning if unset); the others are optional (warning if set but missing). |
 | `files.cost_db` | string \| null |  | `null` | TVD cost DB (cost_db.csv format, P3.4; see docs/engines/tvd.md). The TVD engine validates it before the run. |
 | `files.stv_mapping` | string \| null |  | `null` | STV mapping table (stv_mapping.csv format, P3.6; see docs/engines/stv.md). concho-stv maps the Revit exports with it; unset = the default table template/stv_mapping.csv. |
-| `files.custom_materials` | string \| null |  | `null` | Custom materials CSV (P3.7). |
+| `files.custom_materials` | string \| null |  | `null` | STV custom materials (custom_materials.csv format, P3.7; see docs/engines/stv.md): EPD-based materials the course catalog lacks, used like catalog entries; results that rest on them are flagged. |
 | `files.macro_schedule` | string \| null |  | `null` | Macro schedule CSV (P3B.1). |
 | `files.schedule_rules` | string \| null |  | `null` | Schedule rules JSON (P3B.2). |
 | `files.exports` | string |  | `"exports"` | Directory for Revit exports. |
