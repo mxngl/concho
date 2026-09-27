@@ -65,7 +65,7 @@ file line numbers. JSON Schema of one row: [`docs/schema/stv_mapping.schema.json
 | `stv_material_type` | yes | material type of that assembly in the catalog (`Concrete Cladding (sf)`) |
 | `quantity_field` | yes | `area` (SF), `volume` (CF), `length` (FT), `count` (1 per element), `weight` (kg: `Weight`, else `Unit Weight`), `airflow` (m³/s: `Airflow`/`Flow`, the snapshot flows, else `Connector Flow`) |
 | `conversion` | – | named conversion, see "Conversions"; empty = the quantity as read |
-| `note` | yes (may be empty) | free text: why the rule exists, proxies (`proxy, see P3.7`) |
+| `note` | yes (may be empty) | free text: why the rule exists. A note with the word `proxy` marks a **proxy rule** (a catalog entry standing in for a material the catalog lacks): its quantities are flagged in the results (P3.7, `data_flags`) |
 
 A rule needs a `category` or an `assembly_code`; a `keyword` needs a `category`.
 
@@ -163,7 +163,7 @@ Assembly Code and the MEP export has no Assembly Code column, so the Island rule
 category and keyword (only the exterior walls use `B2000`). The file makes the implicit
 choices explicit (note column):
 
-- **bamboo → glulam proxy** (`proxy, see P3.7`): structural rules with keyword
+- **bamboo → glulam proxy** (note `proxy (bamboo, P3.7 …)`, flagged in `data_flags`): structural rules with keyword
   `structural bamboo` book the Island bamboo columns (99) and beams (113) as Glulam Column /
   Beam (kg) at 19.43 kg/cf; the architecture rules book the bamboo floors as Concrete (sf) and
   the bamboo walls as Steel Studs and Painted Gypsum (sf), as the old default rules did.
@@ -328,6 +328,48 @@ bamboo walls as Steel Studs and Painted Gypsum (sf) 123,625.98, bamboo beams as 
 (kg) 72,139.44, bamboo columns as Glulam Column (kg) 25,239.92 (energy 6,025,597 MJ = 21.2 %,
 water 6,832,138 kg = 22.8 %).
 
+### Engineered bamboo (P3.7): still a proxy
+
+Bamboo is not in the course catalog. P3.7 looked for a public EPD whose values can be
+expressed in the course's units per the course's functional unit (per kg for the glulam
+entries the Island bamboo columns and beams stand in for). **No bamboo custom material was
+added; the Island keeps the proxies**, now flagged as such (`data_flags`, above), and the
+Island reference result stays **2,517,183.14 kgCO₂e**.
+
+What was found (2026-09-27; registry listings and search results only, **the EPD documents
+themselves could not be read**, because the network policy of the Claude Code session that
+did P3.7 blocks environdec.com, epd-australasia.com and the manufacturers' sites):
+
+- best candidate: **GREEZU Structural Glued Laminated Bamboo** (Sentai Bamboo & Wood),
+  EPD International **EPD-IES-0025126:001**, PCR 2019:14 (EN 15804+A2), published
+  2025-09-26, valid to 2030-09-25; declared per m³ according to the listing
+  (<https://environdec.com/library/epd25126>). Siblings from the same manufacturer: laminated
+  bamboo EPD-IES-0025124:001, strand woven bamboo EPD-IES-0020939:001;
+- older MOSO result summaries (EN 15804+A1, 2017; decking and panels, not structural members).
+
+**Missing before a `custom_materials.csv` row can be written** (none of it may be guessed):
+
+1. the results table of the EPD (document page) for modules A1–A3, A4 and A5: GWP-total (and
+   how biogenic carbon is reported; A1–A3 may be negative), PERT + PENRT (MJ), FW (m³ →
+   kg), ODP (kg CFC-11e);
+2. the density (kg/m³) stated in the EPD, to convert per m³ to per kg (the course's glulam
+   unit), or a per-m² product with thickness and density for the bamboo floors and walls;
+3. whether A4 and A5 are declared or "MND" (many bamboo EPDs are cradle-to-gate + C + D;
+   then transport and construction are unknown and the row cannot mirror the course's
+   Transport / Construction columns without further assumptions to be agreed);
+4. an agreed note on the method gap: the course catalog is SimaPro / ReCiPe Midpoint (H), EPDs
+   are EN 15804 (EF / CML), so a bamboo row is never fully comparable with the glulam row.
+
+With these, the switch is: one row in a team `custom_materials.csv` (e.g. `Beams, Engineered
+Bamboo Beam (kg), …, source = "GREEZU EPD-IES-0025126:001, p. …, declared unit 1 m³, ÷ … kg/m³"`),
+`files.custom_materials` in a copy of the config, and the bamboo rules of a copy of the
+mapping file pointed at the new names. The Island reference config and mapping file keep the
+glulam proxy by default.
+
+The architecture bamboo proxies are the larger part: bamboo floors booked as Concrete (sf)
+349,607 kgCO₂e and bamboo walls as Steel Studs and Painted Gypsum (sf) 123,626 kgCO₂e, against
+97,379 kgCO₂e for the glulam columns and beams.
+
 ## Island 2026 reference result
 
 **The current Island result is 2,517,183.14 kgCO₂e** (28,396,923.44 MJ, 30,026,557.14 kg
@@ -419,8 +461,8 @@ rule 4).
   `Glulam-Western Species` and `Timber-Column`, so the importer books it as
   **Glulam Beam (kg)** / **Glulam Column (kg)** at 19.43 kg/cf (`GLULAM_KG_PER_CF`). In C
   that is 81,954 kg of beams and 33,932 kg of columns. Undocumented in the original; since
-  P3.6 explicit proxy rules in the Island mapping file (note "proxy, see P3.7"); an explicit
-  custom material follows in P3.7.
+  P3.6 explicit proxy rules in the Island mapping file; since P3.7 flagged as proxies in the
+  results (`data_flags`). No custom bamboo material yet: see "Engineered bamboo" above.
 - **Use phase = 0.** A and C contain no use-phase inputs (no kWh, gas, water or PV), while
   the target covers construction + 50 years of operation. So C is embodied only and its
   % of target is not comparable with the target's scope. Only B has use-phase inputs (P3.8).
