@@ -13,7 +13,11 @@ Examples:
 - [`template/project_config.example.json`](../template/project_config.example.json): neutral
   example with invented values; field-by-field notes in [`template/README.md`](../template/README.md).
 - [`engines/common/examples/island_2026.project_config.json`](../engines/common/examples/island_2026.project_config.json):
-  the Island 2026 values from the current engine defaults.
+  the Island 2026 values from the current engine defaults (use phase not modeled, so the
+  reference result 2,517,183.14 kgCO₂e stays reproducible).
+- [`engines/common/examples/island_2026_use_phase.project_config.json`](../engines/common/examples/island_2026_use_phase.project_config.json):
+  the same with the use phase and the PV panels from the Island slides and the team workbook
+  (P3.8; assumptions in [`docs/engines/stv.md`](engines/stv.md#island-use-phase-example-p38)).
 
 ## Commands
 
@@ -37,7 +41,8 @@ or `validate_config_file(path)` (returns errors and warnings).
 | `tvd.target` above the course budget formula result | warning |
 | Shares sum to 1.0: `cluster_split` with `basis: pct`, every `reference_columns[].shares`, `cogeneration.splits` | error |
 | `stv.use_phase`: every value stated (0 allowed; `cogeneration: null` = none; `water.urinal_gpf: null` = no urinals) unless `not_modeled: true` | error |
-| `stv.use_phase.not_modeled: true`, or all use-phase values 0 | warning |
+| `stv.use_phase.not_modeled: true` without a non-empty `not_modeled_reason` (P3.8) | error |
+| `stv.use_phase.not_modeled: true` (with reason), or all use-phase values 0, or `not_modeled_reason` set while `not_modeled` is false | warning |
 | Dates in order: `budget.grant_year ≤ construction_year`, `schedule.start_date < target_completion ≤ project.completion_date`, each blocked window `start ≤ end` | error |
 | Blocked window or holiday outside the schedule | warning |
 | `files.cost_db`, `files.macro_schedule`: set but not found | error (unset: warning); the cost DB's content is checked by `concho costdb validate` and by the TVD engine (P3.4) |
@@ -54,7 +59,7 @@ All paths in the file are relative to the config file.
 |---|---|---|
 | TVD (`concho-tvd --config`) | `project.name`, `project.team_name`, `project.gross_sf` (also `per_gsf` cost rows), `tvd.total_target` / `tvd.target`, `tvd.budget`, `tvd.cluster_split` (`explicit` or `derive_from_references`), `tvd.custom_clusters` (also the allowed non-course clusters of the cost DB), `tvd.target_sum_tolerance`, `tvd.target_sum_override`, `files.cost_db` (default for `--cost`, `cost_db.csv` format, P3.4) | Cluster targets: course clusters A–H under their canonical names (`Special Construction`), then the custom clusters. `derive_from_references` follows the course sheets **TVD Targets** / **TVD Owners** (P3.5; formulas and the `target_derivation` block in [`docs/engines/tvd.md`](engines/tvd.md#target-derivation-p35)). The total target excludes `on_top` custom clusters. Target check and `target_consistency` block: see below. Results JSON: `meta.project_name`, `meta.team_name`. |
 | TVD dashboard | team name, GSF, targets (from the run) | No project strings in the renderer. |
-| STV (`concho-stv --config`) | `stv.course_team` (`--team` overrides), `stv.lifetime_years`, `stv.use_phase`, `stv.custom_materials_file` / `files.custom_materials` | `lifetime_years` ≠ 50 is used but reported as a warning (the course formula uses 50). `not_modeled: true` → use phase 0 (warning). `cogeneration: null` = no cogeneration. `urinal_gpf: null` = no urinals (toilet factor 1.0), an explicit `0` = course behaviour (factor 0.75), decision D11 (engine since P3.10). Custom materials are loaded and validated only; the calculation uses them from P3.7. `--no-use-phase` skips the use phase (for per-trade runs combined later). |
+| STV (`concho-stv --config`) | `stv.course_team` (`--team` overrides), `stv.lifetime_years`, `stv.use_phase`, `stv.construction_items` (P3.8, e.g. PV as Energy / Photovoltaics (sf)), `stv.custom_materials_file` / `files.custom_materials` | `lifetime_years` ≠ 50 is used but reported as a warning (the course formula uses 50). `not_modeled: true` (with `not_modeled_reason`) → use phase 0 (warning). The results JSON reports the use-phase status in `use_phase_status` (P3.8, [`docs/engines/stv.md`](engines/stv.md#use-phase-p38)). `cogeneration: null` = no cogeneration. `urinal_gpf: null` = no urinals (toilet factor 1.0), an explicit `0` = course behaviour (factor 0.75), decision D11 (engine since P3.10). Custom materials (P3.7) are validated against the course catalog and used like catalog entries; results that rest on them are flagged (`data_flags`, [`docs/engines/stv.md`](engines/stv.md#custom-materials-custom_materialscsv-p37)). `--combine-results` takes the use phase and `stv.construction_items` once (P3.8; from `--config` when given); `--no-use-phase` is deprecated. |
 
 ### Cluster target consistency (P3.3)
 
@@ -125,8 +130,9 @@ categories stay an engine default (`engines/tvd/rules.py`). The engine validates
    Electricity:", `natural_gas_m3` ← "Natural Gas Use:", `cogeneration.*` ← "Fuel Type",
    "Electricity", "Heating", "Cooling" and the three "… Split" cells, `water.*` ← the "… Flow
    Rate:", "Landscaping Water Use:" and "Rainwater Collection:" rows. If the team has not
-   modeled the use phase yet, set `not_modeled: true` (the result then covers construction
-   only, reported as a warning). The workbook itself is never committed; set the env var named
+   modeled the use phase yet, set `not_modeled: true` and say why in `not_modeled_reason`
+   (the result then covers construction only, reported as a warning). Every other field
+   must be stated, 0 included. The workbook itself is never committed; set the env var named
    in `course_workbook_env` to its local path.
 5. **schedule:** start date, work calendar, blocked periods (e.g. hurricane season), target
    completion, takt rooms per zone, trade order, and which licensed-tool adapters the team
@@ -191,7 +197,8 @@ Generated from `docs/schema/project_config.schema.json`; do not edit by hand.
 | `stv.lifetime_years` | integer |  | `50` | Building lifetime. (> 0, ≤ 200) |
 | `stv.course_workbook_env` | string |  | `"COURSE_STV_XLSX"` | Env var that holds the local path to the course STV workbook. (pattern `^[A-Z_][A-Z0-9_]*$`) |
 | `stv.use_phase` | object | yes |  | Operational energy and water per year. Every value is required (0 is allowed but must be stated) unless `not_modeled` is true. |
-| `stv.use_phase.not_modeled` | boolean |  | `false` | true = the use phase is not modeled; the STV result then covers construction only (reported as a warning). |
+| `stv.use_phase.not_modeled` | boolean |  | `false` | true = the use phase is not modeled; the STV result then covers construction only (reported as a warning). Requires `not_modeled_reason`. |
+| `stv.use_phase.not_modeled_reason` | string \| null |  | `null` | Why the use phase is not modeled (required when `not_modeled` is true), e.g. 'no energy model yet'. Reported in the STV results (`use_phase_status`). |
 | `stv.use_phase.grid_kwh` | number \| null |  | `null` | Grid electricity (kWh/yr). (≥ 0) |
 | `stv.use_phase.onsite_renewable_kwh` | number \| null |  | `null` | On-site renewable electricity, e.g. PV (kWh/yr). (≥ 0) |
 | `stv.use_phase.natural_gas_m3` | number \| null |  | `null` | Natural gas (m3/yr). (≥ 0) |
@@ -213,7 +220,12 @@ Generated from `docs/schema/project_config.schema.json`; do not edit by hand.
 | `stv.use_phase.water.shower_gpm` | number \| null |  | `null` | Shower (gal/min). (≥ 0) |
 | `stv.use_phase.water.landscaping_gal` | number \| null |  | `null` | Landscaping water per year (gal). (≥ 0) |
 | `stv.use_phase.water.rainwater_gal` | number \| null |  | `null` | Rainwater collected per year (gal). (≥ 0) |
-| `stv.custom_materials_file` | string \| null |  | `null` | Optional custom materials CSV (P3.7). Same as files.custom_materials; if both are set they must be the same path. |
+| `stv.construction_items` | list of object |  |  | Construction items not in the Revit exports (P3.8), e.g. PV panels as Energy / 'Photovoltaics (sf)', as the course enters them in 'Construction and Materials'. Added once to the STV project result. |
+| `stv.construction_items[].assembly` | string | yes |  | Course assembly, e.g. 'Energy' ('Construction and Materials' column B). |
+| `stv.construction_items[].material_type` | string | yes |  | Material/Type of the course LCA catalog (or a custom material) for that assembly, e.g. 'Photovoltaics (sf)' (column C); checked against the catalog when concho-stv runs. |
+| `stv.construction_items[].amount` | number | yes |  | Quantity in the unit of material_type (column D), e.g. panel area in sf. (≥ 0) |
+| `stv.construction_items[].note` | string | yes |  | Where the amount comes from (required), e.g. 'team input, not course data: PV area from the team workbook'. |
+| `stv.custom_materials_file` | string \| null |  | `null` | Optional custom materials CSV (custom_materials.csv format, P3.7). Same as files.custom_materials; if both are set they must be the same path. |
 | `schedule` | object | yes |  | Schedule inputs (P3B.7). |
 | `schedule.start_date` | string (date) | yes |  | Construction start. |
 | `schedule.calendar` | object |  |  | Work calendar. |
@@ -246,7 +258,7 @@ Generated from `docs/schema/project_config.schema.json`; do not edit by hand.
 | `files` | object |  |  | Input files and the exports directory, relative to this config file. `cost_db` and `macro_schedule` are needed by the engines (error if set but missing, warning if unset); the others are optional (warning if set but missing). |
 | `files.cost_db` | string \| null |  | `null` | TVD cost DB (cost_db.csv format, P3.4; see docs/engines/tvd.md). The TVD engine validates it before the run. |
 | `files.stv_mapping` | string \| null |  | `null` | STV mapping table (stv_mapping.csv format, P3.6; see docs/engines/stv.md). concho-stv maps the Revit exports with it; unset = the default table template/stv_mapping.csv. |
-| `files.custom_materials` | string \| null |  | `null` | Custom materials CSV (P3.7). |
+| `files.custom_materials` | string \| null |  | `null` | STV custom materials (custom_materials.csv format, P3.7; see docs/engines/stv.md): EPD-based materials the course catalog lacks, used like catalog entries; results that rest on them are flagged. |
 | `files.macro_schedule` | string \| null |  | `null` | Macro schedule CSV (P3B.1). |
 | `files.schedule_rules` | string \| null |  | `null` | Schedule rules JSON (P3B.2). |
 | `files.exports` | string |  | `"exports"` | Directory for Revit exports. |

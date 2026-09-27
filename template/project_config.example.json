@@ -92,6 +92,14 @@
         "rainwater_gal": 25000
       }
     },
+    "construction_items": [
+      {
+        "assembly": "Energy",
+        "material_type": "Photovoltaics (sf)",
+        "amount": 3000,
+        "note": "invented example: PV panel area on the roof, not in the Revit exports"
+      }
+    ],
     "custom_materials_file": null
   },
   "schedule": {

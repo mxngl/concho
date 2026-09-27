@@ -604,7 +604,14 @@ class UsePhase(_Model):
         default=False,
         description=(
             "true = the use phase is not modeled; the STV result then covers construction "
-            "only (reported as a warning)."
+            "only (reported as a warning). Requires `not_modeled_reason`."
+        ),
+    )
+    not_modeled_reason: str | None = Field(
+        default=None,
+        description=(
+            "Why the use phase is not modeled (required when `not_modeled` is true), e.g. "
+            "'no energy model yet'. Reported in the STV results (`use_phase_status`)."
         ),
     )
     grid_kwh: NonNegative | None = Field(default=None, description="Grid electricity (kWh/yr).")
@@ -623,6 +630,11 @@ class UsePhase(_Model):
     @model_validator(mode="after")
     def _complete(self) -> UsePhase:
         if self.not_modeled:
+            if not (self.not_modeled_reason or "").strip():
+                raise ValueError(
+                    "use phase is not modeled but not_modeled_reason is missing: say why "
+                    "(e.g. 'no energy model yet'), or state every use-phase value."
+                )
             return self
         missing = [
             f for f in ("grid_kwh", "onsite_renewable_kwh", "natural_gas_m3")
@@ -644,7 +656,7 @@ class UsePhase(_Model):
 
     def has_values(self) -> bool:
         """True if any value is given (used to warn when not_modeled hides values)."""
-        return bool(self.model_fields_set - {"not_modeled"})
+        return bool(self.model_fields_set - {"not_modeled", "not_modeled_reason"})
 
     def all_zero(self) -> bool:
         nums = [self.grid_kwh, self.onsite_renewable_kwh, self.natural_gas_m3]
@@ -652,6 +664,27 @@ class UsePhase(_Model):
             nums += [getattr(self.water, f) for f in _WATER_FIELDS]
             nums.append(self.water.urinal_gpf)
         return self.cogeneration is None and all(not v for v in nums)
+
+
+class STVConstructionItem(_Model):
+    """A construction item that is not in the Revit exports, entered like a row of the course
+    sheet 'Construction and Materials' (e.g. PV panels: Energy / 'Photovoltaics (sf)')."""
+
+    assembly: NonEmptyStr = Field(
+        description="Course assembly, e.g. 'Energy' ('Construction and Materials' column B)."
+    )
+    material_type: NonEmptyStr = Field(
+        description="Material/Type of the course LCA catalog (or a custom material) for that "
+                    "assembly, e.g. 'Photovoltaics (sf)' (column C); checked against the "
+                    "catalog when concho-stv runs."
+    )
+    amount: NonNegative = Field(
+        description="Quantity in the unit of material_type (column D), e.g. panel area in sf."
+    )
+    note: NonEmptyStr = Field(
+        description="Where the amount comes from (required), e.g. 'team input, not course "
+                    "data: PV area from the team workbook'."
+    )
 
 
 class STVSection(_Model):
@@ -666,11 +699,19 @@ class STVSection(_Model):
         description="Env var that holds the local path to the course STV workbook.",
     )
     use_phase: UsePhase
+    construction_items: list[STVConstructionItem] = Field(
+        default_factory=list,
+        description=(
+            "Construction items not in the Revit exports (P3.8), e.g. PV panels as "
+            "Energy / 'Photovoltaics (sf)', as the course enters them in 'Construction and "
+            "Materials'. Added once to the STV project result."
+        ),
+    )
     custom_materials_file: RelPath | None = Field(
         default=None,
         description=(
-            "Optional custom materials CSV (P3.7). Same as files.custom_materials; if both "
-            "are set they must be the same path."
+            "Optional custom materials CSV (custom_materials.csv format, P3.7). Same as "
+            "files.custom_materials; if both are set they must be the same path."
         ),
     )
 
@@ -822,7 +863,10 @@ class FilesSection(_Model):
                     "template/stv_mapping.csv.",
     )
     custom_materials: RelPath | None = Field(
-        default=None, description="Custom materials CSV (P3.7)."
+        default=None,
+        description="STV custom materials (custom_materials.csv format, P3.7; see "
+                    "docs/engines/stv.md): EPD-based materials the course catalog lacks, used "
+                    "like catalog entries; results that rest on them are flagged.",
     )
     macro_schedule: RelPath | None = Field(
         default=None, description="Macro schedule CSV (P3B.1)."
@@ -1114,11 +1158,17 @@ def _collect_warnings(config: ProjectConfig, report: ValidationReport) -> None:
             report.warnings.append(
                 "stv.use_phase: values are given but ignored because not_modeled is true."
             )
-    elif up.all_zero():
-        report.warnings.append(
-            "stv.use_phase: all use-phase values are 0. If the use phase is not modeled, "
-            "set not_modeled: true instead."
-        )
+    else:
+        if up.not_modeled_reason:
+            report.warnings.append(
+                "stv.use_phase: not_modeled_reason is set but ignored because not_modeled is "
+                "false."
+            )
+        if up.all_zero():
+            report.warnings.append(
+                "stv.use_phase: all use-phase values are 0. If the use phase is not modeled, "
+                "set not_modeled: true with a not_modeled_reason instead."
+            )
 
     sched = config.schedule
     for w in sched.blocked_windows:

@@ -11,11 +11,10 @@ It is a port of the course workbook `CEE_222_STV_V12.xlsx`:
   water = team water value (the constants come from the course workbook);
 - **embodied:** amount × LCA factor × unit multiplier, per construction item;
 - **use phase:** annual grid electricity, cogeneration, natural gas and water
-  (900 occupants, 250 days; rainwater offset capped at total water use), × 50 years
+  (900 occupants, 250 days; rainwater offset capped at toilet + urinal + landscaping
+  water, as in the course), × 50 years
   (`stv.lifetime_years` of the config; another value is used but reported as a warning).
 
-Known divergence from the workbook: the course applies the 0.75 toilet factor whenever the
-urinal cell is non-blank (even at 0); the engine applies it only when `urinal_gpf > 0`.
 
 Course logic lives in `engine.py`, `reference.py` and `models.py`. The Revit importers
 (`revit_architecture.py`, `revit_structural.py`, `revit_mep.py`, `central_bim.py`) map rows
@@ -28,8 +27,9 @@ table: `examples/island/stv_mapping.csv`; default table for common Uniformat cod
 
 Project values come from `project_config` (`--config`, P3.2, see `project.py`): course team
 (`stv.course_team`, `--team` overrides it), lifetime and use phase (`not_modeled` → 0, with a
-warning). `custom_materials.py` loads and validates `stv.custom_materials_file`; the materials
-are not used in the calculation before P3.7.
+warning). `custom_materials.py` loads and validates `stv.custom_materials_file`
+(`custom_materials.csv`, P3.7): EPD-based materials used like catalog entries; results that
+rest on them or on proxy mapping rules are flagged in the `data_flags` block.
 
 ## Course workbook (required, local only)
 
@@ -57,13 +57,16 @@ concho-stv --config engines/common/examples/island_2026.project_config.json \
 with `--stv-mapping`, else `files.stv_mapping` of `--config`, else `template/stv_mapping.csv`
 (warning); `concho stvmap validate` checks a table. `--config` sets the team,
 lifetime and use phase; without it, give `--team` (or `team` in the input JSON). With
-`--config`, the use phase is added to the run; for per-trade runs that are combined later,
-pass `--no-use-phase` to all but one (`--combine-results` sums the use phase and warns when
-more than one input has one). Other inputs:
+`--config`, the use phase and `stv.construction_items` are added to the run;
+`--combine-results` sums the embodied impacts but takes those once (P3.8: from `--config`
+when given, else from the inputs, which must agree). `--no-use-phase` is deprecated. Other
+inputs:
 `--structural-schedule`, `--mep-schedule`, `--architecture-schedule` (each takes one or more
 CSVs),
-`--architecture-history-dir`, `--central-bim-model`, `--stv-workbook-input`, and
-`--combine-results a/stv_results.json b/stv_results.json` (no workbook needed).
+`--architecture-history-dir`, `--central-bim-model`, `--stv-workbook-input`,
+`--custom-materials custom_materials.csv` (default: from `--config`), and
+`--combine-results a/stv_results.json b/stv_results.json` (no workbook needed unless
+`--config` is given).
 Outputs: `stv_results.json` (with a `mapping_coverage` block and per-item `estimated` flags
 when exports were mapped), `history.json`, PNG charts and per-discipline item reports.
 

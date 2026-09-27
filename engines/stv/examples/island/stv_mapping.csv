@@ -9,7 +9,7 @@ architecture,,Curtain Panels,,100,Exterior Wall,Curtain Wall Double Pane (sf),ar
 architecture,,Curtain Wall Mullions,,100,Exterior Wall,Curtain Wall Double Pane (sf),area,,mullion Area is booked as curtain wall area (as before P3.6)
 architecture,,Doors,,100,Interior Wall,Timber Studs and Painted Gypsum (sf),area,door_area(thickness_in=1.75),all doors as timber-stud wall area (as before P3.6); Island door thickness 1.75 in for the volume fallback
 architecture,,Floors,wood|timber|glulam|clt|lumber,100,Floor,Wood System (sf),area,,
-architecture,,Floors,structural bamboo,110,Floor,Concrete (sf),area,,"proxy, see P3.7: structural bamboo floors (Bamboo - 6"") are booked as concrete floor (default rule before P3.6)"
+architecture,,Floors,structural bamboo,110,Floor,Concrete (sf),area,,"proxy (bamboo, P3.7: no usable EPD yet, see docs/engines/stv.md): structural bamboo floors (Bamboo - 6"") are booked as concrete floor (default rule before P3.6)"
 architecture,,Floors,,100,Floor,Concrete (sf),area,,default for floors
 architecture,,Roofs,green,10,Roof,Green Roof (sf),area,,
 architecture,,Roofs,epdm|membrane,20,Roof,EPDM Membrane (sf),area,,
@@ -25,13 +25,13 @@ architecture,,Walls,exterior|storefront|curtain & concrete,30,Exterior Wall,Conc
 architecture,,Walls,exterior|storefront|curtain,40,Exterior Wall,EIFS on Metal Stud (sf),area,,"exterior wall by name, default"
 architecture,,Walls,concrete,50,Interior Wall,Concrete and Painted Gypsum (sf),area,,
 architecture,,Walls,wood|timber|lumber,60,Interior Wall,Timber Studs and Painted Gypsum (sf),area,,
-architecture,,Walls,structural bamboo,70,Interior Wall,Steel Studs and Painted Gypsum (sf),area,,"proxy, see P3.7: structural bamboo walls (Bamboo- 8"") are booked as steel-stud partitions (default rule before P3.6)"
+architecture,,Walls,structural bamboo,70,Interior Wall,Steel Studs and Painted Gypsum (sf),area,,"proxy (bamboo, P3.7: no usable EPD yet, see docs/engines/stv.md): structural bamboo walls (Bamboo- 8"") are booked as steel-stud partitions (default rule before P3.6)"
 architecture,,Walls,,100,Interior Wall,Steel Studs and Painted Gypsum (sf),area,,default for walls
 structural,,Structural Columns,concrete,10,Columns,Reinforced Concrete Column (cy),volume,cf_to_cy,
-structural,,Structural Columns,structural bamboo,15,Columns,Glulam Column (kg),volume,density_kg_per_cf=19.43,"proxy, see P3.7: bamboo is not in the course catalog; Island bamboo columns (Timber-Column family) are booked as glulam at the glulam density 19.43 kg/cf"
+structural,,Structural Columns,structural bamboo,15,Columns,Glulam Column (kg),volume,density_kg_per_cf=19.43,"proxy (bamboo, P3.7: no usable EPD yet, see docs/engines/stv.md): bamboo is not in the course catalog; Island bamboo columns (Timber-Column family) are booked as glulam at the glulam density 19.43 kg/cf"
 structural,,Structural Columns,glulam|timber,20,Columns,Glulam Column (kg),volume,density_kg_per_cf=19.43,glulam density 19.43 kg/cf (team value)
 structural,,Structural Framing,concrete,10,Beams,Reinforced Concrete Beam (cy),volume,cf_to_cy,
-structural,,Structural Framing,structural bamboo,15,Beams,Glulam Beam (kg),volume,density_kg_per_cf=19.43,"proxy, see P3.7: bamboo is not in the course catalog; Island bamboo beams (Glulam-Western Species family) are booked as glulam at the glulam density 19.43 kg/cf"
+structural,,Structural Framing,structural bamboo,15,Beams,Glulam Beam (kg),volume,density_kg_per_cf=19.43,"proxy (bamboo, P3.7: no usable EPD yet, see docs/engines/stv.md): bamboo is not in the course catalog; Island bamboo beams (Glulam-Western Species family) are booked as glulam at the glulam density 19.43 kg/cf"
 structural,,Structural Framing,glulam,20,Beams,Glulam Beam (kg),volume,density_kg_per_cf=19.43,glulam density 19.43 kg/cf (team value)
 structural,,Structural Framing,wood|softwood|lumber,30,Beams,Wood Beam (kg),volume,density_kg_per_cf=12.72,softwood lumber density 12.72 kg/cf (team value)
 structural,,Structural Foundations,slab,10,Foundation,Concrete Slab (cy),volume,cf_to_cy,

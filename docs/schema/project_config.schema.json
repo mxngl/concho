@@ -529,7 +529,7 @@
             }
           ],
           "default": null,
-          "description": "Custom materials CSV (P3.7).",
+          "description": "STV custom materials (custom_materials.csv format, P3.7; see docs/engines/stv.md): EPD-based materials the course catalog lacks, used like catalog entries; results that rest on them are flagged.",
           "title": "Custom Materials"
         },
         "macro_schedule": {
@@ -737,6 +737,44 @@
       "title": "ReferenceColumn",
       "type": "object"
     },
+    "STVConstructionItem": {
+      "additionalProperties": false,
+      "description": "A construction item that is not in the Revit exports, entered like a row of the course\nsheet 'Construction and Materials' (e.g. PV panels: Energy / 'Photovoltaics (sf)').",
+      "properties": {
+        "assembly": {
+          "description": "Course assembly, e.g. 'Energy' ('Construction and Materials' column B).",
+          "minLength": 1,
+          "title": "Assembly",
+          "type": "string"
+        },
+        "material_type": {
+          "description": "Material/Type of the course LCA catalog (or a custom material) for that assembly, e.g. 'Photovoltaics (sf)' (column C); checked against the catalog when concho-stv runs.",
+          "minLength": 1,
+          "title": "Material Type",
+          "type": "string"
+        },
+        "amount": {
+          "description": "Quantity in the unit of material_type (column D), e.g. panel area in sf.",
+          "minimum": 0,
+          "title": "Amount",
+          "type": "number"
+        },
+        "note": {
+          "description": "Where the amount comes from (required), e.g. 'team input, not course data: PV area from the team workbook'.",
+          "minLength": 1,
+          "title": "Note",
+          "type": "string"
+        }
+      },
+      "required": [
+        "assembly",
+        "material_type",
+        "amount",
+        "note"
+      ],
+      "title": "STVConstructionItem",
+      "type": "object"
+    },
     "STVSection": {
       "additionalProperties": false,
       "description": "Sustainable Target Value (life-cycle carbon, energy, water).",
@@ -763,6 +801,14 @@
         "use_phase": {
           "$ref": "#/$defs/UsePhase"
         },
+        "construction_items": {
+          "description": "Construction items not in the Revit exports (P3.8), e.g. PV panels as Energy / 'Photovoltaics (sf)', as the course enters them in 'Construction and Materials'. Added once to the STV project result.",
+          "items": {
+            "$ref": "#/$defs/STVConstructionItem"
+          },
+          "title": "Construction Items",
+          "type": "array"
+        },
         "custom_materials_file": {
           "anyOf": [
             {
@@ -775,7 +821,7 @@
             }
           ],
           "default": null,
-          "description": "Optional custom materials CSV (P3.7). Same as files.custom_materials; if both are set they must be the same path.",
+          "description": "Optional custom materials CSV (custom_materials.csv format, P3.7). Same as files.custom_materials; if both are set they must be the same path.",
           "title": "Custom Materials File"
         }
       },
@@ -947,9 +993,22 @@
       "properties": {
         "not_modeled": {
           "default": false,
-          "description": "true = the use phase is not modeled; the STV result then covers construction only (reported as a warning).",
+          "description": "true = the use phase is not modeled; the STV result then covers construction only (reported as a warning). Requires `not_modeled_reason`.",
           "title": "Not Modeled",
           "type": "boolean"
+        },
+        "not_modeled_reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Why the use phase is not modeled (required when `not_modeled` is true), e.g. 'no energy model yet'. Reported in the STV results (`use_phase_status`).",
+          "title": "Not Modeled Reason"
         },
         "grid_kwh": {
           "anyOf": [

@@ -40,9 +40,30 @@
     "lifetime_years": 50,
     "course_workbook_env": "COURSE_STV_XLSX",
     "use_phase": {
-      "not_modeled": true,
-      "not_modeled_reason": "Island 2026 reference result C (2026-05-15) has no use-phase inputs; kept construction-only so the reference result stays reproducible. With use phase: island_2026_use_phase.project_config.json (P3.8)."
-    }
+      "not_modeled": false,
+      "grid_kwh": 0,
+      "onsite_renewable_kwh": 216992,
+      "natural_gas_m3": 0,
+      "cogeneration": null,
+      "water": {
+        "toilet_gpf": 1.0,
+        "urinal_gpf": null,
+        "wc_sink_gpm": 0.2,
+        "lab_sink_gpm": 0.3,
+        "kitchen_sink_gpm": 0,
+        "shower_gpm": 0,
+        "landscaping_gal": 0,
+        "rainwater_gal": 396183
+      }
+    },
+    "construction_items": [
+      {
+        "assembly": "Energy",
+        "material_type": "Photovoltaics (sf)",
+        "amount": 5000,
+        "note": "team input, not course data: PV panel area from the team workbook STV_LAMARCASINA_BAMBOO.xlsx. Open question for Max/Ash: 5,000 sf gives roughly 150,000 kWh/yr, the slide's 216,992 kWh/yr needs about 7,000-7,500 sf (docs/engines/stv.md)."
+      }
+    ]
   },
   "schedule": {
     "start_date": "2029-10-01",

@@ -56,7 +56,11 @@ ISLAND_CONFIG = REPO_ROOT / "engines" / "common" / "examples" / "island_2026.pro
 RIVER_CONFIG = REPO_ROOT / "tests" / "fixtures" / "configs" / "river_test.project_config.json"
 ISLAND_MAPPING = REPO_ROOT / "engines" / "stv" / "examples" / "island" / "stv_mapping.csv"
 # P3.6 item fields that the stored reference results do not have.
-P36_ITEM_KEYS = ("estimated", "estimated_amount")
+# Keys added after the stored reference files: P3.6 (estimates), P3.7 (custom materials,
+# proxies), P3.8 (use-phase status).
+ADDED_ITEM_KEYS = ("estimated", "estimated_amount", "custom_material", "custom_material_source",
+                   "proxy", "proxy_amount", "origin")
+ADDED_RESULT_KEYS = ("data_flags", "use_phase_status")
 WORKBOOK = "STV_Template/STV_ConceptA_Bambo.xlsx"
 SCHEDULES = "revit_schedules/Current"
 
@@ -100,23 +104,27 @@ def _load(path: Path) -> dict:
 def _trade_items(loader, paths: list[Path], mapping: StvMapping) -> list[ConstructionItem]:
     totals: dict[tuple[str, str], float] = defaultdict(float)
     estimated: dict[tuple[str, str], float] = defaultdict(float)
+    proxy: dict[tuple[str, str], float] = defaultdict(float)
     for path in paths:
         for item in loader(path, mapping).construction_items:
             totals[(item.assembly, item.material_type)] += item.amount
             estimated[(item.assembly, item.material_type)] += item.estimated_amount
+            proxy[(item.assembly, item.material_type)] += item.proxy_amount
     return [
         ConstructionItem(assembly=assembly, material_type=material_type, amount=amount,
-                         estimated_amount=estimated[(assembly, material_type)])
+                         estimated_amount=estimated[(assembly, material_type)],
+                         proxy_amount=proxy[(assembly, material_type)])
         for (assembly, material_type), amount in sorted(totals.items())
         if amount > 0
     ]
 
 
-def _without_p36(result: dict) -> dict:
-    """The result without the P3.6 item fields (for the comparison with stored files)."""
-    items = [{k: v for k, v in item.items() if k not in P36_ITEM_KEYS}
+def _without_added(result: dict) -> dict:
+    """The result without the keys added since P3.6 (for the comparison with stored files)."""
+    items = [{k: v for k, v in item.items() if k not in ADDED_ITEM_KEYS}
              for item in result["construction_items"]]
-    return {**result, "construction_items": items}
+    rest = {k: v for k, v in result.items() if k not in ADDED_RESULT_KEYS}
+    return {**rest, "construction_items": items}
 
 
 def _assert_close(actual, expected, path: str = "") -> None:
@@ -159,7 +167,7 @@ def _run_trades(reference_data, ipd_challenge_dir, settings: STVProjectSettings,
             "team": settings.team,
             "construction_items": [
                 {"assembly": i.assembly, "material_type": i.material_type, "amount": i.amount,
-                 "estimated_amount": i.estimated_amount}
+                 "estimated_amount": i.estimated_amount, "proxy_amount": i.proxy_amount}
                 for i in items
             ],
             "use_phase": settings.use_phase if trade == use_phase_trade else {},
@@ -201,13 +209,13 @@ def test_project_totals(project):
 def test_project_matches_reference_file(project, expected_project):
     _assert_close(project["metric_summary"], expected_project["metric_summary"], "metrics")
     _assert_close(project["breakdown"], expected_project["breakdown"], "breakdown")
-    _assert_close(_without_p36(project), expected_project)
+    _assert_close(_without_added(project), expected_project)
 
 
 @pytest.mark.parametrize("trade", list(TRADES))
 def test_trade_matches_reference_file(trade, trade_results, ipd_challenge_dir):
     expected = _load(ipd_challenge_dir / EXPECTED_TRADE.format(trade=trade))
-    _assert_close(_without_p36(trade_results[trade].to_dict()), expected, trade)
+    _assert_close(_without_added(trade_results[trade].to_dict()), expected, trade)
 
 
 def test_ipd_copy_of_project_file_is_identical(autostv_dir, ipd_challenge_dir):
@@ -323,3 +331,66 @@ def test_island_cli_single_run(monkeypatch, tmp_path, ipd_challenge_dir):
     coverage = result["mapping_coverage"]
     assert coverage["mapping_file"].endswith("engines/stv/examples/island/stv_mapping.csv")
     assert DOUBLE_FLOORS <= {x["element_id"] for x in coverage["cross_discipline_elements"]}
+
+
+# --- P3.7: bamboo proxies flagged, no custom material ------------------------------------
+
+# kgCO2e of the proxy rules of the Island mapping file (bamboo as concrete floor,
+# steel-stud walls, glulam columns and beams); docs/engines/stv.md.
+PROXY_KGCO2E = {"Floor": 349_607.170808, "Interior Wall": 123_625.979178,
+                "Beams": 72_139.4414088, "Columns": 25_239.9219634}
+
+
+def test_island_proxy_flags(project):
+    flags = project["data_flags"]
+    assert flags["custom_material"] is False and flags["proxy"] is True
+    assert flags["custom_materials"]["embodied"]["carbon"] == 0.0
+    for assembly, kgco2e in PROXY_KGCO2E.items():
+        block = flags["by_assembly"][assembly]
+        assert block["proxy"] is True
+        assert block["proxy_embodied"]["carbon"] == pytest.approx(kgco2e, rel=REL)
+    assert flags["proxies"]["embodied"]["carbon"] == pytest.approx(
+        sum(PROXY_KGCO2E.values()), rel=REL)
+    assert flags["proxies"]["share_of_embodied"]["carbon"] == pytest.approx(
+        sum(PROXY_KGCO2E.values()) / PROJECT["carbon"], rel=REL)
+    assert not any(flags["by_assembly"][a]["proxy"] for a in ("Foundation", "MEP", "Roof",
+                                                               "Exterior Wall"))
+
+
+# --- P3.8: Island use-phase example (engines/common/examples/island_2026_use_phase...) ------
+
+USE_PHASE_CONFIG = ISLAND_CONFIG.with_name("island_2026_use_phase.project_config.json")
+# The team workbook whose Use Phase inputs the example takes (team input, not course data).
+TEAM_USE_PHASE_WORKBOOK = "STV_Template/STV_LAMARCASINA_BAMBOO.xlsx"
+
+
+def test_island_use_phase_example(monkeypatch, tmp_path, ipd_challenge_dir, trade_results):
+    """Six Current exports + the use-phase config: construction as the reference plus 5,000 sf
+    PV, and a 50-year use phase equal to the team workbook's own 'Use Phase' F13:I13 (the
+    same inputs typed into the course formulas there)."""
+    openpyxl = pytest.importorskip("openpyxl")
+    schedules = ipd_challenge_dir / SCHEDULES
+    args = ["--config", str(USE_PHASE_CONFIG), "--template", str(ipd_challenge_dir / WORKBOOK),
+            "--output-dir", str(tmp_path)]
+    for trade, (_loader, files) in TRADES.items():
+        args += [f"--{trade}-schedule", *(str(schedules / f) for f in files)]
+    monkeypatch.setattr(sys, "argv", ["concho-stv", *args])
+    cli.main()
+    result = _load(tmp_path / "stv_results.json")
+
+    (pv,) = [i for i in result["construction_items"] if i["origin"] == "project_config"]
+    assert (pv["assembly"], pv["material_type"], pv["amount"]) == (
+        "Energy", "Photovoltaics (sf)", 5000.0)
+    embodied = result["breakdown"]["embodied"]
+    assert embodied["carbon"] == pytest.approx(PROJECT["carbon"] + pv["embodied_total"]["carbon"],
+                                               rel=REL)
+
+    ws = openpyxl.load_workbook(ipd_challenge_dir / TEAM_USE_PHASE_WORKBOOK,
+                                data_only=True)["Use Phase"]
+    cached = [float(ws[c].value) for c in ("F13", "G13", "H13", "I13")]
+    use = result["breakdown"]["use_phase"]
+    assert [use[m] for m in ("carbon", "energy", "water", "ozone")] == pytest.approx(cached,
+                                                                                    rel=REL)
+    assert result["breakdown"]["use_electricity"]["carbon"] == 0.0  # annual net: grid 0
+    status = result["use_phase_status"]
+    assert (status["modeled"], status["source"]) == (True, "project_config")
