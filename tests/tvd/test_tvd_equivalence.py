@@ -11,8 +11,9 @@ to ``cost_db.csv`` by ``scripts/migrate_cost_data.py`` into ``tmp_path`` (never 
 RSMeans-derived). The new engine reads the project values from the Island example config
 (``engines/common/examples/island_2026.project_config.json``).
 Compared: the results JSON (all fields except run timestamps, run label, input paths, the
-project/team names added in P3.2, the ``target_consistency`` block added in P3.3 and the
-``cost_db_validation`` block added in P3.4), the
+project/team names added in P3.2, the ``target_consistency`` block added in P3.3, the
+``cost_db_validation`` block added in P3.4 and the ``target_derivation``, ``reliability`` and
+``tracking`` blocks added in P3.5; each new block has its own Island test below), the
 history snapshot (except its date) and the dashboard HTML (with timestamps and data source
 masked).
 
@@ -95,6 +96,12 @@ def _canonical(obj):
 
 def _strip_meta(payload: dict) -> dict:
     payload = json.loads(json.dumps(payload))
+    # P3.5: new block, not in the original; tested in test_island_target_derivation.
+    payload.pop("target_derivation", None)
+    # P3.5: new blocks, not in the original; tested in test_island_reliability and
+    # test_island_tracking.
+    payload.pop("reliability", None)
+    payload.pop("tracking", None)
     # P3.3: new block, not in the original; tested in test_island_target_consistency.
     payload.pop("target_consistency", None)
     # P3.4: new block, not in the original; tested in test_island_cost_db_validation.
@@ -224,3 +231,46 @@ def test_island_cost_db_validation(outputs):
     assert "(D5090): description: 'HVAC Systems' suggests D30" in warnings
     assert "cluster 'Equipment Rental' is a custom cluster" in warnings
     assert block["warning_count"] == len(block["warnings"]) == 8
+
+
+# P3.5: explicit amount split, no budget (total_target); the shares of the 16.7M total sum
+# to 1.00035 (the 5,852 gap above).
+def test_island_target_derivation(outputs):
+    block = _load(outputs["new"] / "results" / "latest.json")["target_derivation"]
+    assert block["method"] == "explicit" and block["budget"] is None
+    assert block["target_above_budget"] is None and block["warnings"] == []
+    assert block["total_target"] == block["course_cluster_base"] == 16_700_000
+    targets = {x: c["target"] for x, c in block["clusters"].items()}
+    assert targets == {"A": 1_781_276, "B": 3_826_446, "C": 2_005_842, "D": 4_041_448,
+                       "E": 1_319_286, "F": 1_001_839, "G": 1_435_258, "H": 1_294_457}
+    assert block["sums"]["target"] == 16_705_852
+    assert block["sums"]["final_share"] == pytest.approx(16_705_852 / 16_700_000, abs=1e-9)
+    assert "owner_share" not in block["clusters"]["A"]
+
+
+# P3.5: the Island cost DB is not rated, so every $ is not_rated.
+def test_island_reliability(outputs):
+    new = _load(outputs["new"] / "results" / "latest.json")
+    rel = new["reliability"]
+    grand_total = new["financials"]["grand_total"]
+    assert grand_total == 16_065_644.29
+    for cat in ("quantity", "cost", "overall"):
+        assert rel["totals"][cat] == {"high": 0, "medium": 0, "low": 0,
+                                      "not_rated": grand_total}
+    assert rel["totals"]["estimate"] == grand_total
+    by_cluster = {r["cluster"]: r["estimate"] for r in new["cluster_summary"]}
+    assert {n: c["estimate"] for n, c in rel["clusters"].items()} == by_cluster
+    assert rel["totals_a_to_h"]["estimate"] == pytest.approx(
+        grand_total - by_cluster["Equipment Rental"], abs=0.005)
+
+
+# P3.5: the equivalence snapshot is the current run (no --event/--note given).
+def test_island_tracking(outputs):
+    new = _load(outputs["new"] / "results" / "latest.json")
+    assert new["tracking"] == {
+        "target": 16_700_000,
+        "rows": [{
+            "date": new["meta"]["date"], "label": SNAPSHOT_LABEL, "event": None, "note": None,
+            "estimate": 16_065_644.29, "delta": 634_355.71, "current": True,
+        }],
+    }

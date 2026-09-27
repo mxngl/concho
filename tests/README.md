@@ -22,14 +22,15 @@ These compare the engines with the course workbooks, which are course data and n
 | Env var | Workbook | Tests |
 |---|---|---|
 | `COURSE_STV_XLSX` | `CEE_222_STV_V12.xlsx` | `tests/stv/test_stv_course_equivalence.py` (P2.4, P3.10), `tests/stv/test_stv_course_workbook.py` (P1.2) |
-| `COURSE_TVD_XLSX` | `PBL_Lab_TVD-collaboration_tool.xlsx` | `tests/tvd/test_tvd_course_equivalence.py` (P2.5) |
+| `COURSE_TVD_XLSX` | `PBL_Lab_TVD-collaboration_tool.xlsx` | `tests/tvd/test_tvd_course_equivalence.py` (P2.5), `tests/tvd/test_tvd_course_method.py` (P3.5: targets, owner reallocation, reliability) |
 
-**Prerequisite: LibreOffice Calc** (`soffice` on the `PATH`) for the two `*_course_equivalence.py` files (`test_stv_course_workbook.py` only reads the workbook). They write the inputs into a temporary copy of the workbook and recalculate it headless (`soffice --headless --convert-to xlsx`). Install e.g. `sudo apt-get install libreoffice-calc` (Debian/Ubuntu) or `brew install --cask libreoffice` (macOS). Without `soffice` the tests are skipped; if `soffice` is there but cannot convert (Calc component missing) they fail with the LibreOffice output.
+**Prerequisite: LibreOffice Calc** (`soffice` on the `PATH`) for the two `*_course_equivalence.py` files and parts of `test_tvd_course_method.py` (`test_stv_course_workbook.py` only reads the workbook). They write the inputs into a temporary copy of the workbook and recalculate it headless (`soffice --headless --convert-to xlsx`). Install e.g. `sudo apt-get install libreoffice-calc` (Debian/Ubuntu) or `brew install --cask libreoffice` (macOS). Without `soffice` the tests are skipped; if `soffice` is there but cannot convert (Calc component missing) they fail with the LibreOffice output.
 
 ```bash
 export COURSE_STV_XLSX=/path/to/CEE_222_STV_V12.xlsx
 export COURSE_TVD_XLSX=/path/to/PBL_Lab_TVD-collaboration_tool.xlsx
-pytest tests/stv/test_stv_course_equivalence.py tests/tvd/test_tvd_course_equivalence.py -s
+pytest tests/stv/test_stv_course_equivalence.py tests/tvd/test_tvd_course_equivalence.py \
+       tests/tvd/test_tvd_course_method.py -s
 ```
 
 `-s` shows the max. relative error per case.

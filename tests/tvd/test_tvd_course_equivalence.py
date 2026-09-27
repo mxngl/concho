@@ -21,9 +21,9 @@ quantities and line totals to cents (the A1020 line below: 240.75 x 215.5 = 51,8
 lines are kept large enough for that to stay within the 1e-6 tolerance. All unit costs,
 quantities and descriptions are invented; they are not RSMeans or course data.
 
-Not compared, because ``engines/tvd`` does not implement them yet (P3.5): target
-derivation ("TVD Targets"), owner reallocation ("TVD Owners"), reliability ratings
-(columns N-P and "TVD Reliability") and "TVD Tracking".
+Target derivation ("TVD Targets"), owner reallocation ("TVD Owners") and the reliability
+summary (columns N-P and "TVD Reliability") are compared in ``test_tvd_course_method.py``
+(P3.5). "TVD Tracking" has no formulas beyond delta = target - estimate (unit tests).
 """
 
 from __future__ import annotations

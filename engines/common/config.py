@@ -249,34 +249,149 @@ class ReferenceColumn(_Model):
         return self
 
 
+OwnerRating = Annotated[float, Field(ge=0, le=10)]
+
+
+class ValueItem(_Model):
+    """One owner value item of a cluster (course sheet 'TVD Owners', column C), rated 0-10
+    by each owner (columns D, E, ...)."""
+
+    item: NonEmptyStr = Field(description="Value item, e.g. 'Energy Efficiency'.")
+    ratings: dict[NonEmptyStr, OwnerRating | None] = Field(
+        default_factory=dict,
+        description=(
+            "Rating 0-10 per owner (owner name as in `owners`). A missing owner or null = "
+            "blank (ignored, as in the course)."
+        ),
+    )
+
+
+class OwnerRatings(_Model):
+    """Owner value ratings (course sheet 'TVD Owners'): value items per cluster, each rated
+    0-10 by several owners. Cluster value = mean of all ratings of its items."""
+
+    owners: list[NonEmptyStr] = Field(
+        min_length=1, description="Owner names (course: 'Owner 1', 'Owner 2')."
+    )
+    items: dict[CourseCluster, list[ValueItem]] = Field(
+        description=(
+            "Value items per course cluster A-H (all eight keys required; an empty list = "
+            "the cluster is not rated and gets no owner share)."
+        )
+    )
+
+    @model_validator(mode="after")
+    def _check(self) -> OwnerRatings:
+        dupes = sorted({o for o in self.owners if self.owners.count(o) > 1})
+        if dupes:
+            raise ValueError(f"owners must be unique; duplicated: {dupes}.")
+        missing = [c.value for c in CourseCluster if c not in self.items]
+        if missing:
+            raise ValueError(
+                f"items must list all clusters A-H; missing: {', '.join(missing)} "
+                "(use [] for a cluster without value items)."
+            )
+        for cluster, items in self.items.items():
+            for it in items:
+                unknown = sorted(set(it.ratings) - set(self.owners))
+                if unknown:
+                    raise ValueError(
+                        f"items.{cluster.value} '{it.item}': ratings by unknown owner(s) "
+                        f"{unknown}; owners are {self.owners}."
+                    )
+        return self
+
+    def cluster_ratings(self) -> dict[str, list[list[float | None]]]:
+        """Per cluster letter: per item the ratings in owner order (None = blank)."""
+        return {
+            c.value: [[it.ratings.get(o) for o in self.owners] for it in self.items[c]]
+            for c in CourseCluster
+        }
+
+
 class DeriveFromReferences(_Model):
-    """Course method: cluster share = average of the reference columns, then
-    `reallocation_pct` of the total is reallocated by the owner value ratings."""
+    """Course method ('TVD Targets' / 'TVD Owners'): cluster share = mean of the reference
+    columns (K), `reallocation_pct` of it reallocated by the owner value ratings
+    (L = K x (1 - p) + G x p), plus an optional team adjustment (M); or the target shares
+    typed in by the team (column N)."""
 
     method: Literal["derive_from_references"]
     reference_columns: list[ReferenceColumn] = Field(
         min_length=1,
-        description="RSMeans reference and previous projects (course: 1 + 3 columns).",
+        max_length=4,
+        description=(
+            "RSMeans SF estimate and previous projects ('TVD Targets' columns G-J; "
+            "course: 1 + 3 columns, up to 4)."
+        ),
     )
-    owner_ratings: dict[CourseCluster, NonNegative] = Field(
-        description="Owner value rating per course cluster A-H (course sheet 'TVD Owners')."
+    owner_ratings: OwnerRatings = Field(
+        description="Owner value ratings per value item and owner (course sheet 'TVD Owners')."
     )
     reallocation_pct: Fraction = Field(
-        default=0.10, description="Share of the total reallocated by owner ratings (0.10 = 10 %)."
+        default=0.10,
+        description=(
+            "Share reallocated by the owner ratings (0.10 = 10 %; 'TVD Owners' C22). "
+            "L = K x (1 - reallocation_pct) + G x reallocation_pct."
+        ),
+    )
+    team_adjustment: dict[CourseCluster, Annotated[float, Field(ge=-1, le=1)]] = Field(
+        default_factory=dict,
+        description=(
+            "Additional share per cluster from the team's input ('TVD Targets' column M), "
+            "as fractions that sum to 0; missing clusters = 0."
+        ),
+    )
+    target_shares: dict[CourseCluster, Fraction] | None = Field(
+        default=None,
+        description=(
+            "Target share per cluster A-H typed in by the team ('TVD Targets' column N); "
+            "must sum to 1.0. null (default) = the target shares are L + M."
+        ),
     )
 
     @model_validator(mode="after")
-    def _check_ratings(self) -> DeriveFromReferences:
-        missing = [c.value for c in CourseCluster if c not in self.owner_ratings]
-        if missing:
+    def _check(self) -> DeriveFromReferences:
+        from engines.tvd.derivation import (  # local: engines.tvd imports this module
+            owner_adjusted,
+            owner_shares,
+            owner_values,
+            reference_average,
+        )
+
+        values = owner_values(self.owner_ratings.cluster_ratings())
+        if self.reallocation_pct > 0 and not any(values.values()):
             raise ValueError(
-                f"owner_ratings must rate all clusters A-H; missing: {', '.join(missing)}."
+                "owner_ratings has no rating above 0, so reallocation_pct cannot be "
+                "distributed; rate at least one value item or set reallocation_pct to 0."
             )
-        if self.reallocation_pct > 0 and sum(self.owner_ratings.values()) == 0:
+        adj = sum(self.team_adjustment.values())
+        if abs(adj) > SHARE_SUM_TOLERANCE:
             raise ValueError(
-                "owner_ratings are all 0, so reallocation_pct cannot be distributed; "
-                "rate at least one cluster or set reallocation_pct to 0."
+                f"team_adjustment must sum to 0 (it moves shares between clusters), but it "
+                f"sums to {adj:+.6f}."
             )
+        if self.target_shares is not None:
+            missing = [c.value for c in CourseCluster if c not in self.target_shares]
+            if missing:
+                raise ValueError(
+                    f"target_shares must list all clusters A-H; missing: {', '.join(missing)}."
+                )
+            total = sum(self.target_shares.values())
+            if abs(total - 1.0) > SHARE_SUM_TOLERANCE:
+                raise ValueError(f"target_shares must sum to 1.0, but they sum to {total:.6f}.")
+        else:
+            refs = [{c.value: col.shares[c] for c in CourseCluster}
+                    for col in self.reference_columns]
+            owner = owner_adjusted(
+                reference_average(refs), owner_shares(values), self.reallocation_pct
+            )
+            final = {k: v + self.team_adjustment.get(CourseCluster(k), 0.0)
+                     for k, v in owner.items()}
+            negative = [f"{k} ({v:+.6f})" for k, v in final.items() if v < -SHARE_SUM_TOLERANCE]
+            if negative:
+                raise ValueError(
+                    "team_adjustment makes target shares negative: " + ", ".join(negative) + "."
+                )
         return self
 
 
@@ -943,6 +1058,16 @@ def _collect_warnings(config: ProjectConfig, report: ValidationReport) -> None:
             )
 
     split = tvd.cluster_split
+    if isinstance(split, DeriveFromReferences) and split.reallocation_pct > 0:
+        rated = split.owner_ratings.cluster_ratings()
+        unrated = [
+            c for c, items in rated.items() if not any(r is not None for i in items for r in i)
+        ]
+        if unrated:
+            report.warnings.append(
+                f"tvd.cluster_split.owner_ratings: no owner rating for cluster(s) "
+                f"{', '.join(unrated)}; they get no owner share."
+            )
     if isinstance(split, ExplicitSplit) and split.basis == "amount":
         course_sum = sum(split.values.values())
         diff = course_sum + tvd.carved_out_total - total

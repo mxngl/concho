@@ -20,9 +20,11 @@ Line totals are rounded to cents when computed; see
 | `summary.py` | cluster summary, console formatting |
 | `engine.py` | `compute()` / `run_files()`: inputs + project config → `TvdRun` (line items, summary, counts, results dict) |
 | `targets.py` | `ProjectTargets`: project values from `project_config` (names, GSF, total and cluster targets, custom clusters, tolerance) |
+| `derivation.py` | course target derivation (P3.5): budget, reference average, owner reallocation, team adjustment → `target_derivation` block |
+| `reliability.py` | reliability summary per cluster (P3.5) → `reliability` block |
 | `clusters.py` | canonical course clusters A–H with display names; maps cost DB labels (incl. the legacy `Special Contruction`) |
 | `results_writer.py` | results JSON (`<timestamp>.json` + `latest.json`, schema = AutoTVD `results/SCHEMA.md`) |
-| `history.py` | named history snapshots |
+| `history.py` | named history snapshots (with tracking `event`/`note`, P3.5) and the `tracking` table |
 | `alert.py` | budget-overrun webhook (env vars, see below) |
 | `rules.py` | excluded categories (the quantity rules live in the cost DB since P3.4) |
 | `cli.py` | `python -m engines.tvd` / `concho-tvd` |
@@ -61,6 +63,7 @@ concho-tvd --config path/to/project_config.json \
 | `--out DIR` | output folder (**required**): `DIR/results/`, `DIR/history/`, `DIR/TVD_Dashboard.html` |
 | `--ci` | CI mode: dashboard to `DIR/docs/index.html`, no browser, no demo snapshot |
 | `--snapshot LABEL` | save a named snapshot to the history folder |
+| `--event LABEL`, `--note TEXT` | tracking event and note of this run (course **TVD Tracking**, P3.5): stored in the snapshot (with `--snapshot`) and in the `tracking` table of the results JSON |
 | `--history DIR` | history folder (default `OUT/history`) |
 
 Without `--ci`, the dashboard opens in the browser and, if the history folder is empty, a demo

@@ -80,7 +80,7 @@
         }
       ],
       "default": null,
-      "description": "Quantity reliability 1 = low, 2 = medium, 3 = high; empty = not rated.",
+      "description": "Quantity reliability 1 = high, 2 = medium, 3 = low (course scale); empty = not rated.",
       "title": "Qty Reliability"
     },
     "cost_reliability": {
@@ -95,7 +95,7 @@
         }
       ],
       "default": null,
-      "description": "Unit cost reliability 1 = low, 2 = medium, 3 = high; empty = not rated.",
+      "description": "Unit cost reliability 1 = high, 2 = medium, 3 = low (course scale); empty = not rated.",
       "title": "Cost Reliability"
     },
     "source": {

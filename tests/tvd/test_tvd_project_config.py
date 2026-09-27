@@ -92,10 +92,14 @@ def test_targets_outside_tolerance_fail(island_config):
         ProjectTargets.from_config(bad).check()
 
 
-def test_derive_from_references_not_implemented():
+def test_derive_from_references_targets():
     template = load_config(TEMPLATE_CONFIG)
-    with pytest.raises(NotImplementedError, match="P3.5"):
-        ProjectTargets.from_config(template)
+    targets = ProjectTargets.from_config(template)
+    base = 18_500_000 - 250_000  # target minus the carved-out Owner Allowance
+    assert sum(v for n, v in targets.cluster_targets.items()
+               if n != "Owner Allowance") == pytest.approx(base)
+    assert targets.derivation.course.final_source == "L+M"
+    assert targets.check() == []
 
 
 # ── second config changes exactly the project-dependent outputs ─────────────
