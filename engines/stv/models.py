@@ -110,6 +110,9 @@ class ConstructionItem:
     assembly: str
     material_type: str
     amount: float
+    # P3.6: part of ``amount`` that comes from a fallback estimate of the mapping
+    # (engines/stv/conversions.py); reporting only, not used in the calculation.
+    estimated_amount: float = 0.0
 
 
 @dataclass(slots=True)
@@ -163,6 +166,7 @@ class STVInputs:
                 assembly=item["assembly"],
                 material_type=item["material_type"],
                 amount=float(item["amount"]),
+                estimated_amount=float(item.get("estimated_amount", 0.0)),
             )
             for item in payload.get("construction_items", [])
         ]
@@ -217,6 +221,7 @@ class ConstructionImpactResult:
     materials: ImpactVector
     transport: ImpactVector
     construction: ImpactVector
+    estimated_amount: float = 0.0  # P3.6, see ConstructionItem
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -228,6 +233,8 @@ class ConstructionImpactResult:
             "materials": self.materials.to_dict(),
             "transport": self.transport.to_dict(),
             "construction": self.construction.to_dict(),
+            "estimated": self.estimated_amount > 0,
+            "estimated_amount": self.estimated_amount,
         }
 
     @classmethod
@@ -241,6 +248,7 @@ class ConstructionImpactResult:
             materials=ImpactVector.from_dict(payload.get("materials", {})),
             transport=ImpactVector.from_dict(payload.get("transport", {})),
             construction=ImpactVector.from_dict(payload.get("construction", {})),
+            estimated_amount=float(payload.get("estimated_amount", 0.0)),
         )
 
 
@@ -251,6 +259,9 @@ class STVResults:
     breakdown: ImpactBreakdown
     construction_items: list[ConstructionImpactResult]
     lifetime_years: int
+    # P3.6: mapping coverage of the Revit exports (engines/stv/coverage.py); None when the
+    # items did not come from a mapped export.
+    mapping_coverage: dict[str, Any] | None = None
 
     def metric_summary(self) -> dict[str, dict[str, float | None]]:
         totals = self.breakdown.life_cycle
@@ -263,7 +274,7 @@ class STVResults:
         return summary
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        payload = {
             "team": self.team,
             "targets": self.targets.to_dict(),
             "metric_summary": self.metric_summary(),
@@ -271,6 +282,9 @@ class STVResults:
             "construction_items": [item.to_dict() for item in self.construction_items],
             "lifetime_years": self.lifetime_years,
         }
+        if self.mapping_coverage is not None:
+            payload["mapping_coverage"] = self.mapping_coverage
+        return payload
 
     def to_json_ready(self) -> dict[str, Any]:
         return asdict(self)
@@ -286,6 +300,7 @@ class STVResults:
                 for item in payload.get("construction_items", [])
             ],
             lifetime_years=int(payload.get("lifetime_years", 0)),
+            mapping_coverage=payload.get("mapping_coverage"),
         )
 
     @classmethod
@@ -317,10 +332,17 @@ class STVResults:
             combined_breakdown = combined_breakdown + result.breakdown
             combined_items.extend(result.construction_items)
 
+        coverage_blocks = [r.mapping_coverage for r in results if r.mapping_coverage]
+        mapping_coverage = None
+        if coverage_blocks:
+            from .coverage import merge_coverage
+
+            mapping_coverage = merge_coverage(coverage_blocks)
         return cls(
             team=combined_team,
             targets=combined_targets,
             breakdown=combined_breakdown,
             construction_items=combined_items,
             lifetime_years=combined_lifetime,
+            mapping_coverage=mapping_coverage,
         )

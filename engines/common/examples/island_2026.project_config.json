@@ -92,7 +92,7 @@
   },
   "files": {
     "cost_db": null,
-    "stv_mapping": null,
+    "stv_mapping": "../../stv/examples/island/stv_mapping.csv",
     "custom_materials": null,
     "macro_schedule": null,
     "schedule_rules": "../../schedule/examples/island/micro_schedule_rules.json",

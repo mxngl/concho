@@ -3,7 +3,7 @@
 The per-team data repo template (project config, cost DB, STV mapping, custom materials, macro schedule, exports, pipeline workflow). Ships without any course or RSMeans data.
 
 Filled by: Phase 5 (P5.1, P5.2). Already here: `project_config.example.json` (P3.1),
-`cost_db.csv` and `examples/cost_db.example.csv` (P3.4).
+`cost_db.csv` and `examples/cost_db.example.csv` (P3.4), `stv_mapping.csv` (P3.6).
 
 ## `cost_db.csv`
 
@@ -13,6 +13,15 @@ per cost line item (format and rules: [`docs/engines/tvd.md`](../docs/engines/tv
 project_config.json`. `examples/cost_db.example.csv` shows five invented rows with comments
 (takeoff, mirror, counted codes, lump sum, percent of subtotal). A team with an old AutoTVD
 `cost_data.csv` converts it with `python scripts/migrate_cost_data.py`.
+
+## `stv_mapping.csv`
+
+The default STV mapping table (P3.6): Revit export rows → course LCA catalog entries for
+common Uniformat codes, a small reviewed set (names only, no LCA values; not course data).
+`concho-stv` uses it when the project sets no `files.stv_mapping`. Copy it, extend it with
+your categories and keywords (format: [`docs/engines/stv.md`](../docs/engines/stv.md)) and
+check it with `concho stvmap validate stv_mapping.csv` (with `$COURSE_STV_XLSX` set for the
+catalog check). The `mapping_coverage` block of the results lists what is still unmapped.
 
 ## `project_config.example.json`
 
@@ -62,3 +71,4 @@ validation rules: [`docs/config.md`](../docs/config.md). Check your copy with
 - **`files`**: all `null` until the team has its files (formats: cost DB P3.4, STV mapping
   P3.6, custom materials P3.7, macro schedule P3B.1, schedule rules P3B.2). Validation warns
   that `cost_db` and `macro_schedule` are unset. Paths are relative to the config file.
+  With `stv_mapping: null`, `concho-stv` uses the default table `template/stv_mapping.csv`.
