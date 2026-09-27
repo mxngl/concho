@@ -52,6 +52,11 @@
     },
     "blocked_windows": [
       {
+        "name": "Hurricane season 2029 (Jun-Oct, peak Aug-Oct)",
+        "start": "2029-06-01",
+        "end": "2029-10-31"
+      },
+      {
         "name": "Hurricane season 2030 (Jun-Oct, peak Aug-Oct)",
         "start": "2030-06-01",
         "end": "2030-10-31"
