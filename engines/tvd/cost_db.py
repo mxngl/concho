@@ -84,6 +84,9 @@ RULE_PATTERN = (
     r"|count_codes:[A-Z][0-9]{4}(\.[A-Za-z0-9_-]+)?(,[A-Z][0-9]{4}(\.[A-Za-z0-9_-]+)?)*)$"
 )
 FALLBACK_KEYWORD = "*"
+# Course reliability scale (cluster sheets, e.g. 'A Substructure' K26:M28): 1 = High,
+# 2 = Medium, 3 = Low. A line's overall reliability is the worse (higher) of the two ratings.
+RELIABILITY_LEVELS: dict[int, str] = {1: "high", 2: "medium", 3: "low"}
 
 # Description keywords that point to another D level-2 group (mislabel check, e.g. the
 # Island D5030 "Fire Protection Systems" and D5090 "HVAC Systems").
@@ -154,11 +157,13 @@ class CostDbRow(BaseModel):
     )
     qty_reliability: int | None = Field(
         default=None, ge=1, le=3,
-        description="Quantity reliability 1 = low, 2 = medium, 3 = high; empty = not rated.",
+        description="Quantity reliability 1 = high, 2 = medium, 3 = low (course scale); "
+                    "empty = not rated.",
     )
     cost_reliability: int | None = Field(
         default=None, ge=1, le=3,
-        description="Unit cost reliability 1 = low, 2 = medium, 3 = high; empty = not rated.",
+        description="Unit cost reliability 1 = high, 2 = medium, 3 = low (course scale); "
+                    "empty = not rated.",
     )
     source: str = Field(default="", description="Where the unit cost comes from (free text).")
     split_keywords: str = Field(
@@ -425,7 +430,7 @@ class _Validator:
                 values[col] = int(raw)
             else:
                 self.err(row, code, col,
-                         f"'{raw}' must be 1, 2 or 3 (low, medium, high), or empty.")
+                         f"'{raw}' must be 1, 2 or 3 (high, medium, low), or empty.")
                 values[col] = None
 
         # rule

@@ -34,7 +34,7 @@ row: [`docs/schema/cost_db.schema.json`](../schema/cost_db.schema.json) (pydanti
 | `unit_cost` | – | cost per unit, **plain decimal** (`1670000.00`); empty = unpriced (priced 0, warning) |
 | `quantity_rule` | yes | see "Quantity rules" |
 | `quantity_value` | rule | plain decimal: the quantity (`fixed`), factor (`per_gsf`), percent (`pct_of_subtotal`); empty otherwise |
-| `qty_reliability`, `cost_reliability` | – | 1 = low, 2 = medium, 3 = high; empty = not rated (warning; used by the reliability summary in P3.5) |
+| `qty_reliability`, `cost_reliability` | – | **1 = high, 2 = medium, 3 = low** (course scale, cluster sheets rows 26–28 in 'A Substructure', `M26:M28`); empty = not rated (warning; used by the reliability summary, see below) |
 | `source` | – | where the unit cost comes from (free text) |
 | `split_keywords` | – | sub-code rows only, see "Keyword split" |
 | `qty_label` | – (optional column) | label shown as the quantity source (`qty_src`) instead of the engine's generic label |
@@ -116,12 +116,12 @@ cluster nor in `tvd.custom_clusters` is an error.
 
 ```csv
 cluster,assembly_code,group,description,unit,unit_cost,quantity_rule,quantity_value,qty_reliability,cost_reliability,source,split_keywords,qty_label
-Interiors,C1010,Partitions,Invented gypsum partition,SF,12.50,takeoff,,3,2,invented,,
-Interiors,C3010,Wall Finishes,Invented wall paint,SF,1.80,mirror:C1010,,3,2,invented,,
+Interiors,C1010,Partitions,Invented gypsum partition,SF,12.50,takeoff,,1,2,invented,,
+Interiors,C3010,Wall Finishes,Invented wall paint,SF,1.80,mirror:C1010,,1,2,invented,,
 Interiors,C1030,Fittings,Invented toilet partition,EA,950.00,count_codes:D2010,,2,2,invented,,
-Services,D5010,Electrical Service & Distribution,Invented electrical,GSF,20.00,per_gsf,,1,1,invented,,
-General Conditions,H4000,General Conditions,Invented site overhead,LS,250000.00,fixed,1,2,1,invented,,
-General Conditions,H5000,Contingency,Invented design contingency,%,,pct_of_subtotal,5,1,1,invented,,
+Services,D5010,Electrical Service & Distribution,Invented electrical,GSF,20.00,per_gsf,,3,3,invented,,
+General Conditions,H4000,General Conditions,Invented site overhead,LS,250000.00,fixed,1,2,3,invented,,
+General Conditions,H5000,Contingency,Invented design contingency,%,,pct_of_subtotal,5,3,3,invented,,
 Substructure,A1020,Special Foundations,,,,takeoff,,,,,,
 ```
 
