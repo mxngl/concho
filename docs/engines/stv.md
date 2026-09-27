@@ -151,6 +151,33 @@ warning. With exports, every element is matched and ties are errors. From Python
 | an element of a given export matches two rules with the same specificity and priority | error |
 | no course workbook given (catalog not checked) | warning |
 
+### Island mapping file
+
+`engines/stv/examples/island/stv_mapping.csv` (72 rules) reproduces the importers of
+concho `17da703` (before P3.6). All 4,007 rows of the six Current exports map to the same
+(assembly, material type, amount), bit for bit, and the golden test reproduces
+2,517,183.14 kgCO₂e and every stored result file exactly. Most Island elements have no
+Assembly Code and the MEP export has no Assembly Code column, so the Island rules use
+category and keyword (only the exterior walls use `B2000`). The file makes the implicit
+choices explicit (note column):
+
+- **bamboo → glulam proxy** (`proxy, see P3.7`): structural rules with keyword
+  `structural bamboo` book the Island bamboo columns (99) and beams (113) as Glulam Column /
+  Beam (kg) at 19.43 kg/cf; the architecture rules book the bamboo floors as Concrete (sf) and
+  the bamboo walls as Steel Studs and Painted Gypsum (sf), as the old default rules did.
+- MEP family names (diffusers → AHU airflow, fitting families with their surface factors),
+  duct size 12"/18"D at 15 in, 12 in when unknown; stainless 8000 kg/m³, gauges 0.5/0.6/0.8 mm.
+- Unmapped as before (no rule): MEP `34274` electrical fixtures and `Utility Switchboard`
+  (the old code had explicit "no mapping" entries), all `Parts` (P3.9), furniture, generic
+  models, plumbing fixtures, structural floors without concrete/wood keywords.
+
+Where the table generalises the old code (same result on the Island exports, possibly a
+different one on other data): keywords are always searched in Family + Type + Material +
+Assembly Description (the old code searched some keywords only in the family, the material or
+the type; pipe materials also in the parameter snapshot); a stainless duct without a weight is
+zero quantity (the old code fell back to the duct length); the bamboo rules also catch
+bamboo members of other families.
+
 ## Island 2026 reference result
 
 **The current Island result is 2,517,183.14 kgCO₂e** (28,396,923.44 MJ, 30,026,557.14 kg
