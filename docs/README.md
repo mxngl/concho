@@ -2,7 +2,7 @@
 
 Project documentation.
 
-- [`ROADMAP.md`](ROADMAP.md): handover roadmap (planning baseline)
+- [`ROADMAP.md`](ROADMAP.md): roadmap (source of truth)
 - [`decisions.md`](decisions.md): decision records D1–D12
 - [`config.md`](config.md): `project_config` reference
 - [`model-requirements.md`](model-requirements.md): Revit model requirements (Assembly Codes, units) and every CSV column of the add-in exports

@@ -1,8 +1,7 @@
 # CLAUDE.md – rules for every Claude Code session in this repo
 
 ## Roadmap
-- The source of truth is the roadmap artifact maintained by Max/Ash; `docs/ROADMAP.md` is its copy.
-- If the prompt includes a newer roadmap, first replace `docs/ROADMAP.md` with it (unchanged).
+- The source of truth is `docs/ROADMAP.md`; Max and Ash change it via PRs. The roadmap artifact is a read-only mirror.
 - In the PR for a task: tick the task's checkbox / status in `docs/ROADMAP.md` and add one line
   to the progress log (date, what was done, PR link). Don't rewrite other parts of the roadmap.
 
