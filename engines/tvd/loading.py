@@ -1,9 +1,11 @@
-"""QTO loading: read CSV exports and merge/deduplicate them by ElementId."""
+"""QTO loading: read CSV exports and merge/deduplicate them (P3.9 rule, D15)."""
 
 import csv
 import io
 import os
 import re
+
+from engines.common.dedup import ARCHITECTURE, STRUCTURAL, DedupResult, Export, deduplicate
 
 
 def _read_local(path: str) -> str:
@@ -63,14 +65,18 @@ def source_label(path: str) -> str:
     return rel.replace(os.sep, "/")
 
 
-def merge_takeoffs(arch: list[dict], struct: list[dict]) -> list[dict]:
+def merge_takeoffs(
+    arch: list[dict], struct: list[dict], *, arch_label: str = "arch", struct_label: str = "struct"
+) -> DedupResult:
+    """Merge the architecture and structural takeoffs with the shared rule of P3.9 / D15
+    (:mod:`engines.common.dedup`): Parts over their host, then one row per ElementId (with
+    Assembly Code > export of the owning discipline). ``.kept_rows`` are the rows to count,
+    ``.block()`` is the ``deduplication`` block of the results JSON.
+
+    Before P3.9 the structural row always won; the AutoTVD reference exports have no
+    ElementId in both files, so the Island results are unchanged (docs/engines/tvd.md).
     """
-    Merge architectural and structural takeoffs by ElementId (no duplicates).
-    Structural rows override architectural where ElementId matches.
-    """
-    combined: dict[str, dict] = {}
-    for row in arch:
-        combined[row["ElementId"]] = row
-    for row in struct:
-        combined[row["ElementId"]] = row  # struct wins on overlap
-    return list(combined.values())
+    return deduplicate([
+        Export(arch_label, ARCHITECTURE, arch),
+        Export(struct_label, STRUCTURAL, struct),
+    ])

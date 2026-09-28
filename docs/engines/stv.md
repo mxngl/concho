@@ -58,7 +58,7 @@ file line numbers. JSON Schema of one row: [`docs/schema/stv_mapping.schema.json
 |---|---|---|
 | `discipline` | – (optional column) | `architecture`, `structural` or `mep`: the rule only sees elements of that export; empty = all. The discipline comes from the importer (`--architecture-schedule` etc., or the `source_schedule` of a central BIM row), not from the export. |
 | `assembly_code` | – | Uniformat code, validated like the cost DB codes (P3.4, `engines/common/uniformat.csv`: level 3 `B2010`, the 4-digit form of a level-2 code `B2000`, or an extension). Matches element Assembly Codes that **start with** it (`B2010` → `B2010`, `B2010100`; `B2000` → everything in `B20`). No sub-codes. |
-| `category` | – | Revit Category, case-insensitive (`Walls`, `Structural Framing`). |
+| `category` | – | Revit Category, case-insensitive (`Walls`, `Structural Framing`). A Part (Category `Parts`) matches with its `Original Category` (P3.9; `Parts` when that is empty, as in the old exports). |
 | `keyword` | – | case-insensitive substrings of Family + Type + Material + Assembly Description; see "Keywords". Needs a category. |
 | `priority` | – (optional column) | whole number ≥ 0, default 100; lower wins among rules of the same specificity. |
 | `stv_assembly` | yes | assembly of the course LCA catalog (`Exterior Wall`, `Columns`, `MEP`, …) |
@@ -155,7 +155,7 @@ warning. With exports, every element is matched and ties are errors. From Python
 
 ### Island mapping file
 
-`engines/stv/examples/island/stv_mapping.csv` (72 rules) reproduces the importers of
+`engines/stv/examples/island/stv_mapping.csv` (73 rules) reproduces the importers of
 concho `17da703` (before P3.6). All 4,007 rows of the six Current exports map to the same
 (assembly, material type, amount), bit for bit, and the golden test reproduces
 2,517,183.14 kgCO₂e and every stored result file exactly. Most Island elements have no
@@ -170,8 +170,15 @@ choices explicit (note column):
 - MEP family names (diffusers → AHU airflow, fitting families with their surface factors),
   duct size 12"/18"D at 15 in, 12 in when unknown; stainless 8000 kg/m³, gauges 0.5/0.6/0.8 mm.
 - Unmapped as before (no rule): MEP `34274` electrical fixtures and `Utility Switchboard`
-  (the old code had explicit "no mapping" entries), all `Parts` (P3.9), furniture, generic
-  models, plumbing fixtures, structural floors without concrete/wood keywords.
+  (the old code had explicit "no mapping" entries), the `Parts` of the old exports (no
+  `Original Category`), furniture, generic models, plumbing fixtures, structural floors
+  without concrete/wood keywords.
+- **Parts (P3.9):** Parts of new exports match the rules of their `Original Category`, so the
+  Floors rules also take floor Parts. One rule was added for the structural floor Parts of
+  the current model (bamboo, code B1010 from the source floor): `structural, B1010, Floors,
+  structural bamboo` → Floor / Concrete (sf) by area, a proxy like the whole bamboo floors of
+  the architecture rules. No row of the six Current exports matches it (their Parts have no
+  `Original Category`), so the Island results are unchanged by it.
 
 Where the table generalises the old code (same result on the Island exports, possibly a
 different one on other data): keywords are always searched in Family + Type + Material +
@@ -192,7 +199,9 @@ weight; D5090 PV panels (Electrical Equipment or Generic Models with a photovolt
 panel keyword) by area as Energy / Photovoltaics (sf), P3.8). Left out on purpose: members that need a density (steel, timber, glulam), steel
 ducts (size threshold), windows (pane count and frame are rarely exported), roof structure
 (B1020), and anything without an Assembly Code (e.g. the MEP export). Teams copy it and
-extend it; the coverage report lists what is left.
+extend it; the coverage report lists what is left. Parts need no rules of their own (P3.9):
+a Part carries its source's Assembly Code and matches with its `Original Category`, so e.g.
+floor Parts take the B1010 Floors rules.
 
 ### Coverage report: `mapping_coverage`
 
@@ -209,26 +218,107 @@ When Revit exports are mapped, `stv_results.json` gets a `mapping_coverage` bloc
 - `rules`: every rule with `won` (elements it mapped, `won_zero_quantity` of them with 0
   quantity), `lost_to_priority` (it matched, but a rule of the same specificity with a lower
   priority won) and `lost_to_specificity` (a more specific rule won), so overlaps are visible;
-- `cross_discipline_elements`: ElementIds in more than one discipline export, with how each
-  occurrence maps (input for P3.9; nothing is deduplicated here).
+- `cross_discipline_elements`: ElementIds in more than one discipline export among the
+  mapped rows, with how each occurrence maps. Since P3.9 `concho-stv` maps only the rows the
+  duplicate / Parts rule keeps (see "Duplicates and Parts" below), so in a CLI run the list is
+  empty; the dropped rows are in the `deduplication` block.
 
 `--combine-results` merges the blocks of the inputs (disciplines and rule counts summed);
 cross-discipline elements cannot be recovered there (`null` with a note), so run all
-exports in one `concho-stv` call (the export flags take several files) to get them.
+exports in one `concho-stv` call (the export flags take several files).
 
-Island (all six Current exports in one call, `engines/common/examples/island_2026.project_config.json`):
+Island (all six Current exports in one call, `engines/common/examples/island_2026.project_config.json`;
+since P3.9 after the duplicate / Parts rule, before it in brackets where different):
 
 | Discipline | Elements | Mapped | Zero qty | Unmapped | Mapped by area / volume / length | kgCO₂e | on estimates |
 |---|---|---|---|---|---|---|---|
-| architecture | 1,986 | 1,331 (67.0 %) | 3 | 652 | 72.8 % / 89.3 % / 93.8 % | 1,921,565.69 | 0 |
-| structural | 505 | 338 (66.9 %) | 0 | 167 | 36.2 % / 46.4 % / 100 % | 544,319.12 | 0 |
+| architecture | 1,952 (1,986) | 1,329 (1,331), 68.1 % | 3 | 620 (652) | 72.2 % / 88.8 % / 93.8 % | 1,863,757.19 (1,921,565.69) | 0 |
+| structural | 504 (505) | 338, 67.1 % | 0 | 166 (167) | 38.8 % / 51.6 % / 100 % | 544,319.12 | 0 |
 | mep | 1,516 | 1,346 (88.8 %) | 74 | 96 | 73.9 % / 46.5 % / 95.1 % | 51,298.33 | 5,731.34 (11.2 %) |
 
-Unmapped/zero quantity = the rows skipped before P3.6 (655 / 167 / 170). Structural: 166
-`Parts` (Structural Bamboo (CLB)) and the floor 1241457; MEP zero quantity: 74 return
-grilles without airflow. 35 ElementIds appear in two disciplines, among them the floors
-1241457 (architecture: 6,848 sf Concrete; structural: unmapped), 1789623 and 1789655 (both
-mapped in both).
+Before P3.9 the unmapped/zero-quantity rows were the rows skipped before P3.6 (655 / 167 /
+170). Structural unmapped: the 166 `Parts` (Structural Bamboo (CLB), no `Original Category`
+in this old export); the floor 1241457 is now dropped as a duplicate. MEP zero quantity: 74
+return grilles without airflow. The 35 ElementIds that appeared in two disciplines are
+resolved by the rule (next section).
+
+## Duplicates and Parts (P3.9, decision D15)
+
+`concho-stv` reads **all exports of one call together** and applies the shared rule of
+`engines/common/dedup.py` (the same module TVD uses) **before** mapping. Rule and wording:
+[`docs/model-requirements.md`](../model-requirements.md), "How Parts and duplicates are
+counted"; decision: [D15](../decisions.md).
+
+1. **Parts over their host.** A row whose ElementId is some Part's `Part Source Id` is
+   dropped (`host_of_parts`), its Parts are counted.
+2. **One row per ElementId**, decided in this order (the deciding step is the reason):
+   a. a row with an Assembly Code wins (`duplicate_without_code`);
+   b. **STV only:** a row the mapping table maps (a rule matches) wins over an unmapped one
+      (`duplicate_unmapped`);
+   c. the export whose discipline owns the category wins: structural for Floors, Structural
+      Framing / Columns / Foundations (and Parts with such an `Original Category`), MEP for
+      the MEP categories (plumbing fixtures included), architecture for everything else
+      (`duplicate_other_discipline`);
+   d. two exports of the same discipline: the first given wins (`duplicate_same_discipline`).
+3. **Parts are mapped with their `Original Category`** (`Parts` if it is empty, so the Parts
+   of the old exports stay unmapped as before).
+
+The results JSON gets a `deduplication` block: `rule`, `exports` (file name, discipline,
+rows), `rows_in`, `rows_kept`, `dropped`, `by_reason` (count per reason), `parts` (Part rows,
+of them with `Part Source Id`, hosts), and `dropped_rows` (`element_id`, `category`,
+`kept_export`, `kept_discipline`, `dropped_export`, `dropped_discipline`, `reason`; no
+quantities). The per-discipline item files (`*_schedule_items.json`) and `mapping_coverage`
+count only the kept rows. `--architecture-history-dir` applies the rule per export.
+
+**`--combine-results` cannot deduplicate**: its inputs carry no ElementIds, so an element in
+the exports of two inputs is counted twice and a host next to its Parts. It still works,
+but prints a warning, and its `deduplication` block says so (`deduplicated_across_inputs:
+false`, a note recommending one run with all discipline exports, and what each input dropped
+in its own run). **Run all discipline exports in one `concho-stv` call** (each export flag
+takes several files) whenever duplicates are possible.
+
+**DNC rows (`dnc_rows`, not changed by P3.9).** TVD skips rows whose Family, Type, Mark or
+Comments contain `DNC` ("do not count"); STV counts them. The results list the counted DNC
+rows (`element_id`, `category`, `type`, `discipline`, `status`) and `concho-stv` warns. The
+Island one run has 12 (the floors 1241717, 1241762, 1502300, 1533476, 1789623, 1789655 and
+six walls). Whether STV should skip them too is a separate decision (Ash).
+
+### Island: before / after
+
+The **per-trade reference C stays 2,517,183.14 kgCO₂e** (golden test unchanged): it
+reproduces the stored AutoSTV / IPD_Challenge files, which the original batch script built
+per trade and combined, so no rule could see the duplicates. The **one run** of all six
+Current exports (`concho-stv --architecture-schedule … --mep-schedule … --structural-schedule
+…`, `tests/stv/test_golden_stv.py::test_island_cli_single_run`) used to equal C and now
+drops 35 rows:
+
+| ElementId(s) | Category | Kept | Dropped | Reason | Effect |
+|---|---|---|---|---|---|
+| 1789623 | Floors (`Concrete 6" DNC`, B1010 in both) | structural (1,628 sf) | architecture (1,628 sf) | `duplicate_other_discipline` | −1,628 sf Floor / Concrete (sf) |
+| 1789655 | Floors (`Concrete 6" DNC`, B1010 in both) | structural (1,858 sf) | architecture (3,238 sf) | `duplicate_other_discipline` | −3,238 sf Floor / Concrete (sf) |
+| 1241457 | Floors (`Generic - 12"`, A1010 in both) | architecture (6,848 sf, mapped) | structural (no rule matches) | `duplicate_unmapped` | none (the architecture row was counted before too) |
+| 32 plumbing fixtures (sinks, toilets) | Plumbing Fixtures (no code in either) | MEP | architecture | `duplicate_other_discipline` | none (unmapped in both) |
+
+| One run, six Current exports | Carbon kgCO₂e | Energy MJ | Water kg | Ozone |
+|---|---|---|---|---|
+| before P3.9 (= C) | 2,517,183.14 | 28,396,923.44 | 30,026,557.14 | 0.0707308 |
+| **after P3.9** | **2,459,374.64** | **27,881,604.68** | **29,295,515.72** | **0.0692645** |
+| delta | −57,808.50 (−2.3 %) | −515,318.76 | −731,041.42 | −0.0014663 |
+| % of target | 33.2 % (34.0 %) | 17.9 % (18.2 %) | 10.8 % (11.1 %) | |
+
+Per assembly only **Floor** changes (1,190,997.03 → 1,133,188.53 kgCO₂e; Floor / Concrete
+(sf) 93,170 → 88,304 sf, i.e. −4,866 sf at 11.88 kgCO₂e/sf); Beams, Columns, Exterior Wall,
+Foundation, Interior Wall, MEP and Roof are identical. No Parts rule applies (the old exports
+have no `Part Source Id` and no `Original Category`).
+
+Notes on the three floors: all of them come from the **ARCH model's own two exports**
+(`04_Island_ARCH_Concept2_Architecture_TakeOff.csv` and `…_Structural_Schedule.csv`); no
+ElementId is shared between the ARCH and the STR model exports, so no chance collision of
+two models' ElementIds occurs here. 1789655 has **different areas** in them (3,238 sf in the
+architecture export, 1,858 sf in the structural one), so these two exports were taken from
+different states of the model. 1241457 has no structural rule because the Island structural
+floor rules need a concrete/slab/deck or wood keyword; step b keeps its mapped architecture
+row, so no Island mapping file had to change for it.
 
 ## Custom materials: `custom_materials.csv` (P3.7)
 
@@ -470,27 +560,30 @@ Course water for these inputs: toilet 675,000 + WC sink 67,500 + lab sink 13,500
 
 ### Result (six Current exports, one run; reference workbook `STV_ConceptA_Bambo.xlsx`, same with the course workbook)
 
+Since P3.9 the one run is deduplicated (see "Duplicates and Parts"): construction is the
+one-run value 2,459,374.64 instead of reference C; values before P3.9 in brackets.
+
 | | Carbon kgCO₂e | Energy MJ | Water kg |
 |---|---|---|---|
-| Construction (reference C) | 2,517,183.14 | 28,396,923.44 | 30,026,557.14 |
+| Construction (one run, P3.9) | 2,459,374.64 (2,517,183.14) | 27,881,604.68 (28,396,923.44) | 29,295,515.72 (30,026,557.14) |
 | + PV panels 5,000 sf | 206,969.00 | 2,678,270.49 | 3,809,140.52 |
-| **Construction total** | **2,724,152.14** | **31,075,193.93** | **33,835,697.66** |
+| **Construction total** | **2,666,343.64** (2,724,152.14) | **30,559,875.16** (31,075,193.93) | **33,104,656.24** (33,835,697.66) |
 | Use phase, 50 years (water only; grid 0) | 45,414.05 | 506,239.08 | 145,234,734.80 |
-| **Construction + 50 years use** | **2,769,566.19** | **31,581,433.01** | **179,070,432.45** |
+| **Construction + 50 years use** | **2,711,757.69** (2,769,566.19) | **31,066,114.25** (31,581,433.01) | **178,339,391.04** (179,070,432.45) |
 | Island target | 7,396,873.85 | 155,969,076.59 | 271,387,397.26 |
-| **% of target** | **37.4 %** | **20.2 %** | **66.0 %** |
+| **% of target** | **36.7 %** (37.4 %) | **19.9 %** (20.2 %) | **65.7 %** (66.0 %) |
 
 The use phase equals the team workbook's own cached `Use Phase` F13:I13 (the same inputs in
-the course formulas; pinned in `tests/stv/test_golden_stv.py`). The PV panels add 8.2 % to
+the course formulas; pinned in `tests/stv/test_golden_stv.py`). The PV panels add 8.4 % to
 the construction carbon.
 
 **Sensitivity of the grid assumption** (added to the totals above; Island grid factors):
 
 | Grid kWh/yr | Carbon kgCO₂e (% of target) | Energy MJ (%) | Water kg (%) |
 |---|---|---|---|
-| 0 (annual netting, example) | 2,769,566.19 (37.4 %) | 31,581,433.01 (20.2 %) | 179,070,432.45 (66.0 %) |
-| 12,000 (PV only ~150,000 kWh/yr, from 5,000 sf) | 3,284,366.19 (44.4 %) | 38,393,554.22 (24.6 %) | 180,717,216.45 (66.6 %) |
-| 162,000 (gross, PV not netted) | 9,719,366.19 (131.4 %) | 123,545,069.34 (79.2 %) | 201,302,016.45 (74.2 %) |
+| 0 (annual netting, example) | 2,711,757.69 (36.7 %) | 31,066,114.25 (19.9 %) | 178,339,391.04 (65.7 %) |
+| 12,000 (PV only ~150,000 kWh/yr, from 5,000 sf) | 3,226,557.69 (43.6 %) | 37,878,235.46 (24.3 %) | 179,986,175.03 (66.3 %) |
+| 162,000 (gross, PV not netted) | 9,661,557.69 (130.6 %) | 123,029,750.58 (78.9 %) | 200,570,975.03 (73.9 %) |
 
 **Open data questions for Max/Ash:** (1) PV area vs. output: 5,000 sf vs. ~7,000–7,500 sf
 for 216,992 kWh/yr; (2) water: the course formula gives 756,000 gal/yr gross / 359,817 net
@@ -600,13 +693,19 @@ rule 4).
 - **Unmapped Parts.** In C, 166 structural `Parts` rows (plus 1 floor) are skipped by the
   structural importer, and 96 `Parts` rows by the architecture importer (together with 370
   furniture, 118 generic models, 32 plumbing fixtures, …; 655 skipped architecture rows).
-  The Revit add-in exports parts and skips a floor/ceiling that has parts, so whether parts
-  should be counted is open (P3.9). MEP skips 170 rows (air terminals, electrical and
-  plumbing fixtures).
+  MEP skips 170 rows (air terminals, electrical and plumbing fixtures). Since P3.9 (D15) Parts
+  are counted and their hosts are not; the Parts of these old exports carry no
+  `Original Category` / `Part Source Id` and stay unmapped. In the current model (Max's
+  retest, not in the fixtures) the 166 structural Parts come from the floors 631022, 646198
+  and 646504, which appear in no export as whole elements, and carry B1010 + `Original
+  Category` Floors, so the Island mapping books them (bamboo proxy rule, see "Island mapping
+  file"). Check: if a floor's Parts are split by **layer** rather than in plan, area rules
+  count the floor area once per layer; use a volume rule or check the Part split.
 - **MEP mapping uses literal Revit family names** (since P3.6 in the Island mapping file).
-- **Possible double counting of floors.** Three floor elements (IDs 1241457, 1789623,
-  1789655; about 10,000 sf) appear in both the Current architecture and structural exports and
-  both importers map floors. Not verified further; the golden test keeps the behaviour as is.
+- **Double counting of floors.** Three floor elements (IDs 1241457, 1789623, 1789655) appear
+  in both the Current architecture and structural exports; in C, 1789623 and 1789655 are
+  counted in both (4,866 sf too much). C keeps that (per-trade reference); a one run since
+  P3.9 counts each once (see "Duplicates and Parts", 2,459,374.64 kgCO₂e).
 - **Reference workbook.** The team workbooks in IPD_Challenge `STV_Template/` are used as the
   reference data here (never copied into this repo). `STV_ConceptA_Bambo.xlsx` reproduces all
   files exactly. `STV_LAMARCASINA_BAMBOO.xlsx` gives the same carbon, energy and water for C

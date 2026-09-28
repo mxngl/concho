@@ -20,7 +20,7 @@
     },
     "category": {
       "default": "",
-      "description": "Revit Category (case-insensitive), e.g. 'Walls'. Empty = any category (then assembly_code is required and keyword must be empty).",
+      "description": "Revit Category (case-insensitive), e.g. 'Walls'; Parts match with their 'Original Category' ('Parts' if empty). Empty = any category (then assembly_code is required and keyword must be empty).",
       "title": "Category",
       "type": "string"
     },

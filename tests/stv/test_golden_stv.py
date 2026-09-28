@@ -57,10 +57,10 @@ RIVER_CONFIG = REPO_ROOT / "tests" / "fixtures" / "configs" / "river_test.projec
 ISLAND_MAPPING = REPO_ROOT / "engines" / "stv" / "examples" / "island" / "stv_mapping.csv"
 # P3.6 item fields that the stored reference results do not have.
 # Keys added after the stored reference files: P3.6 (estimates), P3.7 (custom materials,
-# proxies), P3.8 (use-phase status).
+# proxies), P3.8 (use-phase status), P3.9 (deduplication block, DNC rows).
 ADDED_ITEM_KEYS = ("estimated", "estimated_amount", "custom_material", "custom_material_source",
                    "proxy", "proxy_amount", "origin")
-ADDED_RESULT_KEYS = ("data_flags", "use_phase_status")
+ADDED_RESULT_KEYS = ("data_flags", "use_phase_status", "deduplication", "dnc_rows")
 WORKBOOK = "STV_Template/STV_ConceptA_Bambo.xlsx"
 SCHEDULES = "revit_schedules/Current"
 
@@ -316,21 +316,93 @@ def test_island_estimates(island_coverage, project):
     assert flagged and all(assembly == "MEP" for assembly, _ in flagged)
 
 
-def test_island_cli_single_run(monkeypatch, tmp_path, ipd_challenge_dir):
-    """All six exports in one concho-stv call: same total, full coverage block."""
+# P3.9 (D15): all six exports in one concho-stv call are deduplicated. Only the architecture
+# rows of 1789623 (1,628 sf) and 1789655 (3,238 sf) drop (the structural export owns Floors);
+# 1241457 keeps its architecture row (A1010 in both, only that row is mapped). Everything
+# else is the per-trade reference above. Before/after: docs/engines/stv.md, "Duplicates and
+# Parts".
+ONE_RUN = {"carbon": 2_459_374.640652, "energy": 27_881_604.675038,
+           "water": 29_295_515.721439}
+ONE_RUN_DROPPED_SF = 1628.0 + 3238.0
+PLUMBING_DUPLICATES = 32  # plumbing fixtures in the ARCH model's architecture + MEP exports
+
+
+def _one_run(monkeypatch, tmp_path, ipd_challenge_dir, config: Path) -> dict:
     schedules = ipd_challenge_dir / SCHEDULES
-    args = ["--config", str(ISLAND_CONFIG), "--template", str(ipd_challenge_dir / WORKBOOK),
+    args = ["--config", str(config), "--template", str(ipd_challenge_dir / WORKBOOK),
             "--output-dir", str(tmp_path)]
     for trade, (_loader, files) in TRADES.items():
         args += [f"--{trade}-schedule", *(str(schedules / f) for f in files)]
     monkeypatch.setattr(sys, "argv", ["concho-stv", *args])
     cli.main()
-    result = _load(tmp_path / "stv_results.json")
-    assert result["metric_summary"]["carbon"]["project"] == pytest.approx(PROJECT["carbon"],
-                                                                          rel=REL)
-    coverage = result["mapping_coverage"]
+    return _load(tmp_path / "stv_results.json")
+
+
+@pytest.fixture
+def one_run(monkeypatch, tmp_path, ipd_challenge_dir) -> dict:
+    return _one_run(monkeypatch, tmp_path, ipd_challenge_dir, ISLAND_CONFIG)
+
+
+def test_island_cli_single_run(one_run, project):
+    """All six exports in one concho-stv call: the P3.9 value, full coverage block."""
+    for metric, value in ONE_RUN.items():
+        assert one_run["metric_summary"][metric]["project"] == pytest.approx(value, rel=REL)
+    coverage = one_run["mapping_coverage"]
     assert coverage["mapping_file"].endswith("engines/stv/examples/island/stv_mapping.csv")
-    assert DOUBLE_FLOORS <= {x["element_id"] for x in coverage["cross_discipline_elements"]}
+    # The duplicates are resolved before mapping, so none are left to list.
+    assert coverage["cross_discipline_elements"] == []
+
+    # Exactly one line amount differs from the per-trade reference: Floor / Concrete (sf).
+    def amounts(result):
+        totals: dict[tuple[str, str], float] = defaultdict(float)
+        for item in result["construction_items"]:
+            totals[(item["assembly"], item["material_type"])] += item["amount"]
+        return totals
+
+    before, after = amounts(project), amounts(one_run)
+    changed = {k: after[k] - before[k] for k in before | after
+               if after[k] != pytest.approx(before[k], rel=1e-12)}
+    assert changed == {("Floor", "Concrete (sf)"): pytest.approx(-ONE_RUN_DROPPED_SF)}
+
+
+def test_island_cli_deduplication_block(one_run):
+    block = one_run["deduplication"]
+    assert (block["rows_in"], block["rows_kept"], block["dropped"]) == (4007, 3972, 35)
+    assert block["by_reason"] == {
+        "host_of_parts": 0, "duplicate_without_code": 0, "duplicate_unmapped": 1,
+        "duplicate_other_discipline": 34, "duplicate_same_discipline": 0}
+    # Old exports: 262 Parts (166 structural, 96 architecture), none with Part Source Id.
+    assert block["parts"] == {"rows": 262, "with_part_source_id": 0, "hosts": 0}
+    dropped = {d["element_id"]: d for d in block["dropped_rows"]}
+    assert set(dropped) >= DOUBLE_FLOORS
+    arch = "04_Island_ARCH_Concept2_Architecture_TakeOff.csv"
+    struct = "04_Island_ARCH_Concept2_Structural_Schedule.csv"
+    assert dropped["1241457"] == {
+        "element_id": "1241457", "category": "Floors", "kept_export": arch,
+        "kept_discipline": "architecture", "dropped_export": struct,
+        "dropped_discipline": "structural", "reason": "duplicate_unmapped"}
+    for element_id in ("1789623", "1789655"):
+        assert (dropped[element_id]["kept_export"], dropped[element_id]["dropped_export"],
+                dropped[element_id]["reason"]) == (struct, arch, "duplicate_other_discipline")
+    plumbing = [d for d in block["dropped_rows"] if d["category"] == "Plumbing Fixtures"]
+    assert len(plumbing) == PLUMBING_DUPLICATES
+    assert {(d["kept_discipline"], d["dropped_discipline"]) for d in plumbing} == {
+        ("mep", "architecture")}
+    # Nothing but ElementIds, categories, exports and reasons (no quantities).
+    assert all(set(d) == {"element_id", "category", "kept_export", "kept_discipline",
+                          "dropped_export", "dropped_discipline", "reason"}
+               for d in block["dropped_rows"])
+
+
+def test_island_cli_dnc_rows(one_run):
+    """P3.9: counted rows with the DNC marker are listed (TVD skips such rows, STV counts
+    them; a separate decision)."""
+    rows = {r["element_id"]: r for r in one_run["dnc_rows"]}
+    assert len(rows) == 12
+    assert {"1789623", "1789655"} <= set(rows)
+    assert rows["1789655"] == {"element_id": "1789655", "category": "Floors",
+                               "type": 'Concrete 6" DNC', "discipline": "structural",
+                               "status": "mapped"}
 
 
 # --- P3.7: bamboo proxies flagged, no custom material ------------------------------------
@@ -365,24 +437,18 @@ TEAM_USE_PHASE_WORKBOOK = "STV_Template/STV_LAMARCASINA_BAMBOO.xlsx"
 
 
 def test_island_use_phase_example(monkeypatch, tmp_path, ipd_challenge_dir, trade_results):
-    """Six Current exports + the use-phase config: construction as the reference plus 5,000 sf
+    """Six Current exports + the use-phase config: construction as the one run plus 5,000 sf
     PV, and a 50-year use phase equal to the team workbook's own 'Use Phase' F13:I13 (the
     same inputs typed into the course formulas there)."""
     openpyxl = pytest.importorskip("openpyxl")
-    schedules = ipd_challenge_dir / SCHEDULES
-    args = ["--config", str(USE_PHASE_CONFIG), "--template", str(ipd_challenge_dir / WORKBOOK),
-            "--output-dir", str(tmp_path)]
-    for trade, (_loader, files) in TRADES.items():
-        args += [f"--{trade}-schedule", *(str(schedules / f) for f in files)]
-    monkeypatch.setattr(sys, "argv", ["concho-stv", *args])
-    cli.main()
-    result = _load(tmp_path / "stv_results.json")
+    result = _one_run(monkeypatch, tmp_path, ipd_challenge_dir, USE_PHASE_CONFIG)
 
     (pv,) = [i for i in result["construction_items"] if i["origin"] == "project_config"]
     assert (pv["assembly"], pv["material_type"], pv["amount"]) == (
         "Energy", "Photovoltaics (sf)", 5000.0)
     embodied = result["breakdown"]["embodied"]
-    assert embodied["carbon"] == pytest.approx(PROJECT["carbon"] + pv["embodied_total"]["carbon"],
+    # One run: deduplicated construction (P3.9, ONE_RUN) plus the PV panels.
+    assert embodied["carbon"] == pytest.approx(ONE_RUN["carbon"] + pv["embodied_total"]["carbon"],
                                                rel=REL)
 
     ws = openpyxl.load_workbook(ipd_challenge_dir / TEAM_USE_PHASE_WORKBOOK,

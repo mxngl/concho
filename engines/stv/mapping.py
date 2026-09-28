@@ -13,7 +13,8 @@ Matching (per element of an export):
    (architecture / structural / mep: given by the importer, not by the export).
 2. ``assembly_code``: the element's Assembly Code starts with the rule's code (``B2010``
    matches ``B2010``, ``B2010100``; the level-2 form ``B2000`` matches everything in ``B20``).
-3. ``category``: equals the Revit Category (case-insensitive).
+3. ``category``: equals the Revit Category (case-insensitive); for a Part (Category
+   ``Parts``) its ``Original Category``, or ``Parts`` if that is empty (P3.9).
 4. ``keyword``: case-insensitive substrings of Family + Type + Material + Assembly
    Description. ``a|b`` = any, ``a&b`` = all (``&`` binds looser: ``a|b&c`` = (a or b) and
    c). A term can be a numeric test on a named value, e.g. ``diameter_in<=15``
@@ -43,6 +44,7 @@ from typing import Any, Protocol
 from pydantic import BaseModel, ConfigDict, Field
 
 from engines.common import uniformat
+from engines.common.dedup import DedupResult, Export, deduplicate, effective_category
 
 from . import conversions
 from .conversions import ConversionSpec, ConversionSpecError, Row
@@ -140,7 +142,8 @@ class StvMappingRow(BaseModel):
     )
     category: str = Field(
         default="",
-        description="Revit Category (case-insensitive), e.g. 'Walls'. Empty = any category "
+        description="Revit Category (case-insensitive), e.g. 'Walls'; Parts match with their "
+                    "'Original Category' ('Parts' if empty). Empty = any category "
                     "(then assembly_code is required and keyword must be empty).",
     )
     keyword: str = Field(
@@ -390,6 +393,12 @@ class Element:
         return self.get("Category")
 
     @property
+    def match_category(self) -> str:
+        """The category the rules match (P3.9): a Part's ``Original Category``, else
+        ``Category`` (``Parts`` when ``Original Category`` is empty, as in old exports)."""
+        return effective_category(self.row)
+
+    @property
     def assembly_code(self) -> str:
         return self.get("Assembly Code").upper()
 
@@ -430,7 +439,7 @@ class StvMapping:
             self._by_category[rule.category.lower()].append(rule)
 
     def candidates(self, element: Element) -> list[MappingRule]:
-        category = element.category.lower()
+        category = element.match_category.lower()
         code = element.assembly_code
         text = element.keyword_text
         out = []
@@ -894,6 +903,28 @@ def load_schedule(
     """Read one Revit export of ``discipline`` and map it with ``mapping``."""
     return map_elements(read_export(csv_path, discipline), mapping, discipline=discipline,
                         source=str(csv_path))
+
+
+def can_map(mapping: StvMapping, element: Element) -> bool:
+    """A rule matches the element (a tie counts: it stops the run later anyway)."""
+    match = mapping.match(element)
+    return match.rule is not None or bool(match.tie)
+
+
+def map_exports(
+    exports: list[tuple[str, Path | str]], mapping: StvMapping
+) -> tuple[list[ScheduleReport], DedupResult]:
+    """Read (discipline, path) exports, apply the P3.9 rule (D15, :mod:`engines.common.dedup`)
+    over all of them, and map the rows that are kept, one report per export (input order).
+    A mapping tie in any export raises :class:`StvMappingTieError`."""
+    read = [(discipline, Path(path), read_export(path, discipline))
+            for discipline, path in exports]
+    result = deduplicate([Export(path.name, discipline, elements)
+                          for discipline, path, elements in read],
+                         is_mapped=lambda element, _discipline: can_map(mapping, element))
+    reports = [map_elements(kept, mapping, discipline=discipline, source=str(path))
+               for (discipline, path, _), kept in zip(read, result.kept, strict=True)]
+    return reports, result
 
 
 def check_exports(mapping: StvMapping, exports: list[tuple[str, Path | str]]) -> list[str]:

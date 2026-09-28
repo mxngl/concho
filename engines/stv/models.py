@@ -451,6 +451,11 @@ class STVResults:
     # P3.8: is the use phase modeled, where do its inputs come from (STVInputs.
     # use_phase_status, replaced by concho-stv --config); None in results from before P3.8.
     use_phase_status: dict[str, Any] | None = None
+    # P3.9: rows dropped by the duplicate / Parts rule (D15, engines/common/dedup.py), and the
+    # counted rows with the DNC marker (TVD skips them, STV counts them); None when the items
+    # did not come from mapped exports.
+    deduplication: dict[str, Any] | None = None
+    dnc_rows: list[dict[str, Any]] | None = None
 
     def metric_summary(self) -> dict[str, dict[str, float | None]]:
         totals = self.breakdown.life_cycle
@@ -476,6 +481,10 @@ class STVResults:
             payload["use_phase_status"] = self.use_phase_status
         if self.mapping_coverage is not None:
             payload["mapping_coverage"] = self.mapping_coverage
+        if self.deduplication is not None:
+            payload["deduplication"] = self.deduplication
+        if self.dnc_rows is not None:
+            payload["dnc_rows"] = self.dnc_rows
         return payload
 
     def to_json_ready(self) -> dict[str, Any]:
@@ -494,6 +503,8 @@ class STVResults:
             lifetime_years=int(payload.get("lifetime_years", 0)),
             mapping_coverage=payload.get("mapping_coverage"),
             use_phase_status=payload.get("use_phase_status"),
+            deduplication=payload.get("deduplication"),
+            dnc_rows=payload.get("dnc_rows"),
         )
 
     @classmethod
@@ -582,6 +593,7 @@ class STVResults:
             from .coverage import merge_coverage
 
             mapping_coverage = merge_coverage(coverage_blocks)
+        dnc_lists = [r.dnc_rows for r in results if r.dnc_rows is not None]
         return cls(
             team=combined_team,
             targets=combined_targets,
@@ -590,4 +602,31 @@ class STVResults:
             lifetime_years=combined_lifetime,
             mapping_coverage=mapping_coverage,
             use_phase_status=status,
+            deduplication=combined_deduplication(results),
+            dnc_rows=[row for rows in dnc_lists for row in rows] if dnc_lists else None,
         )
+
+
+# P3.9: --combine-results sees no ElementIds, so it cannot apply the duplicate / Parts rule.
+COMBINE_DEDUP_NOTE = (
+    "not deduplicated across the combined results: --combine-results sees no ElementIds, so "
+    "an element in the exports of two inputs is counted twice and a host is counted next to "
+    "its Parts. Run all discipline exports in one concho-stv call instead (D15, "
+    "docs/engines/stv.md)."
+)
+
+
+def combined_deduplication(results: list[STVResults]) -> dict[str, Any]:
+    """The ``deduplication`` block of a ``--combine-results`` result: the note above and what
+    each input dropped within its own run (None for inputs without the block)."""
+    return {
+        "deduplicated_across_inputs": False,
+        "note": COMBINE_DEDUP_NOTE,
+        "inputs": [
+            None if r.deduplication is None else {
+                "dropped": r.deduplication.get("dropped", 0),
+                "by_reason": r.deduplication.get("by_reason", {}),
+            }
+            for r in results
+        ],
+    }

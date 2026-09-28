@@ -3,7 +3,11 @@
 # Reproduces the Island importers before P3.6 (revit_architecture.py, revit_structural.py,
 # revit_mep.py @ concho 17da703); format and matching order: docs/engines/stv.md.
 # Explicitly unmapped as before (no rule): MEP "34274" electrical fixtures and
-# "Utility Switchboard" electrical equipment; structural and architecture "Parts" (P3.9).
+# "Utility Switchboard" electrical equipment.
+# Parts (P3.9, D15): rules match a Part with its Original Category (new add-in exports), so
+# the Floors rules below also take floor Parts; the B1010 bamboo rule is for the structural
+# floor Parts (bamboo, like the whole bamboo floors of the architecture rules). Parts of the
+# old exports (no Original Category) match "Parts" and stay unmapped, as before.
 discipline,assembly_code,category,keyword,priority,stv_assembly,stv_material_type,quantity_field,conversion,note
 architecture,,Curtain Panels,,100,Exterior Wall,Curtain Wall Double Pane (sf),area,,
 architecture,,Curtain Wall Mullions,,100,Exterior Wall,Curtain Wall Double Pane (sf),area,,mullion Area is booked as curtain wall area (as before P3.6)
@@ -39,6 +43,7 @@ structural,,Structural Foundations,footing,20,Foundation,Strip Foundation (cy),v
 structural,,Structural Foundations,concrete,30,Foundation,Concrete Slab (cy),volume,cf_to_cy,other concrete foundations
 structural,,Floors,wood|timber|glulam|lumber|clt|plywood,10,Floor,Wood System (sf),area,,
 structural,,Floors,concrete|slab|deck,20,Floor,Concrete (sf),area,,structural floors without these keywords stay unmapped (as before P3.6)
+structural,B1010,Floors,structural bamboo,100,Floor,Concrete (sf),area,,"proxy (bamboo, P3.7: no usable EPD yet, see docs/engines/stv.md): structural bamboo floor Parts (P3.9: Original Category Floors, code B1010 from the source floor) are booked as concrete floor, like the whole bamboo floors of the architecture rules"
 mep,,Air Terminals,supply diffuser,10,MEP,Air Handling Unit (m^3/s),airflow,,terminal airflow booked as AHU capacity (as before P3.6)
 mep,,Air Terminals,exhaust grill,10,MEP,Air Handling Unit (m^3/s),airflow,,terminal airflow booked as AHU capacity (as before P3.6)
 mep,,Air Terminals,return diffuser,10,MEP,Air Handling Unit (m^3/s),airflow,,terminal airflow booked as AHU capacity (as before P3.6)

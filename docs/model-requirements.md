@@ -61,6 +61,36 @@ from their host elements (double counting, P3.9). Part quantities come from the 
 built-in parameters (`DPART_LENGTH_COMPUTED`, `DPART_AREA_COMPUTED`, `DPART_VOLUME_COMPUTED`,
 `DPART_HEIGHT_COMPUTED`, `DPART_LAYER_WIDTH` as thickness).
 
+## How Parts and duplicates are counted (P3.9)
+
+TVD and STV apply one rule (decision [D15](decisions.md), `engines/common/dedup.py`) to all
+exports of a run before they count anything:
+
+1. **Parts, not their host.** If a Part and its host both appear (host ElementId = the Part's
+   `Part Source Id`, in the same or another export), the Parts count and the host row is
+   dropped. Parts are matched and reported with their `Original Category` (STV mapping rules
+   too), and carry the host's Assembly Code.
+2. **One row per ElementId.** An element in several exports (e.g. a floor in the architecture
+   and the structural export of the same model) is counted once:
+   a row **with an Assembly Code** wins over one without; in STV, a row the mapping table
+   **maps** wins over an unmapped one; then the export of the discipline that **owns the
+   category** (structural: Floors, Structural Framing, Structural Columns, Structural
+   Foundations; MEP: the MEP categories incl. Plumbing Fixtures; architecture: all others);
+   then the first export given.
+3. Both results JSONs list every dropped row in a `deduplication` block (ElementId, category,
+   kept and dropped export, reason; no quantities).
+
+What this means for the model: give the element that should be counted an Assembly Code (a
+row without one loses against a coded duplicate); if you split floors or ceilings into
+Parts, the Parts are what TVD prices and STV maps, so their source's Assembly Code and
+material must be right, and Parts split **by layer** count area once per layer (prefer a
+split in plan, or map such Parts by volume). Old exports (44/47/56 columns) have no
+`Part Source Id` / `Original Category`: their Parts are counted as category `Parts` and no
+host is dropped. ElementIds are unique only within one Revit model; exports of different
+models can share an ElementId by chance and would be treated as one element. STV's
+`--combine-results` cannot apply the rule: run all discipline exports in one `concho-stv`
+call.
+
 ## Assembly Codes
 
 ### Why
@@ -193,14 +223,15 @@ missing column reads as empty, so no alias or fallback is needed):
 
 | Engine | Architecture / Structural | MEP |
 |---|---|---|
-| TVD | `ElementId` (dedup), `Category`, `Family`, `Type`, `Mark`, `Comments` (DNC marker, keyword split), `Assembly Code`, `Length`, `Area`, `Volume`; `Level`, `Material` (unmapped list only) | – |
-| STV | `ElementId`, `Category`, `Family`, `Type`, `Assembly Code`, `Assembly Description`, `Material` (mapping match), `Length`, `Width`, `Height`, `Area`, `Volume`, `Weight`, `Unit Weight` (quantity fields), `Parameter Snapshot` (fallbacks) | `ElementId`, `Category`, `Family`, `Type`, `Assembly Description` (keyword text; empty in MEP exports), `Assembly Code`¹, `Size`, `Diameter`, `Width`, `Height`, `Length`, `Area`, `Volume`, `Material`, `Weight`, `Unit Weight`, `Airflow`, `Flow`, `Connector Flow`, `Parameter Snapshot` |
+| TVD | `ElementId`, `Part Source Id`, `Original Category` (dedup, P3.9; missing = empty), `Category`, `Family`, `Type`, `Mark`, `Comments` (DNC marker, keyword split), `Assembly Code`, `Length`, `Area`, `Volume`; `Level`, `Material` (unmapped list only) | – |
+| STV | `ElementId`, `Part Source Id` (dedup, P3.9), `Category`, `Original Category` (Parts, P3.9), `Family`, `Type`, `Assembly Code`, `Assembly Description`, `Material` (mapping match), `Length`, `Width`, `Height`, `Area`, `Volume`, `Weight`, `Unit Weight` (quantity fields), `Parameter Snapshot` (fallbacks) | `ElementId`, `Category`, `Family`, `Type`, `Assembly Description` (keyword text; empty in MEP exports), `Assembly Code`¹, `Size`, `Diameter`, `Width`, `Height`, `Length`, `Area`, `Volume`, `Material`, `Weight`, `Unit Weight`, `Airflow`, `Flow`, `Connector Flow`, `Parameter Snapshot` |
 
 ¹ The STV mapping matches `Assembly Code` only for rows that set one; the Island MEP rows don't,
 so the MEP `Assembly Code` (missing in the 60-column layout, read as empty) changes nothing.
 
 The columns added since the old layouts are read by the schedule engine (room and `Original *`
-columns) or by no engine yet (`Part Source Id` for P3.9, `Category (local)`). `tests/tvd/test_tvd_export_layouts.py` runs TVD on an invented 44-column
+columns), by TVD and STV for the duplicate / Parts rule (`Part Source Id`, `Original
+Category`, P3.9) or by no engine yet (`Category (local)`). `tests/tvd/test_tvd_export_layouts.py` runs TVD on an invented 44-column
 old-layout pair and a 58-column new-layout pair with the same quantities and checks identical
 totals.
 
@@ -220,7 +251,7 @@ by its parts).
 | 2 | `Category` | text | English category name from the `BuiltInCategory` ([Categories](#categories-p45)) | required (always set) | TVD, STV, Schedule |
 | 3 | `Family` | text | family name (family instances only; empty for system families) | recommended | TVD, STV, Schedule |
 | 4 | `Type` | text | type name | recommended | TVD, STV, Schedule |
-| 5 | `Original Category` | text | parts only: English category of the source element; `Original Category` parameter text if the source can't be resolved | optional | Schedule |
+| 5 | `Original Category` | text | parts only: English category of the source element; `Original Category` parameter text if the source can't be resolved | optional | Schedule, TVD, STV (Parts: ownership and STV mapping, P3.9) |
 | 6 | `Original Family` | text | parts only: `Original Family` / `Original Family Name` | optional | Schedule |
 | 7 | `Original Type` | text | parts only: `Original Type` / `Original Type Name` | optional | Schedule |
 | 8 | `Level` | text | `Level` parameter, else the element's level | recommended | TVD (unmapped list), Schedule |
@@ -245,7 +276,7 @@ by its parts).
 | 46–54 | *room columns* | see below | room of the element | recommended | Schedule |
 | 55 | `Comments` | text | BIP `ALL_MODEL_INSTANCE_COMMENTS`, `Comments` | optional (`DNC` marker) | TVD |
 | 56 | `Parameter Snapshot` | text (display units) | see below | optional | STV, Schedule |
-| 57 | `Part Source Id` | integer | parts only: ElementId of the source element (P4.5) | optional | – (for P3.9) |
+| 57 | `Part Source Id` | integer | parts only: ElementId of the source element (P4.5) | optional | TVD, STV (duplicate / Parts rule, P3.9) |
 | 58 | `Category (local)` | text | category name as Revit shows it (UI language, P4.5) | optional | – |
 
 Both exports use the same parameter lookups, except `Base Level` / `Top Level`: Architecture
