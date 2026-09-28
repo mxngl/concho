@@ -5,7 +5,9 @@ All element IDs, quantities and unit costs are made up; nothing here comes from
 RSMeans, the course workbooks or the Island project data.
 
 - `arch.csv` (with a UTF-8 BOM) and `struct.csv`: AutoTVD QTO column layout
-  (subset). Element `1020` is in both files (dedup: structural wins).
+  (subset). Element `1020` is in both files; only the structural row has an Assembly Code,
+  so the P3.9 rule (D15) keeps it (`duplicate_without_code`). Until P3.9 both rows had
+  `C1010` and the structural row won by the old "structural always wins" rule.
 - `cost_db.csv`: `cost_db.csv` format (P3.4, see `docs/engines/tvd.md`) with the rules
   `takeoff`, `fixed` (with and without quantity), `mirror:` (source in the takeoff, source
   with a fixed quantity, source missing), `count_codes:` and a keyword split

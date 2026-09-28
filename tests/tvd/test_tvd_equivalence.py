@@ -12,8 +12,9 @@ RSMeans-derived). The new engine reads the project values from the Island exampl
 (``engines/common/examples/island_2026.project_config.json``).
 Compared: the results JSON (all fields except run timestamps, run label, input paths, the
 project/team names added in P3.2, the ``target_consistency`` block added in P3.3, the
-``cost_db_validation`` block added in P3.4 and the ``target_derivation``, ``reliability`` and
-``tracking`` blocks added in P3.5; each new block has its own Island test below), the
+``cost_db_validation`` block added in P3.4, the ``target_derivation``, ``reliability`` and
+``tracking`` blocks added in P3.5 and the ``deduplication`` block added in P3.9; each new block
+has its own Island test below), the
 history snapshot (except its date) and the dashboard HTML (with timestamps and data source
 masked).
 
@@ -114,6 +115,8 @@ def _strip_meta(payload: dict) -> dict:
     payload.pop("cost_db_validation", None)
     # P3.11: new block, not in the original; tested in test_island_legacy_parser_block.
     payload.pop("quantity_parse_warnings", None)
+    # P3.9: new block, not in the original; tested in test_island_deduplication.
+    payload.pop("deduplication", None)
     for key in ("generated_at", "date", "label", "data_source", "project_name", "team_name"):
         payload["meta"].pop(key, None)
     return payload
@@ -338,3 +341,18 @@ def test_island_corrected_golden(outputs, autotvd_dir):
     assert changed == [("C1010", "LF", 782.58, 820.63)]
     delta = corrected["financials"]["grand_total"] - legacy["financials"]["grand_total"]
     assert delta == pytest.approx(15_840.11, abs=0.005)
+
+
+# P3.9 (D15): the AutoTVD reference exports share no ElementId and have no Parts, so the
+# duplicate / Parts rule drops nothing (the old "structural always wins" merge didn't either);
+# no legacy merge switch is needed. docs/engines/tvd.md, "Duplicates and Parts".
+@pytest.mark.parametrize("run", ["new", "corrected"])
+def test_island_deduplication(outputs, run):
+    new = _load(outputs[run] / "results" / "latest.json")
+    block = new["deduplication"]
+    assert block["dropped"] == 0 and block["dropped_rows"] == []
+    assert block["rows_in"] == block["rows_kept"] == new["meta"]["total_elements"] == 2608
+    assert block["parts"] == {"rows": 0, "with_part_source_id": 0, "hosts": 0}
+    assert [(e["discipline"], e["rows"]) for e in block["exports"]] == [
+        ("architecture", 2321), ("structural", 287)]
+    assert new["meta"]["duplicates_removed"] == 0

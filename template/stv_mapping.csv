@@ -7,6 +7,9 @@
 # needs a size threshold), windows (pane count and frame are rarely in the export), roof
 # structure (B1020), MEP exports without an Assembly Code column. Copy this file to your
 # project and extend it; unmapped types are listed in mapping_coverage.
+# Parts (P3.9): a Part matches the rules of its Original Category (e.g. floor Parts with the
+# B1010 Floors rules; the add-in gives a Part its source's Assembly Code), so no Parts rules
+# are needed. Parts without Original Category (old exports) match "Parts" and stay unmapped.
 discipline,assembly_code,category,keyword,priority,stv_assembly,stv_material_type,quantity_field,conversion,note
 ,A1010,Structural Foundations,,100,Foundation,Strip Foundation (cy),volume,cf_to_cy,standard foundations (wall and column footings)
 ,A1020,Structural Foundations,,100,Foundation,Mat and Pile (cy),volume,cf_to_cy,special foundations (piles and mats)

@@ -129,6 +129,14 @@ def test_old_and_new_layout_give_identical_totals(layouts, island_config):
         1, 1, 10, 1)
     assert old.quantity_parse_warnings == new.quantity_parse_warnings == {
         "parser": "tolerant", "total": 0, "columns": {}}
+    # P3.9: both layouts write the deduplication block; wall 1 is in both files with a code,
+    # so the architecture export (owner of Walls) keeps it. Old layout: no Part Source Id.
+    for payload in (old_payload, new_payload):
+        dedup = payload["deduplication"]
+        assert [(d["element_id"], d["reason"], d["kept_discipline"])
+                for d in dedup["dropped_rows"]] == [
+            ("1", "duplicate_other_discipline", "architecture")]
+        assert dedup["parts"] == {"rows": 0, "with_part_source_id": 0, "hosts": 0}
     # 15.375 LF x 40.00; the stored qty is rounded to 2 decimals.
     (handrail,) = [r for r in old_payload["line_items"]["Interiors"] if r["ac"] == "C2010"]
     assert (handrail["unit"], handrail["qty"], handrail["total"]) == ("LF", 15.38, 615.0)
@@ -160,3 +168,41 @@ def test_missing_columns_read_as_empty(tmp_path, island_config):
         assert q_min[code]["length_lf"] == 0.0
     run = run_files(str(arch), str(struct), str(COST_DB), island_config)
     assert run.quantity_parse_warnings["total"] == 0
+
+
+def _write_rows(path: Path, rows: list[dict[str, str]]) -> Path:
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=NEW_COLUMNS)
+        writer.writeheader()
+        for row in rows:
+            writer.writerow({c: row.get(c, "") for c in NEW_COLUMNS})
+    return path
+
+
+def test_new_layout_counts_parts_not_their_host(tmp_path, island_config):
+    """P3.9 (D15): slab 500 is split into Parts in the structural export (add-in since #18) and
+    is a whole floor in the architecture export: TVD counts the Parts (400 + 600 SF), not the
+    host as well."""
+    slab = {"Category": "Floors", "Type": "Invented slab", "Assembly Code": "A1030"}
+    arch = _write_rows(tmp_path / "new_Architecture_TakeOff.csv", [
+        {"ElementId": "500", **slab, "Area": "1000", "Volume": "500"},
+        {"ElementId": "1", "Category": "Walls", "Type": "Invented wall",
+         "Assembly Code": "C1010", "Area": "10"},
+    ])
+    part = {"Category": "Parts", "Original Category": "Floors", "Assembly Code": "A1030",
+            "Part Source Id": "500"}
+    struct = _write_rows(tmp_path / "new_Structural_Schedule.csv", [
+        {"ElementId": "501", **part, "Area": "400", "Volume": "200"},
+        {"ElementId": "502", **part, "Area": "600", "Volume": "300"},
+    ])
+    run = run_files(str(arch), str(struct), str(COST_DB), island_config)
+    (slab_line,) = [r for r in run.results if r["ac"] == "A1030"]
+    assert slab_line["qty"] == 1000  # 400 + 600 from the Parts, the host not again
+    dedup = run.results_payload()["deduplication"]
+    assert dedup["dropped_rows"] == [{
+        "element_id": "500", "category": "Floors",
+        "kept_export": "new_Structural_Schedule.csv", "kept_discipline": "structural",
+        "dropped_export": "new_Architecture_TakeOff.csv",
+        "dropped_discipline": "architecture", "reason": "host_of_parts"}]
+    assert dedup["parts"] == {"rows": 2, "with_part_source_id": 2, "hosts": 1}
+    assert run.duplicates_removed == 1 and run.total_elements == 3

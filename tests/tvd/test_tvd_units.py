@@ -56,13 +56,20 @@ def test_cost_db_parsing(synthetic_paths):
 
 # ── dedup ────────────────────────────────────────────────────────────────────
 
-def test_merge_takeoffs_dedups_struct_wins(synthetic_paths):
+def test_merge_takeoffs_row_with_code_wins(synthetic_paths):
+    """P3.9 (D15): 1020 is in both files, only the structural row has a code."""
     arch = load_csv_file(synthetic_paths["arch"])
     struct = load_csv_file(synthetic_paths["struct"])
-    merged = merge_takeoffs(arch, struct)
-    assert len(merged) == len(arch) + len(struct) - 1
-    (row,) = [r for r in merged if r["ElementId"] == "1020"]
+    merged = merge_takeoffs(arch, struct, arch_label="arch.csv", struct_label="struct.csv")
+    rows = merged.kept_rows
+    assert len(rows) == len(arch) + len(struct) - 1
+    (row,) = [r for r in rows if r["ElementId"] == "1020"]
     assert row["Area"] == "80 SF"
+    assert [d.to_dict() for d in merged.dropped] == [{
+        "element_id": "1020", "category": "Walls", "kept_export": "struct.csv",
+        "kept_discipline": "structural", "dropped_export": "arch.csv",
+        "dropped_discipline": "architecture", "reason": "duplicate_without_code",
+    }]
 
 
 def test_run_counts(run):
@@ -175,10 +182,17 @@ def test_cluster_summary_and_payload(run):
     assert set(payload) == {
         "meta", "financials", "cluster_targets", "cluster_summary", "target_derivation",
         "target_consistency", "cost_db_validation", "reliability", "quantity_parse_warnings",
-        "line_items",
+        "deduplication", "line_items",
     }
-    assert list(payload)[-4:] == ["cost_db_validation", "reliability",
-                                  "quantity_parse_warnings", "line_items"]
+    assert list(payload)[-5:] == ["cost_db_validation", "reliability",
+                                  "quantity_parse_warnings", "deduplication", "line_items"]
+    dedup = payload["deduplication"]
+    assert (dedup["rows_in"], dedup["rows_kept"], dedup["dropped"]) == (21, 20, 1)
+    assert dedup["by_reason"] == {"host_of_parts": 0, "duplicate_without_code": 1,
+                                  "duplicate_other_discipline": 0,
+                                  "duplicate_same_discipline": 0}
+    assert payload["meta"]["duplicates_removed"] == 1
+    assert [e["discipline"] for e in dedup["exports"]] == ["architecture", "structural"]
     assert payload["quantity_parse_warnings"] == {"parser": "tolerant", "total": 0,
                                                   "columns": {}}
     assert payload["cost_db_validation"]["error_count"] == 0

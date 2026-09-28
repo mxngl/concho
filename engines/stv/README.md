@@ -70,7 +70,15 @@ CSVs),
 Outputs: `stv_results.json` (with a `mapping_coverage` block and per-item `estimated` flags
 when exports were mapped), `history.json`, PNG charts and per-discipline item reports.
 
-Island "Current" in one call (all six exports; same 2,517,183.14 kgCO₂e as the per-trade runs):
+P3.9 (D15): all exports of one call are deduplicated together before mapping (Parts over
+their host, one row per ElementId; shared with TVD, `engines/common/dedup.py`); the results
+get a `deduplication` block and `dnc_rows` (counted rows with the DNC marker, which TVD
+skips). `--combine-results` cannot deduplicate (no ElementIds): it warns and says so in its
+`deduplication` block, so **run all discipline exports in one call**. `--central-bim-model`
+rows are not deduplicated. Details: [`docs/engines/stv.md`](../../docs/engines/stv.md#duplicates-and-parts-p39-decision-d15).
+
+Island "Current" in one call (all six exports; 2,459,374.64 kgCO₂e since P3.9, the per-trade
+reference 2,517,183.14 counts the floors 1789623 and 1789655 twice):
 
 ```bash
 S=.fixtures/IPD_Challenge/revit_schedules/Current
