@@ -14,6 +14,7 @@
 
 | Date | Update | Tasks |
 |---|---|---|
+| 2026-09-28 | **P5.1/P5.2/P5.5 (Tier 1) PR opened:** [concho #24](https://github.com/mxngl/concho/pull/24). Team repo template (`template/`: config, empty cost DB, default STV mapping, `exports/` + `course/` READMEs, private-repo quickstart) and `pipeline.yml` + `scripts/run_pipeline.py`: validate → TVD → STV (one run, all exports; skipped without the course workbook) → `results/<UTC ts>/` + `results/index.json` snapshots → index page + legacy TVD dashboard → Pages / artifact. Packaging fix: `engines/common/*.csv` now in the wheel. Budget alert (step 9) is a TODO. Open: Max creates the first tag (`v0.1.0`) after the merge. | P5.1 🟡, P5.2 🟡, P5.5 🟡 |
 | 2026-09-26 | Roadmap created; this page shared with Ash | – |
 | 2026-09-26 | **Repo created: [`mxngl/concho`](https://github.com/mxngl/concho)** (public, empty, default branch `main`). Ash invited as collaborator. | D3 ✅, P1.1 🟡 |
 | 2026-09-26 | **Concho webhook secured:** header auth enabled on the n8n webhook (unauthenticated POST → 403, with token → 200); Discord bot on the VPS sends the token from its `.env`; end-to-end test in `#askbim` answered correctly ($16,065,644.29). Telegram nodes removed from the live workflow. Open: remove the old GitHub raw token from the `get_stv_dashboard` URL. | P0.2 🟡 |
