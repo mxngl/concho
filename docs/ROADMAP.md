@@ -14,6 +14,7 @@
 
 | Date | Update | Tasks |
 |---|---|---|
+| 2026-09-28 | **P5.1/P5.2/P5.5 (Tier 1) PR opened:** [concho #24](https://github.com/mxngl/concho/pull/24). Team repo template (`template/`: config, empty cost DB, default STV mapping, `exports/` + `course/` READMEs, private-repo quickstart) and `pipeline.yml` + `scripts/run_pipeline.py`: validate → TVD → STV (one run, all exports; skipped without the course workbook) → `results/<UTC ts>/` + `results/index.json` snapshots → index page + legacy TVD dashboard → Pages / artifact. Packaging fix: `engines/common/*.csv` now in the wheel. Budget alert (step 9) is a TODO. Open: Max creates the first tag (`v0.1.0`) after the merge. | P5.1 🟡, P5.2 🟡, P5.5 🟡 |
 | 2026-09-26 | Roadmap created; this page shared with Ash | – |
 | 2026-09-26 | **Repo created: [`mxngl/concho`](https://github.com/mxngl/concho)** (public, empty, default branch `main`). Ash invited as collaborator. | D3 ✅, P1.1 🟡 |
 | 2026-09-26 | **Concho webhook secured:** header auth enabled on the n8n webhook (unauthenticated POST → 403, with token → 200); Discord bot on the VPS sends the token from its `.env`; end-to-end test in `#askbim` answered correctly ($16,065,644.29). Telegram nodes removed from the live workflow. Open: remove the old GitHub raw token from the `get_stv_dashboard` URL. | P0.2 🟡 |
@@ -442,7 +443,7 @@ Today the schedule chain is ALICE macro (XLSX) → ALICE_BIM_Map → micro sched
 
 Measured on the Island central model: raw 3.4 MB (~860k tokens) → aggregate by category × type × level × Assembly Code = 218 rows (~2.9k tokens).
 
-- [ ] **P5.1 [CC] Team data repo template** (`template/`):
+- [ ] 🟡 **P5.1 [CC] Team data repo template** (`template/`): *(Tier-1 part in PR: config, empty cost DB / custom materials, default STV mapping, `exports/` + `course/` READMEs, `pipeline.yml`; `macro_schedule.csv` / `schedule_rules.json` follow with Tier 2)*
   ```
   project_config.json
   cost_db.csv
@@ -454,7 +455,7 @@ Measured on the Island central model: raw 3.4 MB (~860k tokens) → aggregate by
   .github/workflows/pipeline.yml
   ```
   The workflow installs the `concho` engines at a **pinned version**.
-- [ ] **P5.2 [CC] Pipeline** (`pipeline.yml`), on push to `exports/**`, the config or the DBs:
+- [ ] 🟡 **P5.2 [CC] Pipeline** (`pipeline.yml`), on push to `exports/**`, the config or the DBs: *(Tier-1 part in PR: steps 1–4, 6, 7 via `scripts/run_pipeline.py`, see `docs/pipeline.md`; 3b, 5, 8 open, 9 is a TODO)*
   1. validate config + DBs + exports;
   2. TVD;
   3. STV;
@@ -490,7 +491,7 @@ Measured on the Island central model: raw 3.4 MB (~860k tokens) → aggregate by
 
   **Hard caps:** ≤ 50 rows and ≤ ~8k tokens per response; otherwise return `{"error": "too_many_results", "hint": "filter by level or category"}`.
   AC: every response in the golden eval (P6.8) is under the cap; a unit test covers the caps.
-- [ ] **P5.5 [CC] Snapshots and history.**
+- [ ] 🟡 **P5.5 [CC] Snapshots and history.** *(in PR: `results/index.json` per run, index page lists all snapshots; the new TVD/STV dashboards read it in P7)*
   - Automatic per pipeline run (timestamp, commit SHA, label from the commit message or config).
   - Dashboards read `results/index.json`, which replaces the hardcoded `RUNS` in the AutoSTV `index.html` (currently broken because the snapshot folders have no `history.json`).
   - AC: the dashboard lists every snapshot with no code change.

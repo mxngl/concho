@@ -1,10 +1,85 @@
-# template
+# Concho team repo (Tier 1)
 
-The per-team data repo template (project config, cost DB, STV mapping, custom materials, macro schedule, exports, pipeline workflow). Ships without any course or RSMeans data.
+Your team's data repo for Concho: the Revit exports, your project config and cost data, and
+a GitHub Actions pipeline that computes **TVD** (cost) and **STV** (carbon) on every push and
+publishes a dashboard. Tier 1 = TVD + STV (decision D13); schedule tools come later (Tier 2).
 
-Filled by: Phase 5 (P5.1, P5.2). Already here: `project_config.example.json` (P3.1),
-`cost_db.csv` and `examples/cost_db.example.csv` (P3.4), `stv_mapping.csv` (P3.6),
-`custom_materials.csv` (P3.7).
+This folder is the template. It ships **without any course or RSMeans data**.
+
+> ## ⚠️ Your team repo must be PRIVATE
+>
+> - STV needs the **course STV workbook** at runtime; it goes into `course/` of your repo.
+> - `cost_db.csv` holds your **RSMeans-based cost data**.
+>
+> Neither may be in a public repository. Create your team repo as **private**. The pipeline
+> refuses to run in a public repo once `cost_db.csv` has rows or `course/` holds a workbook.
+>
+> **Pending the course lead's answer (decision D5):** whether teams may keep the course
+> workbooks in their private team repos. Until then this is the working assumption.
+
+## Quickstart
+
+1. **Create a private repo** for your team on GitHub (empty, no README). Copy this template
+   into it (replace `v0.1.0` with the current Concho version):
+
+   ```sh
+   git clone --depth 1 --branch v0.1.0 https://github.com/mxngl/concho concho-src
+   git clone https://github.com/<your-org>/<your-team-repo> team
+   cp -r concho-src/template/. team/
+   cd team
+   ```
+
+2. **Fill in your project:** `project_config.json` (targets, GSF, course team, use phase;
+   field reference: [`docs/config.md`](https://github.com/mxngl/concho/blob/main/docs/config.md))
+   and `cost_db.csv` (your cost lines; see below). Check them locally with
+   `pip install "concho[stv] @ git+https://github.com/mxngl/concho@v0.1.0"`, then
+   `concho config validate project_config.json` and
+   `concho costdb validate cost_db.csv --config project_config.json`.
+3. **Course workbook:** delete `course/.gitignore`, put the course STV workbook into
+   `course/` (see [`course/README.md`](course/README.md)). Without it only TVD runs.
+4. **Install the Revit add-in** (Concho release on GitHub, `INSTALL.md` in the zip) and run
+   the Architecture, Structural and MEP TakeOffs of your models.
+5. **Export → push:** copy the CSV files into `exports/` (naming:
+   [`exports/README.md`](exports/README.md)), commit and push to `main`.
+6. **Dashboard:** the pipeline (Actions tab → *Concho pipeline*) validates your files, runs
+   TVD and STV, commits the results to `results/` and publishes the dashboard (next section).
+   Validation errors appear at the top of the run with what to fix.
+
+Name a snapshot by putting `[snapshot: Design review 1]` into the commit message; otherwise
+the first line of the commit message is the label. You can also run the pipeline by hand
+(Actions → Concho pipeline → Run workflow) with a label.
+
+## Dashboard: GitHub Pages or artifact
+
+The pipeline builds a small site: an index page listing every snapshot (TVD estimate vs.
+target, STV kgCO₂e, links to the JSON files) and the TVD dashboard of the latest run.
+
+- **GitHub Pages:** in the repo settings, *Pages → Build and deployment → Source: GitHub
+  Actions*. Pages from a **private** repo needs **GitHub Pro or Team**; students get Pro free
+  with the [GitHub Student Developer Pack](https://education.github.com/pack).
+  **The published page is public** (anyone with the link can open it, including cost figures
+  of the TVD dashboard), even though the repo is private.
+- **Without Pages** (not available, or you don't want a public page): set the repository
+  variable `CONCHO_PAGES` to `off` (*Settings → Secrets and variables → Actions →
+  Variables*). Every run still uploads the site as the workflow artifact **`dashboard`**:
+  download it from the run page, unzip, open `index.html`.
+
+## What's in here
+
+| Path | What | Who edits it |
+|---|---|---|
+| `project_config.json` | project values (targets, GSF, course team, use phase, file paths) | team |
+| `cost_db.csv` | TVD cost DB, **empty** (header only) | team |
+| `stv_mapping.csv` | STV mapping table (default table, not course data) | team, optional |
+| `custom_materials.csv` | STV custom materials from EPDs, **empty** | team, optional |
+| `exports/` | Revit add-in exports ([`README`](exports/README.md)) | team |
+| `course/` | course workbooks, private repo only ([`README`](course/README.md)) | team |
+| `results/` | one folder per run + `latest/` + `index.json` | pipeline |
+| `.github/workflows/pipeline.yml` | the pipeline; `CONCHO_VERSION` pins the engines | Concho |
+| `project_config.example.json`, `examples/` | annotated examples (below) | – |
+
+Details of the pipeline (steps, inputs, outputs, `results/index.json`):
+[`docs/pipeline.md`](https://github.com/mxngl/concho/blob/main/docs/pipeline.md).
 
 ## `cost_db.csv`
 
@@ -34,6 +109,10 @@ Set `files.custom_materials` in the config and check it with `concho custmat val
 custom_materials.csv` (with `$COURSE_STV_XLSX` set, so names are checked against the catalog).
 
 ## `project_config.example.json`
+
+`project_config.json` is this example with two changes for a team repo: `$schema` is the
+URL of the schema on GitHub, and `files` points to `cost_db.csv`, `stv_mapping.csv` and
+`custom_materials.csv` next to it (the pipeline needs `cost_db` and `stv_mapping` set).
 
 A neutral example: every value is invented (no course data, no RSMeans data, no IDs).
 JSON has no comments, so the notes are here, section by section. Full field reference and

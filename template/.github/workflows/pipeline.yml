@@ -1,0 +1,136 @@
+# Concho team pipeline, Tier 1 (P5.2): validate → TVD → STV → results/ → dashboard → Pages.
+# Docs: https://github.com/mxngl/concho/blob/main/docs/pipeline.md
+#
+# Runs on every push that changes an export, the config or one of the tables, and by hand
+# (Actions → Concho pipeline → Run workflow). Results are committed back to results/ and the
+# dashboard is published to GitHub Pages and attached to the run as the artifact "dashboard".
+#
+# Repository variable (Settings → Secrets and variables → Actions → Variables), optional:
+#   CONCHO_PAGES = off   → skip the GitHub Pages deploy (the "dashboard" artifact is still
+#                          uploaded). Needed when Pages is not available for this repo.
+
+name: Concho pipeline
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "exports/**"
+      - "project_config.json"
+      - "cost_db.csv"
+      - "stv_mapping.csv"
+      - "custom_materials.csv"
+  workflow_dispatch:
+    inputs:
+      label:
+        description: "Snapshot label (default: the last commit message)"
+        required: false
+        default: ""
+
+env:
+  # Concho version (git tag of mxngl/concho). Change it to upgrade the engines.
+  CONCHO_VERSION: v0.1.0
+  PYTHON_VERSION: "3.12"
+
+# One run at a time, so results/index.json and the commits never race.
+concurrency:
+  group: concho-pipeline
+  cancel-in-progress: false
+
+permissions:
+  contents: write   # commit results/ back
+  pages: write      # deploy GitHub Pages
+  id-token: write   # required by actions/deploy-pages
+
+jobs:
+  pipeline:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the team repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # full history: the results commit is rebased onto new pushes
+
+      - name: Get the pipeline script (Concho ${{ env.CONCHO_VERSION }})
+        uses: actions/checkout@v4
+        with:
+          repository: mxngl/concho
+          ref: ${{ env.CONCHO_VERSION }}
+          path: .concho
+          sparse-checkout: scripts/run_pipeline.py
+          sparse-checkout-cone-mode: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install Concho ${{ env.CONCHO_VERSION }}
+        run: |
+          python -m pip install --upgrade pip
+          pip install "concho[stv] @ git+https://github.com/mxngl/concho@${CONCHO_VERSION}"
+
+      # 1. Config, cost DB, STV mapping, custom materials, exports, course workbook.
+      - name: Validate
+        run: >
+          python .concho/scripts/run_pipeline.py validate
+          --repo-visibility ${{ github.event.repository.private && 'private' || 'public' }}
+
+      # 2.–4. TVD, STV (one run with all exports), results/<UTC timestamp>/, results/latest/,
+      # results/index.json (snapshot label: [snapshot: …] in the commit message, else its
+      # first line).
+      - name: Run TVD and STV
+        env:
+          LABEL: ${{ github.event.inputs.label }}
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+        run: |
+          args=(run --commit "$GITHUB_SHA")
+          if [ -n "$LABEL" ]; then args+=(--label "$LABEL"); fi
+          if [ -n "$COMMIT_MESSAGE" ]; then args+=(--commit-message "$COMMIT_MESSAGE"); fi
+          python .concho/scripts/run_pipeline.py "${args[@]}"
+
+      - name: Commit results
+        run: |
+          git config user.name "concho-pipeline[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add results
+          if git diff --cached --quiet; then echo "No new results."; exit 0; fi
+          git commit -m "Pipeline results for ${GITHUB_SHA::7} [skip ci]"
+          for attempt in 1 2 3 4; do
+            git pull --rebase origin "${GITHUB_REF_NAME}" && git push origin "HEAD:${GITHUB_REF_NAME}" && exit 0
+            sleep $((attempt * 5))
+          done
+          echo "::error::Could not push the results (see above)."; exit 1
+
+      # 6. Dashboard: latest TVD dashboard + index page with every snapshot.
+      - name: Build the dashboard site
+        run: python .concho/scripts/run_pipeline.py site
+
+      - name: Upload the dashboard as a workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dashboard
+          path: site/
+          include-hidden-files: true
+
+      - name: Upload the Pages artifact
+        if: vars.CONCHO_PAGES != 'off'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site/
+
+      # 9. TODO (P5.2 step 9): post to the team's Discord webhook (secret), including a budget
+      # alert when the TVD estimate exceeds the target. Not in Tier 1 yet; the engine's
+      # CONCHO_ALERT_WEBHOOK_URL alert is deliberately not configured here.
+
+  # 7. GitHub Pages (a private repo needs GitHub Pro/Team; the published page is PUBLIC).
+  deploy:
+    needs: pipeline
+    if: vars.CONCHO_PAGES != 'off'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

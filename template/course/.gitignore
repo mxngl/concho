@@ -1,0 +1,3 @@
+# Keeps the course workbooks out of the PUBLIC Concho template. In your PRIVATE team repo,
+# delete this file, then add the course STV workbook here (see README.md).
+*.xlsx
