@@ -1,0 +1,137 @@
+{
+  "$schema": "https://raw.githubusercontent.com/mxngl/concho/main/docs/schema/project_config.schema.json",
+  "project": {
+    "name": "Example community center",
+    "team_name": "Example Team",
+    "location": "Springfield, Example State",
+    "currency": "USD",
+    "units": "imperial",
+    "gross_sf": 24000,
+    "completion_date": "2030-08-31"
+  },
+  "tvd": {
+    "budget": {
+      "grant": 20000000,
+      "grant_year": 2026,
+      "construction_year": 2029,
+      "inflation": 0.03,
+      "roi": 0.02
+    },
+    "target": 18500000,
+    "cluster_split": {
+      "method": "derive_from_references",
+      "reference_columns": [
+        {
+          "name": "Reference",
+          "shares": {"A": 0.10, "B": 0.25, "C": 0.15, "D": 0.25, "E": 0.05, "F": 0.03, "G": 0.07, "H": 0.10}
+        },
+        {
+          "name": "Previous project 1",
+          "shares": {"A": 0.12, "B": 0.22, "C": 0.14, "D": 0.27, "E": 0.06, "F": 0.02, "G": 0.08, "H": 0.09}
+        },
+        {
+          "name": "Previous project 2",
+          "shares": {"A": 0.09, "B": 0.26, "C": 0.16, "D": 0.24, "E": 0.05, "F": 0.04, "G": 0.06, "H": 0.10}
+        },
+        {
+          "name": "Previous project 3",
+          "shares": {"A": 0.11, "B": 0.24, "C": 0.13, "D": 0.26, "E": 0.07, "F": 0.03, "G": 0.07, "H": 0.09}
+        }
+      ],
+      "owner_ratings": {
+        "owners": ["Owner 1", "Owner 2"],
+        "items": {
+          "A": [{"item": "Foundation durability", "ratings": {"Owner 1": 4, "Owner 2": 5}}],
+          "B": [
+            {"item": "Facade appearance", "ratings": {"Owner 1": 8, "Owner 2": 7}},
+            {"item": "Daylight through windows", "ratings": {"Owner 1": 9, "Owner 2": 8}}
+          ],
+          "C": [{"item": "Flexible room layouts", "ratings": {"Owner 1": 7, "Owner 2": 6}}],
+          "D": [
+            {"item": "Energy efficiency", "ratings": {"Owner 1": 9, "Owner 2": 9}},
+            {"item": "Indoor comfort", "ratings": {"Owner 1": 8, "Owner 2": null}}
+          ],
+          "E": [{"item": "Kitchen equipment", "ratings": {"Owner 1": 3, "Owner 2": 4}}],
+          "F": [{"item": "Signature canopy", "ratings": {"Owner 1": 5, "Owner 2": 2}}],
+          "G": [{"item": "Outdoor play area", "ratings": {"Owner 1": 6, "Owner 2": 7}}],
+          "H": [{"item": "Short construction time", "ratings": {"Owner 1": 5, "Owner 2": 5}}]
+        }
+      },
+      "reallocation_pct": 0.10,
+      "team_adjustment": {"B": 0.01, "G": -0.01},
+      "target_shares": null
+    },
+    "custom_clusters": [
+      {
+        "name": "Owner Allowance",
+        "target": 250000,
+        "mode": "carved_out",
+        "is_course_data": false
+      }
+    ],
+    "target_sum_tolerance": 0.001
+  },
+  "stv": {
+    "course_team": "Pacific",
+    "lifetime_years": 50,
+    "course_workbook_env": "COURSE_STV_XLSX",
+    "use_phase": {
+      "not_modeled": false,
+      "grid_kwh": 150000,
+      "onsite_renewable_kwh": 60000,
+      "natural_gas_m3": 0,
+      "cogeneration": null,
+      "water": {
+        "toilet_gpf": 1.28,
+        "urinal_gpf": 0.125,
+        "wc_sink_gpm": 0.5,
+        "lab_sink_gpm": 0,
+        "kitchen_sink_gpm": 1.5,
+        "shower_gpm": 1.8,
+        "landscaping_gal": 40000,
+        "rainwater_gal": 25000
+      }
+    },
+    "construction_items": [
+      {
+        "assembly": "Energy",
+        "material_type": "Photovoltaics (sf)",
+        "amount": 3000,
+        "note": "invented example: PV panel area on the roof, not in the Revit exports"
+      }
+    ],
+    "custom_materials_file": null
+  },
+  "schedule": {
+    "start_date": "2029-03-01",
+    "calendar": {
+      "hours_per_day": 8,
+      "workdays": ["Mon", "Tue", "Wed", "Thu", "Fri"],
+      "holidays": ["2029-07-04", "2029-11-22", "2029-12-25", "2030-01-01"]
+    },
+    "blocked_windows": [
+      {"name": "Winter shutdown", "start": "2029-12-24", "end": "2030-01-02"}
+    ],
+    "target_completion": "2030-06-30",
+    "rooms_per_zone": 1,
+    "trade_sequence": ["Interior Walls", "MEP", "Ceiling", "Doors", "Interior Finishes"],
+    "adapters": {"alice": false, "fuzor": false, "manufacton": false}
+  },
+  "agent": {
+    "default_language": "en",
+    "models": {"router": "gpt-4o", "subagent": "gpt-4o-mini", "tts": null},
+    "discord": {
+      "guild": "DISCORD_GUILD_ID",
+      "channels": {"ask": "DISCORD_CHANNEL_ID_ASK", "debug": "DISCORD_CHANNEL_ID_DEBUG"}
+    },
+    "extensions": {"transcripts": false, "clashbot": false}
+  },
+  "files": {
+    "cost_db": "cost_db.csv",
+    "stv_mapping": "stv_mapping.csv",
+    "custom_materials": "custom_materials.csv",
+    "macro_schedule": null,
+    "schedule_rules": null,
+    "exports": "exports"
+  }
+}

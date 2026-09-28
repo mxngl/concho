@@ -1,0 +1,7 @@
+# INVENTED test cost DB for the pipeline tests (tests/pipeline/): no RSMeans data, no course data.
+cluster,assembly_code,group,description,unit,unit_cost,quantity_rule,quantity_value,qty_reliability,cost_reliability,source,split_keywords,qty_label
+Substructure,A1010,Standard Foundations,Invented pad footing,CF,20.00,takeoff,,1,2,invented test value,,
+Shell,B1010,Floor Construction,Invented floor slab,SF,15.00,takeoff,,1,2,invented test value,,
+Shell,B2010,Exterior Walls,Invented facade,SF,40.00,takeoff,,2,2,invented test value,,
+Interiors,C1010,Partitions,Invented partition,SF,10.00,takeoff,,1,1,invented test value,,
+General Conditions,H4000,General Conditions,Invented site overhead,LS,1000.00,fixed,1,2,3,invented test value,,

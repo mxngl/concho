@@ -1,0 +1,19 @@
+# Concho team repo. results/ is committed by the pipeline (snapshots, P5.5); keep it tracked.
+
+# Pipeline work folders (built again on every run)
+.concho-work/
+.concho/
+site/
+
+# Local tooling and secrets
+.env
+.venv/
+__pycache__/
+.claude/
+
+# Office lock and temp files
+~$*
+*.tmp
+
+# Exports you don't want the pipeline to read (see exports/README.md)
+exports/**/raw/
