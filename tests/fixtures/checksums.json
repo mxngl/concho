@@ -9,10 +9,10 @@
   ],
   "private": {
     "_comment": [
-      "PLACEHOLDER: Max replaces 'commit' with the 40-char SHA of the snapshot commit in mxngl/concho-fixtures after pushing it (docs: tests/README.md). Until then --source private reports 'commit not pinned'."
+      "Snapshot commit in mxngl/concho-fixtures (62 files, 28.5 MB, pushed 2026-10-08). After a new snapshot push, replace 'commit' with its 40-char SHA (docs: tests/README.md)."
     ],
     "url": "https://github.com/mxngl/concho-fixtures.git",
-    "commit": "PLACEHOLDER-set-by-Max-after-pushing-the-snapshot"
+    "commit": "618e161545b08661686cb7dd4fb1057d12cdfd75"
   },
   "repos": {
     "AutoTVD": {
