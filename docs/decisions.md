@@ -1,6 +1,6 @@
 # Decisions
 
-Decision records for D1–D10, D13 and D14 from [ROADMAP.md §2](ROADMAP.md#2-decisions-needed-human-settle-these-before-or-during-phase-0), plus decisions taken in later tasks (D11, D12).
+Decision records for D1–D10, D13 and D14 from [ROADMAP.md §2](ROADMAP.md#2-decisions-needed-human-settle-these-before-or-during-phase-0), plus decisions taken in later tasks (D11, D12, D15).
 State as of 2026-09-27 (Max + Ash sync). Owners: Max Nagel, Ashmitha Jaysi Sivakumar. Updating these records is task P0.5.
 
 Status values: **decided** · **working assumption** (acted on, still to be confirmed) · **deferred** (not needed yet) · **open** (not settled; recommended default listed).
@@ -21,6 +21,7 @@ Status values: **decided** · **working assumption** (acted on, still to be conf
 | D12 | Rainwater credit cap (P3.10 item 2) | decided |
 | D13 | Rollout in tiers | decided |
 | D14 | Schedule and Manufacton positioning | decided |
+| D15 | Duplicates across exports and Revit Parts (P3.9) | decided |
 
 ---
 
@@ -170,3 +171,48 @@ Status values: **decided** · **working assumption** (acted on, still to be conf
   kit of parts; nothing syncs back to Revit). ALICE provides the macro schedule (export →
   CSV). Fuzor is dropped from Tier 2.
 - **Consequences:** owner Ash (P3B.9).
+
+## D15: Duplicates across exports and Revit Parts (P3.9)
+
+- **Status:** decided (2026-09-27, Max, on the recommendation in the meeting notes of the
+  Max + Ash sync); implemented in P3.9, Ash reviews the PR.
+- **Context:** TVD merged its two takeoffs by ElementId with "structural always wins"; STV only
+  listed elements in several discipline exports (35 ElementIds in the Island Current exports,
+  e.g. floors 1241457, 1789623, 1789655) and counted them in each. The Revit add-in exports
+  Parts (since concho #18 with `Part Source Id`, `Original Category` and the source's Assembly
+  Code) and skips a floor/ceiling with Parts within one export, but another export can still
+  hold the host as a whole element. In the current Island models the 166 structural Parts come
+  from 3 floors that appear in no export as whole elements; the architecture model has 96
+  Parts of a ceiling whose type has no Assembly Code.
+- **Decision:** one shared rule for TVD and STV (`engines/common/dedup.py`):
+  1. **Parts:** count Parts, never a Part and its host together. If a host row (ElementId =
+     some Part's `Part Source Id`) and Parts of that host both appear, in the same or
+     different exports, keep the Parts and drop the host row.
+  2. **Same ElementId in several exports:** keep one row, decided in this order:
+     (a) a row with an Assembly Code wins over one without;
+     (b) STV only: a row the STV mapping maps wins over an unmapped one (TVD prices by code
+     and skips this step);
+     (c) the export whose discipline owns the category: structural for Floors, Structural
+     Framing, Structural Columns, Structural Foundations (and Parts with such an
+     `Original Category`), MEP for the MEP categories, architecture for all others;
+     (d) same discipline: the first export given.
+  3. Every dropped row is reported in a `deduplication` block of both results JSONs (count
+     per reason `host_of_parts`, `duplicate_without_code`, `duplicate_unmapped`,
+     `duplicate_other_discipline`, `duplicate_same_discipline`; ElementIds and categories
+     only, no quantities).
+  4. STV maps a Part with its `Original Category` (`Parts` if empty).
+  5. `concho-stv --combine-results` cannot deduplicate (no ElementIds): kept, with a warning
+     and a note recommending one run with all discipline exports.
+- **Rationale:** Parts are the representation the add-in counts; an element that carries a
+  code is the one TVD can price and STV's rules usually key on; the owning discipline's model
+  is the authoritative one for its categories. Step (b) was added so that an element is not
+  lost from STV only because the owning discipline's row has no rule (Island floor 1241457,
+  A1010 in both exports, mapped only in architecture).
+- **Consequences:** TVD Island unchanged (the AutoTVD exports share no ElementId, no Parts; no
+  legacy merge switch needed). STV per-trade reference 2,517,183.14 kgCO₂e unchanged; a single
+  STV run of the six Current exports is 2,459,374.64 (−4,866 sf floor concrete counted twice
+  before). DNC handling is not part of this decision (TVD skips DNC rows, STV counts them and
+  lists them in `dnc_rows`; separate decision for Ash). ElementIds are unique per Revit model
+  only, so exports of different models could collide by chance (none in the Island exports).
+  Details: `docs/model-requirements.md` ("How Parts and duplicates are counted"),
+  `docs/engines/tvd.md`, `docs/engines/stv.md`.

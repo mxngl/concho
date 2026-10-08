@@ -15,6 +15,12 @@ Revit exports are mapped with the STV mapping table (P3.6): ``--stv-mapping``, e
 ``files.stv_mapping`` of ``--config``, else the default table ``template/stv_mapping.csv``
 (with a warning). The export flags take one or more files. The results JSON then has a
 ``mapping_coverage`` block (``engines/stv/coverage.py``).
+
+P3.9 (D15): all exports of one call are read together and reduced by the shared duplicate /
+Parts rule (``engines/common/dedup.py``) before they are mapped; the dropped rows are in the
+``deduplication`` block, counted rows with the DNC marker in ``dnc_rows``.
+``--combine-results`` cannot deduplicate (no ElementIds): it warns and says so in its
+``deduplication`` block.
 """
 
 from __future__ import annotations
@@ -29,7 +35,7 @@ from pathlib import Path
 from engines.common.config import validate_config_file
 
 from .central_bim import load_central_bim_model
-from .coverage import build_mapping_coverage
+from .coverage import build_mapping_coverage, dnc_rows
 from .custom_materials import CustomMaterialsError, load_custom_materials
 from .engine import LIFETIME_YEARS, STVEngine
 from .mapping import (
@@ -39,13 +45,11 @@ from .mapping import (
     StvMappingError,
     StvMappingTieError,
     load_stv_mapping,
+    map_exports,
 )
-from .models import STVInputs, STVResults
+from .models import COMBINE_DEDUP_NOTE, STVInputs, STVResults
 from .project import STVProjectSettings
 from .reference import TEMPLATE_ENV_VAR, STVReferenceData, resolve_template_path
-from .revit_architecture import load_architecture_schedule
-from .revit_mep import load_mep_schedule
-from .revit_structural import load_structural_schedule
 from .visualization import export_visualizations
 from .workbook_inputs import load_stv_workbook_inputs
 
@@ -292,13 +296,15 @@ def _run_architecture_history(
     latest_schedule_path = None
 
     for schedule_path in schedule_paths:
-        report = load_architecture_schedule(schedule_path, mapping)
+        (report,), dedup = map_exports([("architecture", schedule_path)], mapping)
         payload = {"construction_items": _item_dicts(report.construction_items)}
         results = _run_stv(
             payload, team=team, template_path=template_path, lifetime_years=lifetime_years,
             reference_data=reference_data,
         )
         results.mapping_coverage = build_mapping_coverage([report], mapping, results)
+        results.deduplication = dedup.block()
+        results.dnc_rows = dnc_rows([report])
         results.use_phase_status.update(
             source="none", not_modeled_reason="--architecture-history-dir runs are "
             "construction only")
@@ -475,6 +481,7 @@ def main() -> None:
         ).isoformat()
 
     if args.combine_results:
+        print(f"warning: {COMBINE_DEDUP_NOTE}", file=sys.stderr)
         result_paths = [Path(path) for path in args.combine_results]
         loaded_results = [
             STVResults.from_dict(json.loads(path.read_text(encoding="utf-8")))
@@ -552,15 +559,16 @@ def main() -> None:
     reference_data = STVReferenceData.from_workbook(args.template)
     _add_custom_materials(parser, args.custom_materials, settings, reference_data)
     exports = [
-        ("structural", args.structural_schedule or [], load_structural_schedule),
-        ("mep", args.mep_schedule or [], load_mep_schedule),
-        ("architecture", args.architecture_schedule or [], load_architecture_schedule),
+        ("structural", args.structural_schedule or []),
+        ("mep", args.mep_schedule or []),
+        ("architecture", args.architecture_schedule or []),
     ]
     mapping = None
-    if args.central_bim_model or any(paths for _, paths, _ in exports):
+    if args.central_bim_model or any(paths for _, paths in exports):
         mapping = _load_mapping(parser, args.stv_mapping, settings, reference_data)
     mapped_reports: list[ScheduleReport] = []
     report_files: dict[str, str] = {}
+    dedup = None
 
     try:
         if args.central_bim_model:
@@ -574,11 +582,16 @@ def main() -> None:
                                            encoding="utf-8")
             report_files["central_bim_model_stv_items"] = str(central_report_path)
 
-        for discipline, paths, loader in exports:
+        # P3.9: the duplicate / Parts rule over all exports of this call, then mapping.
+        pairs = [(discipline, path) for discipline, paths in exports for path in paths]
+        export_reports: list[ScheduleReport] = []
+        if pairs:
+            export_reports, dedup = map_exports(pairs, mapping)
+            mapped_reports += export_reports
+        for discipline, paths in exports:
             if not paths:
                 continue
-            reports = [loader(path, mapping) for path in paths]
-            mapped_reports += reports
+            reports = [r for r in export_reports if r.discipline == discipline]
             payload["construction_items"] = list(payload.get("construction_items", [])) + [
                 item for report in reports for item in _item_dicts(report.construction_items)
             ]
@@ -617,6 +630,17 @@ def main() -> None:
         status["source"] = "stv_workbook_input"
     if mapping is not None:
         results.mapping_coverage = build_mapping_coverage(mapped_reports, mapping, results)
+        results.dnc_rows = dnc_rows(mapped_reports)
+    if dedup is not None:
+        results.deduplication = dedup.block()
+        if dedup.dropped:
+            print("note: duplicate / Parts rule (D15) dropped "
+                  + ", ".join(f"{n} {reason}" for reason, n in dedup.counts().items() if n)
+                  + " row(s); see deduplication in the results JSON.", file=sys.stderr)
+    if results.dnc_rows:
+        print(f"warning: {len(results.dnc_rows)} counted row(s) carry the DNC marker "
+              "(Family/Type/Mark/Comments); STV counts them, TVD skips them. See dnc_rows.",
+              file=sys.stderr)
 
     results_path.write_text(
         json.dumps(results.to_dict(), indent=2),

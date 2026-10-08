@@ -12,7 +12,12 @@ How much of the Revit exports the STV mapping table covers, per discipline:
 plus, over all disciplines, the rule statistics (``rules``: elements each rule won, and how
 many it lost to a rule of the same specificity with a lower priority or to a more specific
 rule) and ``cross_discipline_elements``: ElementIds that appear in more than one discipline
-export, with how each one maps (input for P3.9, not deduplicated here).
+export among the mapped rows, with how each one maps. Since P3.9 ``concho-stv`` maps only the
+rows the duplicate / Parts rule keeps (``engines/common/dedup.py``, the ``deduplication``
+block), so in a CLI run this list is empty unless the rule kept two rows of one ElementId.
+
+:func:`dnc_rows` (P3.9) lists the counted rows that carry the DNC ("do not count") marker:
+TVD skips them, STV counts them (a separate decision).
 """
 
 from __future__ import annotations
@@ -157,6 +162,26 @@ def _cross_discipline(elements: list[MappedElement]) -> list[dict[str, Any]]:
             out.append({"element_id": element_id, "disciplines": disciplines,
                         "occurrences": [_outcome(m) for m in members]})
     return sorted(out, key=lambda x: (len(x["element_id"]), x["element_id"]))
+
+
+# Same marker and fields as TVD (engines/tvd/quantities.py), matched case-insensitively.
+DNC_MARKER = "DNC"
+DNC_FIELDS = ("Family", "Type", "Mark", "Comments")
+
+
+def dnc_rows(reports: Iterable[ScheduleReport]) -> list[dict[str, Any]]:
+    """Rows of ``reports`` with the DNC marker in Family, Type, Mark or Comments. STV counts
+    them (TVD skips them); listed as a warning, no quantities."""
+    out = []
+    for report in reports:
+        for e in report.elements:
+            if any(DNC_MARKER in e.element.get(name).upper() for name in DNC_FIELDS):
+                out.append({"element_id": e.element.element_id,
+                            "category": e.element.category,
+                            "type": e.element.get("Type"),
+                            "discipline": e.element.discipline,
+                            "status": e.status})
+    return out
 
 
 def build_mapping_coverage(

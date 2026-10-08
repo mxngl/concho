@@ -3,7 +3,7 @@
 Project documentation.
 
 - [`ROADMAP.md`](ROADMAP.md): roadmap (source of truth)
-- [`decisions.md`](decisions.md): decision records D1–D14
+- [`decisions.md`](decisions.md): decision records D1–D15
 - [`config.md`](config.md): `project_config` reference
 - [`pipeline.md`](pipeline.md): the Tier-1 team pipeline (template repo, steps, inputs, outputs, snapshots, private-repo requirement)
 - [`model-requirements.md`](model-requirements.md): Revit model requirements (Assembly Codes, units) and every CSV column of the add-in exports

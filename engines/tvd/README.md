@@ -14,7 +14,7 @@ Line totals are rounded to cents when computed; see
 
 | Module | Content |
 |---|---|
-| `loading.py` | CSV reading (BOM cleanup), AutoTVD's legacy quantity parser `parse_qty_str` (only with `--legacy-length-parsing`), `merge_takeoffs` (dedup by `ElementId`, structural wins) |
+| `loading.py` | CSV reading (BOM cleanup), AutoTVD's legacy quantity parser `parse_qty_str` (only with `--legacy-length-parsing`), `merge_takeoffs`: the shared duplicate / Parts rule of P3.9 (`engines/common/dedup.py`, D15; before P3.9: structural wins) |
 | `cost_db.py` | `cost_db.csv` format (P3.4): pydantic row model, loader, validator (`concho costdb validate`) |
 | `quantities.py` | aggregation (DNC marker, excluded categories, keyword AC split; `Length`/`Area`/`Volume` via the shared tolerant parser `engines/common/quantities.py`, P3.11) and quantity rules |
 | `summary.py` | cluster summary, console formatting |
@@ -83,7 +83,8 @@ the engine POSTs a `budget_overrun` event there, with `CONCHO_ALERT_WEBHOOK_TOKE
 
 | Column | Notes |
 |---|---|
-| `ElementId` | unique Revit element ID, used to deduplicate across the two files |
+| `ElementId` | unique Revit element ID, used to deduplicate across the two files (P3.9) |
+| `Part Source Id`, `Original Category` | optional (add-in since concho #18): a Part's host and the host's category; a host row next to its Parts is dropped (P3.9) |
 | `Category` | Revit category (e.g. `Walls`, `Floors`, `Structural Columns`) |
 | `Family` | Revit family name |
 | `Type` | Revit type name |

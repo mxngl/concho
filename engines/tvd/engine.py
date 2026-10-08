@@ -38,6 +38,7 @@ class TvdRun:
     cost_db_validation: dict | None = None
     reliability: dict | None = None
     quantity_parse_warnings: dict | None = None
+    deduplication: dict | None = None
 
     @property
     def targets(self) -> dict[str, float]:
@@ -69,6 +70,7 @@ class TvdRun:
             reliability=self.reliability,
             tracking=tracking,
             quantity_parse_warnings=self.quantity_parse_warnings,
+            deduplication=self.deduplication,
         )
 
 
@@ -91,6 +93,8 @@ def compute(
     source: str = "",
     *,
     legacy_length_parsing: bool = False,
+    arch_label: str = "arch",
+    struct_label: str = "struct",
 ) -> TvdRun:
     """Run the TVD computation on parsed QTO rows and a validated cost DB.
 
@@ -103,11 +107,17 @@ def compute(
     notes = project.check()
     lines = cost_db.lines
 
-    # Merge takeoffs (dedup by ElementId)
-    all_elements = merge_takeoffs(arch_rows, struct_rows)
-    dupes = len(arch_rows) + len(struct_rows) - len(all_elements)
+    # Merge takeoffs: Parts over their host, one row per ElementId (P3.9, D15)
+    merged = merge_takeoffs(arch_rows, struct_rows, arch_label=arch_label,
+                            struct_label=struct_label)
+    all_elements = merged.kept_rows
+    dupes = len(merged.dropped)
     print(f"   Elements: arch={len(arch_rows)}, struct={len(struct_rows)}, "
           f"combined={len(all_elements)}, duplicates removed={dupes}")
+    if dupes:
+        print("   Dropped rows: " + ", ".join(
+            f"{reason} {n}" for reason, n in merged.counts().items() if n)
+            + " (see deduplication)")
 
     # Aggregate takeoff quantities (excluding furnishings and DNC elements)
     parse_log = QuantityParseLog()
@@ -151,6 +161,7 @@ def compute(
         cost_db_validation=cost_db.validation_block(),
         reliability=reliability_summary(lines, results),
         quantity_parse_warnings=parse_warnings,
+        deduplication=merged.block(),
     )
 
 
@@ -172,4 +183,5 @@ def run_files(
     source = "Custom files — " + ", ".join(parts)
     print(f"Loaded data from custom paths: {', '.join(parts)}")
     return compute(load_csv_file(arch_path), load_csv_file(struct_path), cost_db, config, source,
-                   legacy_length_parsing=legacy_length_parsing)
+                   legacy_length_parsing=legacy_length_parsing,
+                   arch_label=source_label(arch_path), struct_label=source_label(struct_path))

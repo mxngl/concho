@@ -445,6 +445,42 @@ in the structural export (3,062.25 → 3,108.63 LF over all codes), but the Isla
 those codes by SF / CY, so the totals don't move. Coded LF of the architecture export: 1,806.17
 → 1,867.48 (−3.3 % in the legacy read). Areas, volumes and counts are identical in both modes.
 
+## Duplicates and Parts (P3.9, decision D15)
+
+Before the quantities are aggregated, the architecture and structural takeoffs are reduced by
+the shared rule of `engines/common/dedup.py` (the same module STV uses; rule text:
+[`docs/model-requirements.md`](../model-requirements.md#how-parts-and-duplicates-are-counted-p39)):
+
+1. a row whose ElementId is some Part's `Part Source Id` is dropped (`host_of_parts`); the
+   Parts count (new add-in exports carry the host's Assembly Code on each Part);
+2. rows with the same ElementId: the row with an Assembly Code wins
+   (`duplicate_without_code`); if both have one, the structural export wins for Floors,
+   Structural Framing / Columns / Foundations (and Parts with such an `Original Category`),
+   the architecture export for all other categories (`duplicate_other_discipline`); two rows
+   of one export: the first (`duplicate_same_discipline`). TVD prices by code, so it skips
+   STV's "mapped row wins" step.
+
+**Before P3.9** `merge_takeoffs` kept the structural row whenever an ElementId was in both
+files. The difference only shows for an element in both files with a code in the
+architecture row only, or with a code in both and a non-structural category (e.g. Walls).
+
+The results JSON gets a `deduplication` block (`rule`, `exports`, `rows_in`, `rows_kept`,
+`dropped`, `by_reason`, `parts`, `dropped_rows` with `element_id`, `category`, `kept_export`,
+`kept_discipline`, `dropped_export`, `dropped_discipline`, `reason`; no quantities);
+`meta.duplicates_removed` is its `dropped`.
+
+### Island: no change
+
+The AutoTVD reference exports (`qto/Architecture_TakeOff.csv`, 2,321 rows;
+`qto/Structural_Schedule.csv`, 287 rows) share **no ElementId** (floor 1241457 is only in the
+architecture file there) and have **no Parts**, so the rule drops nothing, exactly like the old
+merge (`duplicates_removed` 0 before and after). Grand totals, every cluster and every line
+item are unchanged: 16,065,644.29 (legacy parser) and 16,081,484.40 (tolerant parser); no
+ElementId moved. The AutoTVD equivalence test still proves the byte-identical migration
+without a legacy merge switch (the new block is left out of the comparison and pinned in
+`test_island_deduplication`). The synthetic fixture's shared element `1020` now has a code
+only in its structural row, so it tests the "row with a code wins" step with unchanged totals.
+
 ## Course workbook bug found in P2.5
 
 `TVD Summary` C25 ("C3030 Ceiling Finishes") references `'B Shell'!T30` (B3010 Roof

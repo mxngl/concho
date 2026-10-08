@@ -26,6 +26,7 @@ def build_results_payload(
     reliability: dict | None = None,
     tracking: dict | None = None,
     quantity_parse_warnings: dict | None = None,
+    deduplication: dict | None = None,
 ) -> dict:
     """
     Build the structured results dict of a run.
@@ -60,6 +61,13 @@ def build_results_payload(
                         given): parser (tolerant | legacy), total, columns {column: {count,
                         by_issue {issue: count}, examples [{value, issue}] (max. 20, raw
                         cell text only)}}; see docs/engines/tvd.md
+    deduplication     – rows dropped by the P3.9 rule (D15; only if given): rule, exports
+                        [{export, discipline, rows}], rows_in, rows_kept, dropped, by_reason
+                        {host_of_parts, duplicate_without_code, duplicate_other_discipline,
+                        duplicate_same_discipline}, parts {rows, with_part_source_id, hosts},
+                        dropped_rows [{element_id, category, kept_export, kept_discipline,
+                        dropped_export, dropped_discipline, reason}] (no quantities);
+                        meta.duplicates_removed = dropped; see docs/model-requirements.md
     line_items        – dict of cluster → list of full line-item rows
     """
     ts       = ts or datetime.now()
@@ -137,6 +145,8 @@ def build_results_payload(
         payload["tracking"] = tracking
     if quantity_parse_warnings is not None:
         payload["quantity_parse_warnings"] = quantity_parse_warnings
+    if deduplication is not None:
+        payload["deduplication"] = deduplication
     payload["line_items"] = grouped
     return payload
 
