@@ -22,6 +22,8 @@ dependencies = [
 dev = [
     "jsonschema==4.26.0",
     "pytest==9.1.1",
+    # P5.2: tests/pipeline/ parses the team workflow template (pipeline.yml).
+    "pyyaml==6.0.3",
     "ruff==0.16.9",
 ]
 stv = [
@@ -48,6 +50,11 @@ Repository = "https://github.com/mxngl/concho"
 # src-less layout: only the `engines` and `dashboards` packages are importable.
 [tool.setuptools.packages.find]
 include = ["engines", "engines.*", "dashboards", "dashboards.*"]
+
+# P5.2: data files the engines read at runtime, so a non-editable install (the team pipeline's
+# `pip install "concho[stv] @ git+…@vX.Y.Z"`) has them too. Without this the wheel has no CSVs.
+[tool.setuptools.package-data]
+"engines.common" = ["*.csv"]
 
 [tool.ruff]
 target-version = "py311"

@@ -1,0 +1,4 @@
+ElementId,Category,Family,Type,Level,Mark,Assembly Code,Assembly Description,Length,Width,Height,Area,Volume,Material,Comments,Part Source Id
+6001,Structural Foundations,Footing,Pad,L0,,A1010,Standard Foundations,,,,16,27,Concrete,,
+6002,Structural Foundations,Footing,Pad,L0,,A1010,Standard Foundations,,,,16,27,Concrete,,
+5004,Floors,,Concrete 8in,L1,,B1010,Floor Construction,,,,1000,666,Concrete,,

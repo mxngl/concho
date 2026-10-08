@@ -1,0 +1,6 @@
+ElementId,Category,Family,Type,Level,Mark,Assembly Code,Assembly Description,Length,Width,Height,Area,Volume,Material,Comments,Part Source Id
+5001,Walls,,Partition,L1,,C1010,Partitions,40,0.5,10,400,200,Metal Stud Layer; Gypsum,,
+5002,Walls,,Partition,L2,,C1010,Partitions,20,0.5,10,200,100,Metal Stud Layer; Gypsum,,
+5003,Walls,,EIFS facade,L1,,B2010,Exterior Walls,60,1,12,720,720,EIFS; Metal Stud Layer,,
+5004,Floors,,Concrete 8in,L1,,B1010,Floor Construction,,,,1000,666,Concrete,,
+5005,Walls,,Partition,L1,DNC,C1010,Partitions,10,0.5,10,100,50,Metal Stud Layer; Gypsum,,
