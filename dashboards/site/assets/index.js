@@ -1,7 +1,7 @@
 // Overview page (P7.4): the snapshot list from results/index.json, newest first.
 import {
   ROOT, badge, card, el, fetchJson, frac, get, loadIndex, namesOf, num, pickSnapshot,
-  renderHeader, section, showError, signedUsd, snapshotsNewestFirst, table, usd, when,
+  renderHeader, section, setContent, showError, signedUsd, snapshotsNewestFirst, table, usd, when,
 } from "./common.js";
 
 async function main() {
@@ -10,7 +10,7 @@ async function main() {
   const content = document.getElementById("content");
   if (!latest) {
     renderHeader({ page: "index", idx, snap: null, projectName: "", teamName: "" });
-    content.replaceChildren(el("p", { class: "note info", text: "No snapshots yet. Run the pipeline to create the first one." }));
+    setContent(content, el("p", { class: "note info", text: "No snapshots yet. Run the pipeline to create the first one." }));
     return;
   }
   const tvd = await fetchJson(get(latest, "paths.tvd_results")).catch(() => null);
@@ -25,7 +25,7 @@ async function main() {
   const t = latest.tvd || {};
   const s = latest.stv;
   const over = t.status === "over_target";
-  content.replaceChildren(
+  setContent(content,
     el("div", { class: "cards" },
       card("TVD estimate (latest)", usd(t.grand_total), `target ${usd(t.tvd_target)} · ${(t.status || "").replace("_", " ")}`, over ? "over" : "under"),
       s ? card("STV life-cycle carbon (latest)", `${num(s.life_cycle_kgco2e)} kgCO₂e`,

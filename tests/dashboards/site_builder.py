@@ -13,6 +13,7 @@ import functools
 import http.server
 import io
 import json
+import os
 import shutil
 import threading
 from datetime import UTC, datetime
@@ -53,7 +54,10 @@ def _add_stv(repo: Path, snap_id: str, results: dict) -> None:
     """What `run_pipeline.py run` does when the course workbook is there, with `results`."""
     results_root = repo / "results"
     stv_dir = results_root / snap_id / "stv"
-    stv_dir.mkdir(parents=True)
+    # With a course workbook the pipeline may have made this folder (and a real result)
+    # already; the invented result then replaces it on purpose, so the demo is the same
+    # with and without $COURSE_STV_XLSX.
+    stv_dir.mkdir(parents=True, exist_ok=True)
     (stv_dir / "stv_results.json").write_text(json.dumps(results, indent=2) + "\n",
                                               encoding="utf-8")
     entry = {"stv": run_pipeline.stv_summary(results), "stv_note": None}
@@ -72,11 +76,29 @@ def _add_stv(repo: Path, snap_id: str, results: dict) -> None:
         shutil.copytree(results_root / snap_id, results_root / "latest")
 
 
-def build_demo_site(work: Path) -> tuple[Path, Path]:
-    """Returns (team repo, site folder)."""
+def make_team_repo(work: Path) -> Path:
+    """A team repo: the template with the invented exports and cost DB on top."""
     repo = work / "team"
     shutil.copytree(TEMPLATE, repo)
     shutil.copytree(FIXTURE / "exports", repo / "exports", dirs_exist_ok=True)
+    shutil.copy2(FIXTURE / "cost_db.csv", repo / "cost_db.csv")
+    return repo
+
+
+def build_demo_site(work: Path) -> tuple[Path, Path]:
+    """Returns (team repo, site folder). The snapshots have no real STV result: the pipeline
+    runs without the course workbook ($COURSE_STV_XLSX is unset for the runs), STV results
+    are the invented ones added below."""
+    saved = os.environ.pop(run_pipeline.STV_WORKBOOK_ENV, None)
+    try:
+        return _build_demo_site(work)
+    finally:
+        if saved is not None:
+            os.environ[run_pipeline.STV_WORKBOOK_ENV] = saved
+
+
+def _build_demo_site(work: Path) -> tuple[Path, Path]:
+    repo = make_team_repo(work)
     for i, (label, when, factor, stv) in enumerate(SNAPSHOTS):
         (repo / "cost_db.csv").write_text(_scaled_cost_db(factor), encoding="utf-8")
         if i == 1:  # one more partition wall: a second kind of change between snapshots

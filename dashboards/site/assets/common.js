@@ -108,6 +108,12 @@ export function el(tag, attrs = {}, ...kids) {
   return node;
 }
 
+/** Replaces the children of `host`; null, undefined and false (absent blocks) are skipped, so
+ * they never show up as the text "null". */
+export function setContent(host, ...kids) {
+  host.replaceChildren(...kids.flat().filter((k) => k !== null && k !== undefined && k !== false));
+}
+
 export function section(title, id, ...kids) {
   return el("section", { id }, el("h2", { text: title }), ...kids);
 }
@@ -289,7 +295,7 @@ export function renderHeader({ page, idx, snap, projectName, teamName }) {
 
 export function showError(err) {
   const main = document.getElementById("content");
-  main.replaceChildren(note("bad", "Could not show this page.", err.message || String(err)));
+  setContent(main, note("bad", "Could not show this page.", err.message || String(err)));
   console.error(err);
 }
 

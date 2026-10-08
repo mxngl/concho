@@ -2,7 +2,7 @@
 // results/index.json. The paths read at top level are listed in paths.js.
 import {
   ROOT, badge, barChart, card, details, el, fetchJson, footerLinks, frac, get, kv, lineChart,
-  loadIndex, namesOf, note, num, pct, pickSnapshot, renderHeader, section, showError,
+  loadIndex, namesOf, note, num, pct, pickSnapshot, renderHeader, section, setContent, showError,
   signedUsd, snapshotsNewestFirst, stack, table, usd, when,
 } from "./common.js";
 
@@ -11,10 +11,20 @@ const sum = (a) => a.reduce((x, y) => x + (Number.isFinite(y) ? y : 0), 0);
 
 // ------------------------------------------------------------------ summary and warnings
 
+/** "A–H differ from the total target by $5,852 (0.035 %), within tolerance." */
+function withinTolerance(res) {
+  const gap = get(res, "target_consistency.gap");
+  return `A–H differ from the total target by ${usd(Math.abs(gap))} ` +
+    `(${pct(Math.abs(get(res, "target_consistency.gap_pct")), 3)}), within tolerance.`;
+}
+
 function warnings(res) {
   const out = [];
   const cons = get(res, "target_consistency.status");
-  if (cons && cons !== "ok") {
+  if (cons === "within_tolerance") {
+    out.push(note("info", "Cluster targets are within tolerance.", withinTolerance(res), " ",
+      el("a", { href: "#consistency", text: "Details" })));
+  } else if (cons && cons !== "ok") {
     const gap = get(res, "target_consistency.gap");
     out.push(note(cons === "failed" ? "bad" : "", "Cluster targets do not add up to the total target.",
       `Status “${cons.replace("_", " ")}”: gap ${usd(gap, 2)} (${pct(get(res, "target_consistency.gap_pct"), 4)}). `,
@@ -119,8 +129,10 @@ function consistency(res) {
   const ok = c.status === "ok";
   const carved = entries(c.carved_out_clusters), onTop = entries(c.on_top_clusters);
   return section("Target consistency", "consistency",
-    note(ok ? "info" : (c.status === "failed" ? "bad" : ""), ok ? "OK." : `${c.status.replace("_", " ")}.`,
+    note(ok || c.status === "within_tolerance" ? "info" : (c.status === "failed" ? "bad" : ""),
+      ok ? "OK." : `${c.status.replace("_", " ")}.`,
       ok ? " Clusters A–H plus carved-out clusters add up to the total target." :
+        c.status === "within_tolerance" ? ` ${withinTolerance(res)}` :
         ` Gap ${usd(c.gap, 2)} (${pct(c.gap_pct, 4)}); tolerance ${usd(c.tolerance_amount)}.` +
         (c.override_reason ? ` Accepted: ${c.override_reason}.` : "")),
     kv([["Total target", usd(c.total_target, 2)], ["Clusters A–H", usd(c.sum_a_to_h, 2)],
@@ -185,7 +197,7 @@ function compare(idx, snap) {
   const out = el("div", {});
   const load = async (id) => fetchJson(idx.snapshots.find((s) => s.id === id).paths.tvd_results);
   const run = async () => {
-    out.replaceChildren(el("p", { class: "muted", text: "Loading…" }));
+    setContent(out, el("p", { class: "muted", text: "Loading…" }));
     try {
       const [ra, rb] = await Promise.all([load(a.value), load(b.value)]);
       const names = [...new Set([...get(ra, "cluster_summary").map((r) => r.cluster), ...get(rb, "cluster_summary").map((r) => r.cluster)])];
@@ -197,7 +209,7 @@ function compare(idx, snap) {
       const total = { n: "Total", ea: get(ra, "financials.grand_total"), eb: get(rb, "financials.grand_total"),
         ta: get(ra, "financials.tvd_target"), tb: get(rb, "financials.tvd_target") };
       const d = (r) => (r.ea === undefined || r.eb === undefined ? NaN : r.eb - r.ea);
-      out.replaceChildren(table([
+      setContent(out, table([
         { label: "Cluster", value: (r) => r.n },
         { label: "From: estimate", num: true, value: (r) => usd(r.ea ?? NaN) },
         { label: "To: estimate", num: true, value: (r) => usd(r.eb ?? NaN) },
@@ -206,7 +218,7 @@ function compare(idx, snap) {
         { label: "Δ target", num: true, value: (r) => signedUsd((r.tb ?? NaN) - (r.ta ?? NaN)) },
       ], rows, { total }), el("p", { class: "muted", text: "A cluster that exists in only one snapshot (renamed or added) shows “–” on the other side." }));
     } catch (err) {
-      out.replaceChildren(note("bad", "Could not compare.", err.message));
+      setContent(out, note("bad", "Could not compare.", err.message));
     }
   };
   a.addEventListener("change", run); b.addEventListener("change", run);
@@ -263,12 +275,12 @@ async function main() {
   const content = document.getElementById("content");
   if (!snap) {
     renderHeader({ page: "tvd", idx, snap: null, projectName: "", teamName: "" });
-    content.replaceChildren(note("info", "No snapshots yet.", "Run the pipeline to create the first one."));
+    setContent(content, note("info", "No snapshots yet.", "Run the pipeline to create the first one."));
     return;
   }
   const res = await fetchJson(get(snap, "paths.tvd_results"));
   renderHeader({ page: "tvd", idx, snap, ...namesOf(res, null) });
-  content.replaceChildren(summary(res), clusters(res), lineItems(res), derivation(res), consistency(res),
+  setContent(content, summary(res), clusters(res), lineItems(res), derivation(res), consistency(res),
     reliability(res), tracking(res), history(idx), compare(idx, snap), dataQuality(res),
     footerLinks(el("a", { href: "legacy.html", text: "Legacy TVD dashboard (latest run)" }), ". ",
       "Snapshot data: ", el("a", { href: `${ROOT}/${get(snap, "paths.tvd_results")}`, text: "tvd_results.json" }), "."));

@@ -2,7 +2,7 @@
 // Units are the ones the engine reports (kgCO2e, MJ, kg water, kg CFC-11e).
 import {
   badge, barChart, card, details, el, fetchJson, footerLinks, frac, get, kv, loadIndex,
-  namesOf, note, num, pct, pickSnapshot, renderHeader, section, showError, sig, stack, table,
+  namesOf, note, num, pct, pickSnapshot, renderHeader, section, setContent, showError, sig, stack, table,
 } from "./common.js";
 
 const UNITS = { carbon: "kgCO₂e", energy: "MJ", water: "kg", ozone: "kg CFC-11e" };
@@ -199,20 +199,20 @@ async function main() {
   const content = document.getElementById("content");
   if (!snap) {
     renderHeader({ page: "stv", idx, snap: null, projectName: "", teamName: "" });
-    content.replaceChildren(note("info", "No snapshots yet.", "Run the pipeline to create the first one."));
+    setContent(content, note("info", "No snapshots yet.", "Run the pipeline to create the first one."));
     return;
   }
   const tvd = await fetchJson(get(snap, "paths.tvd_results")).catch(() => null);
   const path = get(snap, "paths.stv_results");
   if (!path) {
     renderHeader({ page: "stv", idx, snap, ...namesOf(tvd, null) });
-    content.replaceChildren(note("info", "No STV result in this snapshot.", get(snap, "stv_note") || "STV was not run.",
+    setContent(content, note("info", "No STV result in this snapshot.", get(snap, "stv_note") || "STV was not run.",
       " Pick another snapshot in the list above."));
     return;
   }
   const res = await fetchJson(path);
   renderHeader({ page: "stv", idx, snap, ...namesOf(tvd, res) });
-  content.replaceChildren(totals(res), metrics(res), split(res), assemblies(res), flags(res), coverage(res), quiet(res),
+  setContent(content, totals(res), metrics(res), split(res), assemblies(res), flags(res), coverage(res), quiet(res),
     footerLinks("Snapshot data: ", el("a", { href: `../${path}`, text: "stv_results.json" }), "."));
 }
 

@@ -17,7 +17,16 @@ import tomllib
 from pathlib import Path
 
 import pytest
-from site_builder import REPO_ROOT, SNAPSHOTS, build_demo_site, serve
+import run_pipeline
+from site_builder import (
+    REPO_ROOT,
+    SNAPSHOTS,
+    _add_stv,
+    build_demo_site,
+    make_team_repo,
+    serve,
+)
+from stv_fixture import build_stv_results
 
 SITE_SRC = REPO_ROOT / "dashboards" / "site"
 JS_PAGES = ("index.js", "tvd.js", "stv.js")
@@ -184,6 +193,41 @@ def test_every_literal_read_is_declared():
             assert ok, f"{name} reads {read!r}, not declared in paths.js"
 
 
+def test_add_stv_replaces_an_existing_result(tmp_path: Path):
+    """The demo builder works when the pipeline made results/<id>/stv/ already (with the
+    course workbook it does): the invented result replaces it."""
+    from datetime import UTC, datetime
+
+    saved = os.environ.pop(run_pipeline.STV_WORKBOOK_ENV, None)
+    try:
+        repo = make_team_repo(tmp_path)
+        entry = run_pipeline.run(repo, label="x", commit="abc",
+                                 now=datetime(2027, 1, 1, tzinfo=UTC))
+    finally:
+        if saved is not None:
+            os.environ[run_pipeline.STV_WORKBOOK_ENV] = saved
+    stv_dir = repo / "results" / entry["id"] / "stv"
+    stv_dir.mkdir(parents=True)
+    (stv_dir / "stv_results.json").write_text("{}", encoding="utf-8")
+    _add_stv(repo, entry["id"], build_stv_results(tmp_path / "stv_exports"))
+    written = json.loads((stv_dir / "stv_results.json").read_text(encoding="utf-8"))
+    assert written["team"] == "Example Team"
+    index = json.loads((repo / "results" / "index.json").read_text(encoding="utf-8"))
+    assert index["snapshots"][0]["stv"]["life_cycle_kgco2e"] > 0
+
+
+@pytest.mark.skipif(not os.environ.get(run_pipeline.STV_WORKBOOK_ENV),
+                    reason="needs the course STV workbook ($COURSE_STV_XLSX)")
+def test_stv_paths_in_real_results(tmp_path: Path):
+    """With the workbook the real STV engine runs: the paths the page needs are in its JSON."""
+    repo = make_team_repo(tmp_path)
+    entry = run_pipeline.run(repo, label="real", commit="abc")
+    assert entry["paths"]["stv_results"]
+    res = json.loads((repo / entry["paths"]["stv_results"]).read_text(encoding="utf-8"))
+    for path in _load_paths()["stv"]["required"]:
+        assert missing(res, path) == [], path
+
+
 # ------------------------------------------------------------------------------ packaging
 
 
@@ -229,6 +273,13 @@ def browser():
         b.close()
 
 
+def assert_no_placeholder_text(page, where: str) -> None:
+    """A null / undefined that reached the DOM shows up as the words "null" or "undefined"."""
+    body = page.inner_text("body")
+    found = re.findall(r"(?<![A-Za-z])(?:null|undefined|NaN)+(?![A-Za-z])|\[object Object\]", body)
+    assert found == [], (where, found)
+
+
 def _visit(browser, base: str, url: str, width: int = 1100):
     page = browser.new_page(viewport={"width": width, "height": 900})
     errors: list[str] = []
@@ -252,6 +303,7 @@ def test_pages_load_without_errors(demo, browser):
         for url in urls:
             page, errors = _visit(browser, base, url)
             assert errors == [], (url, errors)
+            assert_no_placeholder_text(page, url)
             assert "Example community center" in page.inner_text("#site-header h1")
             assert "Example Team" in page.inner_text("#site-header .sub")
             page.close()
@@ -308,6 +360,45 @@ def test_missing_results_show_a_message(tmp_path: Path, browser):
         page.goto(base + "/tvd/index.html")
         page.wait_for_selector("#content .note")
         assert "Could not" in page.inner_text("#content")
+        page.close()
+    finally:
+        server.shutdown()
+
+
+def test_one_snapshot_and_within_tolerance(demo, tmp_path: Path, browser):
+    """Every team's first run has one snapshot: no history / compare blocks, and no stray
+    "null" text. A target gap within tolerance is an info note, not a warning."""
+    _, demo_site, index = demo
+    site = tmp_path / "site"
+    shutil.copytree(demo_site, site)
+    last = index["snapshots"][-1]
+    (site / "results" / "index.json").write_text(json.dumps(
+        {**index, "snapshots": [last], "latest": last["id"]}), encoding="utf-8")
+    tvd_path = site / last["paths"]["tvd_results"]
+    tvd = json.loads(tvd_path.read_text(encoding="utf-8"))
+    tvd["target_consistency"].update(status="within_tolerance", gap=5852.0, gap_pct=0.0316)
+    tvd_path.write_text(json.dumps(tvd), encoding="utf-8")
+    server = serve(site)
+    base = f"http://127.0.0.1:{server.server_address[1]}"
+    try:
+        for url in ("/index.html", "/tvd/index.html", "/stv/index.html"):
+            page, errors = _visit(browser, base, url)
+            assert errors == [], (url, errors)
+            assert_no_placeholder_text(page, url)
+            page.close()
+        page, _ = _visit(browser, base, "/tvd/index.html")
+        text = page.inner_text("#content")
+        assert "Compare two snapshots" not in text and "History: all snapshots" not in text
+        assert "do not add up" not in text
+        assert "A–H differ from the total target by $5,852 (0.032 %), within tolerance" in text
+        assert page.locator("#content .note.info", has_text="within tolerance").count() >= 1
+        page.close()
+        # outside the tolerance (accepted by an override) keeps the warning style
+        tvd["target_consistency"].update(status="override", override_reason="invented reason")
+        tvd_path.write_text(json.dumps(tvd), encoding="utf-8")
+        page, _ = _visit(browser, base, "/tvd/index.html")
+        assert "do not add up" in page.inner_text("#content")
+        assert page.locator("#content .note:not(.info)", has_text="do not add up").count() == 1
         page.close()
     finally:
         server.shutdown()
