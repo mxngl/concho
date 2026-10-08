@@ -6,14 +6,32 @@ Only non-sensitive fixtures go under `tests/fixtures/`. Tests that need course w
 
 ## Reference fixtures (Island 2026)
 
-Equivalence and golden tests against the original repos need their checkouts:
+Equivalence and golden tests against the original repos need their files (AutoTVD, AutoSTV, IPD_Challenge). They contain course workbooks and RSMeans-derived cost data, so they live in the **private** repo `mxngl/concho-fixtures` (a snapshot of exactly the files the tests read, same layout as the original repos) and are never committed here:
 
 ```bash
-python scripts/fetch_fixtures.py   # clones AutoTVD, AutoSTV, IPD_Challenge into .fixtures/
+python scripts/fetch_fixtures.py   # clones mxngl/concho-fixtures into .fixtures/ at the pinned commit
 pytest
 ```
 
-The fixture root is `CONCHO_FIXTURES_DIR` (default `.fixtures/`); `AUTOTVD_DIR` (TVD, P1.3) and `IPD_CHALLENGE_DIR` (IPD_Challenge@989a6b7, STV golden and schedule engines, P1.7) override single checkouts. With `CONCHO_REQUIRE_FIXTURES=1` (CI job `reference`) a missing fixture fails instead of skipping.
+- **Access.** Max and Ash: plain `git` with your own GitHub login is enough (credential helper / `gh auth login`). CI and scripts: set `CONCHO_FIXTURES_TOKEN` (fine-grained PAT, read-only on `concho-fixtures`; the Actions secret of the same name); the script uses it for the clone only and never prints or stores it. Without access the script says so and exits 0, the tests that need fixtures are skipped; with `CONCHO_REQUIRE_FIXTURES=1` (or a token set) it exits 1.
+- **Pin and checks.** The commit is `private.commit` in `tests/fixtures/checksums.json`. The script verifies every entry of the snapshot's `MANIFEST.json` and the roadmap §1 / P2.3 checksums in `checksums.json`; any mismatch is fatal.
+- **Fixture root** is `CONCHO_FIXTURES_DIR` (default `.fixtures/`); the folder itself is the clone. A folder that holds the old public clones must be deleted first (or use `--dest`). `AUTOTVD_DIR` (TVD, P1.3) and `IPD_CHALLENGE_DIR` (IPD_Challenge@989a6b7, STV golden and schedule engines, P1.7) override single checkouts. With `CONCHO_REQUIRE_FIXTURES=1` (CI jobs `reference`, `reference-pandas3`) a missing fixture fails instead of skipping.
+- **Old way, until roadmap P1.6:** `python scripts/fetch_fixtures.py --source public` clones the three public repos at their pinned refs. Only needed to build the snapshot.
+
+### Updating the private snapshot (Max/Ash)
+
+Needed when a test starts reading another fixture file, or the reference state changes. The list of files is `SNAPSHOT_FILES` in `scripts/build_fixture_snapshot.py` (recorded by tracing every file the full suite opens, including those the original AutoTVD/IPD scripts read).
+
+```bash
+python scripts/fetch_fixtures.py --source public --dest ../concho-fixtures-public   # the three original repos (outside this repo)
+python scripts/build_fixture_snapshot.py --src ../concho-fixtures-public --out ../concho-fixtures-snapshot
+cd ../concho-fixtures-snapshot
+git init -b main && git add -A && git commit -m "Island 2026 fixtures"
+git remote add origin https://github.com/mxngl/concho-fixtures.git && git push -u origin main
+git rev-parse HEAD   # paste into private.commit in tests/fixtures/checksums.json
+```
+
+Test a fresh push before pinning it with `python scripts/fetch_fixtures.py --private-commit <sha> --dest /tmp/fx`. **Never** copy the snapshot folder into this repo.
 
 ## Course-equivalence tests (course workbooks)
 

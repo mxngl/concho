@@ -4,8 +4,16 @@
     "'commit' is the commit the ref must resolve to. 'files' are the sha256 checksums from docs/ROADMAP.md §1",
     "(recorded in P0.4). 'golden_inputs' are the inputs of the STV golden test (P2.3), added so the inputs stay",
     "pinned if the fixtures later move to a private repo without git history.",
-    "The files themselves are never committed here (course workbooks, RSMeans-derived cost data)."
+    "The files themselves are never committed here (course workbooks, RSMeans-derived cost data).",
+    "'private' is the snapshot repo mxngl/concho-fixtures that scripts/fetch_fixtures.py clones by default: exactly the files the tests read, same layout as 'repos', built by scripts/build_fixture_snapshot.py and verified against its MANIFEST.json plus the checksums below. Its 'commit' is pinned by Max after he pushes the snapshot; 'repos' stays for --source public until P1.6."
   ],
+  "private": {
+    "_comment": [
+      "PLACEHOLDER: Max replaces 'commit' with the 40-char SHA of the snapshot commit in mxngl/concho-fixtures after pushing it (docs: tests/README.md). Until then --source private reports 'commit not pinned'."
+    ],
+    "url": "https://github.com/mxngl/concho-fixtures.git",
+    "commit": "PLACEHOLDER-set-by-Max-after-pushing-the-snapshot"
+  },
   "repos": {
     "AutoTVD": {
       "url": "https://github.com/mxngl/AutoTVD.git",

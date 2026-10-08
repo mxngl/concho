@@ -668,7 +668,7 @@ from the fixtures and compares targets, totals, breakdown, construction items an
 trade results within 1e-6 relative. Run it with:
 
 ```bash
-python scripts/fetch_fixtures.py   # clones the reference repos into .fixtures/, verifies sha256
+python scripts/fetch_fixtures.py   # clones the private mxngl/concho-fixtures into .fixtures/, verifies sha256 (see tests/README.md)
 pytest tests/stv/test_golden_stv.py
 ```
 

@@ -1,8 +1,9 @@
 """Shared test helpers: location of the Island 2026 reference fixtures (P2.1).
 
-The fixtures are clones of AutoTVD, AutoSTV and IPD_Challenge at their reference state,
-fetched by ``python scripts/fetch_fixtures.py``. They contain course and RSMeans-derived
-data and are never committed; tests that need them are skipped when they are missing.
+The fixtures are the files of AutoTVD, AutoSTV and IPD_Challenge at their reference state,
+fetched from the private repo ``mxngl/concho-fixtures`` by ``python scripts/fetch_fixtures.py``
+(same layout as the original repos). They contain course and RSMeans-derived data and are
+never committed; tests that need them are skipped when they are missing.
 
 Fixture root: ``$CONCHO_FIXTURES_DIR`` if set, else ``.fixtures/`` in the repo root if it
 exists. ``$AUTOTVD_DIR`` still overrides the AutoTVD checkout (backwards compatible with the

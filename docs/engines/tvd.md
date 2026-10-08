@@ -6,6 +6,15 @@ compares them with the cluster targets from `project_config`. Usage (CLI, inputs
 tests) is in [`engines/tvd/README.md`](../../engines/tvd/README.md); the config fields and the
 cluster target check (P3.3) are in [`docs/config.md`](../config.md).
 
+## Reference fixtures
+
+The AutoTVD equivalence test (`tests/tvd/test_tvd_equivalence.py`) and the cost-DB migration
+test (`tests/tvd/test_cost_db_migration.py`) read the Island 2026 reference files
+(`AutoTVD/tvd_analysis.py`, `cost_data.csv`, `qto/*.csv`) from the private repo
+`mxngl/concho-fixtures`: `python scripts/fetch_fixtures.py` clones it into `.fixtures/` (git-ignored).
+Access (own GitHub login, or `CONCHO_FIXTURES_TOKEN` in CI) and how the snapshot is updated:
+[`tests/README.md`](../../tests/README.md). Without the fixtures these tests are skipped.
+
 ## Cost DB format: `cost_db.csv` (P3.4)
 
 The engine reads one cost DB per project: `files.cost_db` of `project_config` (or `--cost`).
