@@ -43,7 +43,7 @@ After an **intended** output change (for example a P3B refactor that fixes a fin
 regenerate the file and review the diff in the PR:
 
 ```bash
-python scripts/fetch_fixtures.py
+python scripts/fetch_fixtures.py   # private mxngl/concho-fixtures, access: see tests/README.md
 python tests/schedule/test_schedule_golden.py --update
 git diff tests/fixtures/schedule_golden.json
 ```

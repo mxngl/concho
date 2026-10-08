@@ -39,9 +39,11 @@ jobs:
         run: pytest
 
   reference:
-    # P2.1: golden / equivalence tests on the Island 2026 reference fixtures (public repos
-    # cloned at island-2026-final / 989a6b7, checksums verified). Missing fixtures fail
-    # instead of skip here; course-workbook tests (COURSE_STV_XLSX) still skip.
+    # P2.1: golden / equivalence tests on the Island 2026 reference fixtures (private repo
+    # mxngl/concho-fixtures at the commit pinned in tests/fixtures/checksums.json, read with
+    # the secret CONCHO_FIXTURES_TOKEN, checksums verified; not available to PRs from forks).
+    # Missing fixtures fail instead of skip here; course-workbook tests (COURSE_STV_XLSX)
+    # still skip.
     # P3B.8: pandas 2.3.3 via constraints file, because the equivalence test runs the
     # original IPD scripts, which fail on pandas 3; that test must never be skipped here.
     runs-on: ubuntu-latest
@@ -65,6 +67,8 @@ jobs:
           python -c "import sys, pandas; print('pandas', pandas.__version__); sys.exit(int(pandas.__version__.split('.')[0]) >= 3)"
 
       - name: Fetch reference fixtures
+        env:
+          CONCHO_FIXTURES_TOKEN: ${{ secrets.CONCHO_FIXTURES_TOKEN }}
         run: python scripts/fetch_fixtures.py
 
       - name: Test (incl. golden and equivalence tests)
@@ -135,6 +139,8 @@ jobs:
           python -c "import sys, pandas; print('pandas', pandas.__version__); sys.exit(int(pandas.__version__.split('.')[0]) < 3)"
 
       - name: Fetch reference fixtures
+        env:
+          CONCHO_FIXTURES_TOKEN: ${{ secrets.CONCHO_FIXTURES_TOKEN }}
         run: python scripts/fetch_fixtures.py
 
       - name: Test (schedule golden + pipeline)
