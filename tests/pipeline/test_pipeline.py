@@ -110,7 +110,7 @@ def test_full_run(team: Path):
     site = team / "site"
     # P7: the pages are static (dashboards/site/) and read the JSON in the browser, so the
     # site holds no value of this run in its HTML; the legacy TVD page is kept next to it.
-    # tests/dashboards/ checks the pages and every JSON path they read.
+    # tests/site/ checks the pages and every JSON path they read.
     for page in ("index.html", "tvd/index.html", "stv/index.html", "assets/tvd.js"):
         assert (site / page).is_file(), page
     assert "Design review 1" not in (site / "index.html").read_text(encoding="utf-8")

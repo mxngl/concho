@@ -1,5 +1,5 @@
 // The JSON paths the dashboards read (P7.1, P7.2, P7.4). One list, so a test can check them
-// against the results the engines write (tests/dashboards/test_site.py). The file must stay
+// against the results the engines write (tests/site/test_site.py). The file must stay
 // strict JSON after "export const PATHS =".
 //
 // Syntax: "a.b.c" = keys; a trailing "[]" on a key = every item of that list; "*" = every

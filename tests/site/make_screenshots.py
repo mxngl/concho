@@ -1,5 +1,5 @@
 """Screenshots of the demo site (invented data) for the pull request: needs Playwright and the
-preinstalled Chromium.  python tests/dashboards/make_screenshots.py OUT_DIR"""
+preinstalled Chromium.  python tests/site/make_screenshots.py OUT_DIR"""
 
 from __future__ import annotations
 

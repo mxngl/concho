@@ -126,6 +126,17 @@ def test_static_files_hold_no_project_values_and_no_cdn():
         assert "innerHTML" not in text, f"{path.name} writes HTML strings"
 
 
+def test_site_files_resolve_from_the_real_package():
+    """Regression guard: this test folder must not shadow the real `dashboards` package (a
+    folder `tests/dashboards/` did, through the rootdir sys.path entry, and made
+    importlib.resources find no site files when a folder ran on its own)."""
+    from importlib import resources
+
+    index = resources.files("dashboards") / "site" / "index.html"
+    assert index.is_file(), index
+    assert not Path(str(index)).resolve().is_relative_to(REPO_ROOT / "tests")
+
+
 def test_pipeline_does_not_write_html_strings():
     source = (REPO_ROOT / "scripts" / "run_pipeline.py").read_text(encoding="utf-8")
     assert "<html" not in source and "<table" not in source

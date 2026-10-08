@@ -200,7 +200,7 @@ runs them with concho installed non-editable, as in a team repo.
 - The STV default mapping table (`template/stv_mapping.csv`) is found by a path relative to
   the source tree, so an installed package has no default table; the pipeline therefore
   requires `files.stv_mapping` or `stv_mapping.csv` in the repo. The dashboard files do not
-  repeat this: they are listed as package data and `tests/dashboards/test_site.py` checks that
+  repeat this: they are listed as package data and `tests/site/test_site.py` checks that
   every file of `dashboards/site/` is covered (and, in the CI job `pipeline`, that they are
   found in the non-editable install).
 - Budget alert / Discord post (P5.2 step 9), SQLite ingest (P5.3), data API (P5.4) and the

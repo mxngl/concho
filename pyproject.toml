@@ -73,7 +73,7 @@ select = ["E", "F", "W", "I", "B", "UP"]
 # after the static TVD page of P7.1, then removed.
 "dashboards/tvd/legacy_render.py" = ["E501", "W605"]
 # P7.2: the invented catalog table is one row per line (wide on purpose).
-"tests/dashboards/stv_fixture.py" = ["E501"]
+"tests/site/stv_fixture.py" = ["E501"]
 # P1.7: the schedule engines are kept verbatim from IPD_Challenge@989a6b7 (only paths/CLI
 # changed) so the diff against the source stays reviewable; lint cleanup is left for Phase 3B.
 "engines/schedule/core/*.py" = ["E501", "I001", "B007", "B023", "B905", "F841"]

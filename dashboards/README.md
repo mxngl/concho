@@ -37,11 +37,11 @@ python -m http.server 8000      # then http://localhost:8000/
 - **Data quality** (unmapped count, parse warnings, proxies, dropped duplicates, DNC rows) is
   shown, but below the main results and mostly collapsed.
 - **Adding a JSON field to a page:** add its path to `assets/paths.js`;
-  `tests/dashboards/test_site.py` then checks it against the real results.
+  `tests/site/test_site.py` then checks it against the real results.
 
-Tests: `pytest tests/dashboards` (files, JSON paths, package data; the browser smoke test runs
+Tests: `pytest tests/site` (files, JSON paths, package data; the browser smoke test runs
 when Playwright and Chromium are installed). Screenshots of the invented demo data:
-`python tests/dashboards/make_screenshots.py OUT_DIR`.
+`python tests/site/make_screenshots.py OUT_DIR`.
 
 ## `tvd/legacy_render.py`
 
