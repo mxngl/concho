@@ -57,6 +57,9 @@ include = ["engines", "engines.*", "dashboards", "dashboards.*"]
 # `pip install "concho[stv] @ git+…@vX.Y.Z"`) has them too. Without this the wheel has no CSVs.
 [tool.setuptools.package-data]
 "engines.common" = ["*.csv"]
+# P7: the static dashboards (HTML/CSS/JS) that `run_pipeline.py site` copies into the team site.
+# (explicit globs: the site has one level of page folders and a flat assets folder.)
+dashboards = ["site/*.html", "site/*/*.html", "site/assets/*"]
 
 [tool.ruff]
 target-version = "py311"
@@ -66,8 +69,11 @@ line-length = 100
 select = ["E", "F", "W", "I", "B", "UP"]
 
 [tool.ruff.lint.per-file-ignores]
-# Verbatim copy of the AutoTVD HTML f-string (P1.3); replaced by a static page in P7.1.
+# Verbatim copy of the AutoTVD HTML f-string (P1.3); kept as tvd/legacy.html for one release
+# after the static TVD page of P7.1, then removed.
 "dashboards/tvd/legacy_render.py" = ["E501", "W605"]
+# P7.2: the invented catalog table is one row per line (wide on purpose).
+"tests/dashboards/stv_fixture.py" = ["E501"]
 # P1.7: the schedule engines are kept verbatim from IPD_Challenge@989a6b7 (only paths/CLI
 # changed) so the diff against the source stays reviewable; lint cleanup is left for Phase 3B.
 "engines/schedule/core/*.py" = ["E501", "I001", "B007", "B023", "B905", "F841"]

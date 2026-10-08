@@ -108,11 +108,14 @@ def test_full_run(team: Path):
         assert "no course STV workbook" in proc.stdout
 
     site = team / "site"
-    page = (site / "index.html").read_text(encoding="utf-8")
-    assert "Design review 1" in page and "$51,880" in page and "0123456" in page
-    assert f'href="results/{snap["id"]}/tvd/dashboard.html"' in page
-    assert (site / "tvd" / "index.html").read_bytes() == (run_dir / "tvd" /
-                                                          "dashboard.html").read_bytes()
+    # P7: the pages are static (dashboards/site/) and read the JSON in the browser, so the
+    # site holds no value of this run in its HTML; the legacy TVD page is kept next to it.
+    # tests/dashboards/ checks the pages and every JSON path they read.
+    for page in ("index.html", "tvd/index.html", "stv/index.html", "assets/tvd.js"):
+        assert (site / page).is_file(), page
+    assert "Design review 1" not in (site / "index.html").read_text(encoding="utf-8")
+    assert (site / "tvd" / "legacy.html").read_bytes() == (run_dir / "tvd" /
+                                                           "dashboard.html").read_bytes()
     assert (site / "results" / snap["id"] / "tvd" / "tvd_results.json").is_file()
     assert (site / "results" / "index.json").is_file()
     assert not (site / "results" / "tvd_history").exists()
@@ -120,7 +123,7 @@ def test_full_run(team: Path):
 
 
 def test_snapshots_append(team: Path, monkeypatch):
-    """P5.5: every run adds a snapshot; the index page lists all of them."""
+    """P5.5: every run adds a snapshot; the site's index.json lists all of them."""
     monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
     t1 = datetime(2027, 1, 10, 9, 0, 0, tzinfo=UTC)
     t2 = datetime(2027, 1, 17, 9, 30, 0, tzinfo=UTC)
@@ -146,10 +149,11 @@ def test_snapshots_append(team: Path, monkeypatch):
     assert len(list((team / "results" / "tvd_history").glob("*.json"))) == 2
 
     run_pipeline.build_site(team)
-    page = (team / "site" / "index.html").read_text(encoding="utf-8")
-    assert "Snapshots (2)" in page
-    assert page.index("Week 3") < page.index("First exports")  # newest first
-    assert "$52,880" in page
+    site_index = json.loads((team / "site" / "results" / "index.json").read_text("utf-8"))
+    assert [s["label"] for s in site_index["snapshots"]] == ["First exports", "Week 3"]
+    # the legacy page is the latest run's
+    assert (team / "site" / "tvd" / "legacy.html").read_bytes() == (
+        team / "results" / second["id"] / "tvd" / "dashboard.html").read_bytes()
 
 
 def test_label_from_git(team: Path):
