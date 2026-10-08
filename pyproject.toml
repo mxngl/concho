@@ -30,9 +30,11 @@ stv = [
     "openpyxl==3.1.5",
     "matplotlib==3.11.2",
 ]
-# P1.7: pandas 2.x on purpose; the micro schedule fails under pandas 3 (see engines/schedule/README.md).
+# P3B.8: pandas 2.3.x and 3.x both give the golden schedule outputs (P1.7 pinned 2.3.3 because
+# the micro schedule failed on pandas 3). The CI job `reference` keeps 2.3.3 through
+# ci/constraints-pandas2.txt, because the original IPD scripts still need pandas 2.
 schedule = [
-    "pandas==2.3.3",
+    "pandas>=2.3.3,<4",
     "numpy==2.3.5",
     "openpyxl==3.1.5",
     "matplotlib==3.11.2",

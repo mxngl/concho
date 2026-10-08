@@ -2,21 +2,22 @@
 
 The schedule engines (`engines/schedule/`) turn Revit exports and an ALICE macro schedule
 into a central BIM model with takt zones, an element-level micro schedule, a takt plan,
-delivery analyses and the optional ALICE / Fuzor / Manufacton exports. The pipeline, its 14
+delivery analyses and the optional ALICE / Fuzor / Manufacton exports. The pipeline, its 15
 steps, the inputs and the known findings are described in
 [`engines/schedule/README.md`](../../engines/schedule/README.md).
 
 ## Golden test (P2.6)
 
-`tests/schedule/test_schedule_golden.py` reruns all 14 steps (`python -m engines.schedule
+`tests/schedule/test_schedule_golden.py` reruns all 15 steps (`python -m engines.schedule
 <step>`) on the IPD_Challenge@989a6b7 inputs. The Island rules and BIM map come from
-`engines/schedule/examples/island/` (byte-identical to the 989a6b7 copies). It compares
-every output with `tests/fixtures/schedule_golden.json`:
+`engines/schedule/examples/island/` (byte-identical to the 989a6b7 copies), and so does the
+4D build-code → assembly mapping (rewritten in P3B.8 fix 3 with the `host_wall_element_id`
+column). It compares every output with `tests/fixtures/schedule_golden.json`:
 
-- **Exit status per step.** `manufacton-orders` fails on this data (README finding 3), so
-  its error line is pinned. `delivery-windows` therefore reads the committed Manufacton
-  workbooks, as in the P1.7 equivalence test.
-- **The set of output files** (43).
+- **Exit status per step.** All 15 steps succeed. Before P3B.8, `manufacton-orders` failed
+  on this data and `delivery-windows` read the committed Manufacton workbooks; since fix 3
+  it reads the regenerated ones.
+- **The set of output files** (48).
 - **sha256 per file**, after the P1.7 masking: run-root paths, random P6 GUIDs and the
   relative FBX link. xlsx files are hashed by cell values. The 8 PNG charts only have to
   exist, because matplotlib rendering is not stable across machines.
@@ -27,7 +28,9 @@ every output with `tests/fixtures/schedule_golden.json`:
 
 No output files are committed. The reference is the JSON file, not the original scripts,
 so the test keeps working after IPD_Challenge is archived: only its inputs are read, through
-the P2.1 fixture. The test runs in the CI job `reference` (~50 s) and is skipped elsewhere.
+the P2.1 fixture. The test runs in the CI jobs `reference` (pandas 2.3.3) and
+`reference-pandas3` (~50 s each; since P3B.8 both pandas versions must give the same golden
+file) and is skipped elsewhere.
 
 The **current** `Micro_Schedule.csv` is the golden micro schedule. It is regenerated from the
 current central BIM model: 6,625 rows, 37 tasks, 120 micro-task ids, 2,496 BIM elements,
@@ -62,6 +65,40 @@ The project start, the end date and the row counts did not change: this lag is n
 critical path. The framing waits for the backfill chain. Without the per-task windows, only
 the hashes would have caught the change.
 
+## Manufacton mapping files (P3B.8)
+
+Two plain-text team files drive the named prefab wall assemblies. The Island copies are in
+`engines/schedule/examples/island/` (team configuration, **not course data**). Both are
+candidates for the project template files of P3B.2.
+
+**`4d_build_code_to_assembly_id_mapping.csv`** (`manufacton-orders --mapping`): which prefab
+walls belong to which named assembly.
+
+| Column | Required | Meaning |
+|---|---|---|
+| `build_code` | one of the two | Fuzor build code, e.g. `Exterior Wall Install \| L 1 \| PREFAB_WALL_L1_081`. Its task name (first part) narrows the host-wall lookup. The group number is sequential and shifts when the model changes, so without `host_wall_element_id` the row cannot be checked |
+| `assembly_id` | yes | named prefab assembly; must be a row of `prefab_assemblies.csv` (error otherwise). Rows without it are ignored |
+| `host_wall_element_id` | one of the two (new in P3B.8) | Revit ElementId of the prefab group's host wall (`host_wall_element_id` in `Prefab_Wall_Mapping.csv`). The stable key: the step uses the build code the wall has in the current `Revit_4D_Build_Code_Map.csv` and warns if the written `build_code` differs. ElementId, because the Revit exports have no UniqueId |
+
+Rows whose wall (or, without a host id, whose build code) is not in the micro schedule are
+skipped with a warning. One wall mapped to two assemblies is an error. The Island file maps 17
+host walls (6 on L -1, currently not scheduled) to `SL0W-LNEG1C-WALL`, `SL1-3R-WALL` and
+`SL1-2R-WALL`.
+
+**`prefab_assemblies.csv`** (`--prefab-assemblies` of `manufacton-parts`,
+`manufacton-assemblies` and `manufacton-orders`): one row per named assembly.
+
+| Column | Meaning |
+|---|---|
+| `assembly_id` | Manufacton assembly id (`ID` in `Assembly_Import.xlsx`), e.g. `SL1-3R-WALL` |
+| `assembly_name` | assembly `Name` |
+| `assembly_description` | assembly `Description` |
+| `part_name` | name stem of its 4 parts in `Parts_Import.xlsx` (`<part_name> - Generic 8 Exterior`, …) |
+
+Part ids are `<assembly_id without a trailing -WALL>-<part code>` with part codes `WALL`,
+`MULLION-L`, `MULLION-B`, `GLAZED-PANEL`. Every assembly without mapped elements in the
+current schedule gets a warning in `manufacton-orders`.
+
 ## Island 2026 reference facts (regenerated run)
 
 | Output | Value |
@@ -71,7 +108,8 @@ the hashes would have caught the change.
 | Superstructure (A1330 Columns, A1350 Beams, A1340 Floor, A1420 Roof) | 2029-12-28 10:40 → 2030-01-03 10:40; Rocking Walls (A1280, bamboo) 2029-11-22 14:39 → 2029-11-26 16:00 |
 | Close-out | Integrated Systems Testing ends 2030-02-18 15:40, Final Inspections end 2030-02-26 11:40 |
 | Takt plan Level 1 (`--rooms-per-zone 2`) | 16 zones (32 rooms), 192.36 working hours, 2030-01-02 09:00 → 2030-01-23 12:21; utilisation: interior walls 100 %, interior finishes 93.2 %, MEP 63.9 %, doors 31.1 %, ceiling 28.2 % |
-| Deliveries (601 production orders from the committed Manufacton workbooks) | peak orders per delivery: 1 day 44, 3 days 87, 1 week 155; delivery days 38 / 20 / 11 |
+| Deliveries (456 production orders from the regenerated Manufacton workbooks, P3B.8) | peak orders per delivery: 1 day 80, 3 days 176, 1 week 229; delivery days 19 / 11 / 7. The committed (older) workbooks gave 601 orders, 44 / 87 / 155 and 38 / 20 / 11 |
+| Manufacton prefab assemblies (P3B.8) | SL0W-LNEG1C-WALL 84, SL1-3R-WALL 82, SL1-2R-WALL 61 elements (227) |
 | Manufacton parts | 325 parts covering 2,481 elements |
 
 ## Island 2026 reference vs. presentation
@@ -93,5 +131,5 @@ produce. They cannot be regenerated, so they only count as a trace, not as a rep
 | 32 tasks → 48 parallelized tasks | Committed older `ALICE_Task_Schedule_Macro_View.csv` / `ALICE_Task_Schedule.xml`: 32 tasks → 48 activities (task × level). Current engine: 37 tasks → 54 activities | ✅ committed older output, ❌ current engine | The deck used an older run. The committed macro view lacks the close-out tasks (A1820–A1880) and ends 2030-03-01; it is older than the committed stale micro schedule (37 tasks). The Fuzor template has 33 tasks (32 without the buffer). |
 | 3,106 parts | Committed older macro view: 3,122 elements in the 48 activities, minus 16 non-BIM Basement / Site activities of 1 element each = **3,106 BIM elements**. Current engine: 2,496 BIM elements in the micro schedule; 325 Manufacton parts covering 2,481 elements | ✅ committed older output, ❌ current engine | "Parts" means scheduled BIM elements, not Manufacton parts. The current model has fewer scheduled elements. |
 | Takt Level 1: 16 zones, 192.36 h | `Takt_Schedule.csv`: 16 zones, 192.36 h | ✅ yes | Byte-identical to the §1 reference, with `--rooms-per-zone 2`. |
-| Delivery windows 155 / 87 / 44 assemblies (1 / 3 / 7 days) | `production_order_count_by_delivery_window.csv`: peak production orders per delivery **1 day 44, 3 days 87, 1 week 155** (601 orders) | 🟡 numbers yes, labels no | The deck pairs the values with the windows in reverse order: 155 is the weekly peak and 44 the daily peak. The unit is production orders (distinct order ids per delivery), not assemblies. The values come from the committed Manufacton workbooks, because `manufacton-orders` fails on the 989a6b7 data. |
-| 43 % / 72 % | 1 − 87/155 = 43.9 %, 1 − 44/155 = 71.6 % | ✅ yes | Peak reduction from weekly to 3-day and to daily deliveries. The 43 % is truncated; rounded it would be 44 %. |
+| Delivery windows 155 / 87 / 44 assemblies (1 / 3 / 7 days) | Committed older Manufacton workbooks (601 orders): peak production orders per delivery **1 day 44, 3 days 87, 1 week 155**. Current engine (P3B.8, workbooks regenerated from the 989a6b7 inputs, 456 orders): 1 day 80, 3 days 176, 1 week 229 | 🟡 committed older output (labels reversed), ❌ current engine | The deck pairs the values with the windows in reverse order: 155 is the weekly peak and 44 the daily peak. The unit is production orders (distinct order ids per delivery), not assemblies. The deck used the committed workbooks, which come from an older model (1,040 of their elements are not in the current micro schedule); before P3B.8 `manufacton-orders` could not regenerate them. |
+| 43 % / 72 % | Committed older workbooks: 1 − 87/155 = 43.9 %, 1 − 44/155 = 71.6 %. Current engine: 1 − 176/229 = 23.1 %, 1 − 80/229 = 65.1 % | ✅ committed older output, ❌ current engine | Peak reduction from weekly to 3-day and to daily deliveries. The 43 % is truncated; rounded it would be 44 %. |

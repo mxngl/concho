@@ -520,6 +520,13 @@ def assign_room_takt_ids(frame: pd.DataFrame) -> pd.DataFrame:
         )
         return frame
 
+    # P3B.8 fix 6: the loop below writes room ids/numbers (strings) into these columns, which
+    # read_csv may have parsed as float64. pandas 2 upcast the column to object on the first
+    # such write (FutureWarning); pandas 3 raises TypeError. Upcasting first keeps the values
+    # (floats stay floats) and gives the same output on both.
+    for key in ["room_id", "room_number", "room_name", "room_level", "room_takt_id"]:
+        frame[key] = frame[key].astype(object)
+
     for row_index, row in frame.iterrows():
         if clean_text(row.get("room_takt_id")):
             continue

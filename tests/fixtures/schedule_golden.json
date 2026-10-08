@@ -1,6 +1,6 @@
 {
   "_comment": [
-    "P2.6 golden record of the Island 2026 schedule outputs (all 14 steps).",
+    "P2.6 golden record of the Island 2026 schedule outputs (all 15 steps).",
     "Inputs: IPD_Challenge@989a6b7 + engines/schedule/examples/island. No output files are",
     "committed; sha256 is taken after masking run-root paths, P6 GUIDs and the FBX link",
     "(xlsx: cell values; png: existence only). Regenerate with",
@@ -35,10 +35,12 @@
       "returncode": 0
     },
     "manufacton-orders": {
-      "returncode": 1,
-      "error": "ValueError: Build code not found in 4D build-code map: `Exterior Wall Install | L -1 | PREFAB_WALL_LNEG1_001`"
+      "returncode": 0
     },
     "delivery-windows": {
+      "returncode": 0
+    },
+    "room-takt-zones": {
       "returncode": 0
     },
     "takt-plan": {
@@ -119,21 +121,21 @@
       "metrics": {}
     },
     "delivery/delivery_units_by_micro_schedule.csv": {
-      "sha256": "ef98d21efca90c090489ea03470e5a3f8783e9548f4d306211c8ad710826d329",
+      "sha256": "feb1a469a0fde24547869426c2a4636094aa15d69423a5184b0940b647652a4a",
       "metrics": {
-        "rows": 1145,
+        "rows": 759,
         "columns": 12,
         "by_source": {
-          "Micro Schedule Fallback": 544,
-          "Production Order": 601
+          "Micro Schedule Fallback": 303,
+          "Production Order": 456
         },
-        "elements": 3491,
+        "elements": 2470,
         "first_need_date": "2029-11-09",
         "last_need_date": "2030-01-17"
       }
     },
     "delivery/delivery_window_daily_timeseries.csv": {
-      "sha256": "c9df89b6194325dc485e5be57b2d4ee50d17cbf2ff4f97825b502b338d1485a0",
+      "sha256": "9f5b2d55f82498fdc860ede28573d79a9fe73b47d42336a648e197bf34332cb0",
       "metrics": {
         "rows": 140,
         "columns": 14
@@ -143,24 +145,24 @@
       "metrics": {}
     },
     "delivery/delivery_window_summary_metrics.csv": {
-      "sha256": "7eab72da101dcdd99072a1f619505d7ce7bba3878bedca0af2f5b661d80e0360",
+      "sha256": "3955eb5bf5637bc9ad3d61d4f212ec53a7e44a90ca2af5a0bff46466bc26be73",
       "metrics": {
         "rows": 2,
         "columns": 15,
         "windows": {
           "1 day": {
-            "total_delivered_elements": 3491.0,
-            "total_delivered_cf": 69076.18,
-            "max_single_delivery_cf": 8752.17,
-            "max_peak_on_site_cf": 8752.17,
-            "max_peak_on_site_elements": 370.0
+            "total_delivered_elements": 2470.0,
+            "total_delivered_cf": 58139.43,
+            "max_single_delivery_cf": 16843.71,
+            "max_peak_on_site_cf": 16843.71,
+            "max_peak_on_site_elements": 569.0
           },
           "1 week": {
-            "total_delivered_elements": 3491.0,
-            "total_delivered_cf": 69076.18,
-            "max_single_delivery_cf": 18885.95,
-            "max_peak_on_site_cf": 18885.95,
-            "max_peak_on_site_elements": 822.0
+            "total_delivered_elements": 2470.0,
+            "total_delivered_cf": 58139.43,
+            "max_single_delivery_cf": 37817.59,
+            "max_peak_on_site_cf": 37817.59,
+            "max_peak_on_site_elements": 1227.0
           }
         }
       }
@@ -172,25 +174,25 @@
       "metrics": {}
     },
     "delivery/production_order_count_by_delivery_window.csv": {
-      "sha256": "ba8f7eeaa0e934efdd8c129ccdc387f98b99edcd4babf75399571bcd4aaf61e8",
+      "sha256": "78728ef47eb613e5bff9d5b77af6470fd840cbfcf5933966ad5d8b1c49d3e97d",
       "metrics": {
-        "rows": 207,
+        "rows": 192,
         "columns": 3,
         "windows": {
           "1 day": {
-            "delivery_days": 38,
-            "peak_orders_per_delivery": 44,
-            "orders": 601
+            "delivery_days": 19,
+            "peak_orders_per_delivery": 80,
+            "orders": 456
           },
           "3 days": {
-            "delivery_days": 20,
-            "peak_orders_per_delivery": 87,
-            "orders": 601
+            "delivery_days": 11,
+            "peak_orders_per_delivery": 176,
+            "orders": 456
           },
           "1 week": {
-            "delivery_days": 11,
-            "peak_orders_per_delivery": 155,
-            "orders": 601
+            "delivery_days": 7,
+            "peak_orders_per_delivery": 229,
+            "orders": 456
           }
         }
       }
@@ -212,7 +214,7 @@
       }
     },
     "micro/Micro_Schedule.csv": {
-      "sha256": "0ee03baa3b08f6f6fffba27a33135a68c515113b4f4b102b612e9b82cc18523e",
+      "sha256": "dc55a15d174f1b4587c18305c3441fc6912c765d12438dd277dc8a19eb3c7c73",
       "metrics": {
         "rows": 6625,
         "columns": 38,
@@ -387,9 +389,9 @@
       }
     },
     "micro/Micro_Schedule_Takt_Viewer.html": {
-      "sha256": "5ac185ab609e43317ae49e8cc7f50096c53585375dd6691537c22fd6bee9107a",
+      "sha256": "a73d6b951735021e388887c7e1750158949286ee1c13bb6326968667775a0c21",
       "metrics": {
-        "lines": 4442
+        "lines": 4630
       }
     },
     "prefab/Assembly_Import.xlsx": {
@@ -425,11 +427,54 @@
       }
     },
     "prefab/Prefab_Wall_Mapping.csv": {
-      "sha256": "9c04ed78652941eb60de4e477dd0e812d25069a7337d3bc3bea7301365a19e28",
+      "sha256": "798db9dbf6cf56b51c9ca19e56e8929fa0cd75e9860a673e2aa0e926b9be8920",
       "metrics": {
         "rows": 801,
         "columns": 9,
         "prefab_groups": 131
+      }
+    },
+    "prefab/Production_Order.xlsx": {
+      "sha256": "b374aa7787259532a141a38ee8d4ec154d91ab9c0420fa657275ae7a86864cc9",
+      "metrics": {
+        "sheet_rows": [
+          457
+        ]
+      }
+    },
+    "prefab/Production_Order_Items.xlsx": {
+      "sha256": "3e5e0d0e01a70bb04e62b5429bc329c74948a861eb1e6aec3f7c661ec2848be3",
+      "metrics": {
+        "sheet_rows": [
+          457
+        ]
+      }
+    },
+    "prefab/Revit_Assembly_Id_Map.csv": {
+      "sha256": "4a2c55d44266ca8a2dd31fd32fec9f760994789ed07932b495291507c63e37b0",
+      "metrics": {
+        "rows": 2589,
+        "columns": 4,
+        "assemblies": 423,
+        "mapped_prefab_elements": {
+          "SL0W-LNEG1C-WALL": 84,
+          "SL1-2R-WALL": 61,
+          "SL1-3R-WALL": 82
+        }
+      }
+    },
+    "prefab/Revit_Kit_Parameter_Map.csv": {
+      "sha256": "ec86d168bb83e1a6a0b6e6b1d039114f762c965e4056426bc177df32f8555375",
+      "metrics": {
+        "rows": 2589,
+        "columns": 5
+      }
+    },
+    "rooms/room_takt_zones.csv": {
+      "sha256": "76707cd92ea57e58c0462c1ae25275a20f85353115876708792982f8c5247d8c",
+      "metrics": {
+        "rows": 41,
+        "columns": 11
       }
     },
     "takt/Takt_Crew_Idle_Report.csv": {
@@ -507,7 +552,7 @@
       "metrics": {}
     },
     "takt/Takt_Zones.csv": {
-      "sha256": "3966493dbb27b1d4c72be70ad2be0d43fb6a9af4312448a0328c38cda08ca233",
+      "sha256": "8a3cb1e9331694e194490e434a78af8d036864bcdacb4905b732f15b0bce02fe",
       "metrics": {
         "rows": 16,
         "columns": 7,
@@ -523,18 +568,18 @@
       }
     },
     "takt_zones/central_bim_model_llm_context.csv": {
-      "sha256": "e74d228f1106268b56b1073d9da1f464477be9e8196924d3f2a70365fe666eba",
+      "sha256": "e18c33b13d7699bdd4f6d1a9ca0b0d0522ec0fe71f1e526f67d4124901b21f5e",
       "metrics": {
         "rows": 3971,
         "columns": 33
       }
     },
     "takt_zones/central_bim_model_with_takt.csv": {
-      "sha256": "580c0659bd43a6611f5b425d9a7638d859535d8af633e797c74df1da6be60e99",
+      "sha256": "2d47baa99ce31673ad8d2df07418ebdcf38f7ac5cb498e4773197e1ee35c34f4",
       "metrics": {
         "rows": 3971,
         "columns": 82,
-        "with_takt_id": 1876
+        "with_takt_id": 2776
       }
     },
     "viewers/spatial_visualizer_micro.html": {
