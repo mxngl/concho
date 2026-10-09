@@ -1,0 +1,66 @@
+{
+  "id": "concho-error-handler",
+  "name": "Concho error handler",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "4307cce2-de83-58b2-9efa-2268a164641d",
+      "name": "Error Trigger"
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "guildId": {
+          "__rl": true,
+          "value": "={{ $env.DISCORD_GUILD_ID }}",
+          "mode": "id"
+        },
+        "channelId": {
+          "__rl": true,
+          "value": "={{ $env.DISCORD_CHANNEL_ID_DEBUG }}",
+          "mode": "id"
+        },
+        "content": "={{ ('Concho workflow error\\nWorkflow: ' + ($json.workflow?.name || '?') + '\\nNode: ' + ($json.execution?.lastNodeExecuted || '?') + '\\nError: ' + ($json.execution?.error?.message || '?') + '\\nExecution: ' + ($json.execution?.url || $json.execution?.id || '?')).slice(0, 1900) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.discord",
+      "typeVersion": 2,
+      "position": [
+        240,
+        0
+      ],
+      "id": "cf7c3300-d2dc-5238-bcd9-0113bd3285ca",
+      "name": "Debug message",
+      "credentials": {
+        "discordBotApi": {
+          "id": "concho-discord",
+          "name": "Concho Discord bot"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Error Trigger": {
+      "main": [
+        [
+          {
+            "node": "Debug message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {}
+}

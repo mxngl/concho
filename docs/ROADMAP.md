@@ -515,14 +515,14 @@ Measured on the Island central model: raw 3.4 MB (~860k tokens) → aggregate by
   8. ✅ *(done 2026-09-26)* Carbon Agent prompt units corrected to MJ and kg (TOOLS and RULES lines).
   6. ✅ *(done 2026-09-26)* "Simple Memory" session key re-pointed to `Webhook w/ Auth` and memory enabled;
   7. memory is attached only to the Router Agent (which just classifies), so subagents still don't see earlier messages: attach memory to the subagents or pass the history into their prompts. Note that Simple Memory is in-process and is lost when n8n restarts (persistent memory is P6.4).
-- [ ] **P6.2 [CC] New workflow design** (`agent/workflows/concho.json`):
+- [ ] 🟡 **P6.2 [CC] New workflow design** (`agent/workflows/concho.json`): *(PR 1 of Phase 6: workflow + error workflow + offline tests, see `docs/agent.md`; Discord first, Telegram/voice not built; **Max still has to import and run it in a clean n8n with an OpenAI key**, checklist in `docs/agent.md`)*
   - **Input normalizer:** Discord / Telegram (voice → Whisper) → `{message, user_id, channel_id, source, attachments}` in one Set node, so no node references like `$('Edit Fields Discord')` are needed downstream.
   - **Router:** gpt-4o-mini with **structured output** (enum `COST|CARBON|QUANTITY|SCHEDULE|GENERAL|OTHER`; extensions add `TRANSCRIPT` and `CLASH` when enabled), plus a fallback branch that asks a clarifying question.
   - **Subagents** use **only data API tools** (P5.4). Max 2 tool calls, answer in the user's language, cite numbers and snapshot dates, label custom-material or proxy results.
   - **Reply** to the originating channel or thread and mention the user.
   - **Global error handler:** an error workflow posts a readable message to the user and details to the debug channel.
   - AC: the workflow imports into a clean n8n instance with only `.env` values set.
-- [ ] **P6.3 [CC] Prompts as files.**
+- [ ] 🟡 **P6.3 [CC] Prompts as files.** *(done and tested offline: `agent/prompts/`, `scripts/render_agent.py`, no project string; 🟡 until the rendered prompts are seen answering in n8n)*
   - `agent/prompts/*.md` with placeholders (`{{PROJECT_NAME}}`, `{{LOCATION}}`, `{{COMPLETION_DATE}}`, `{{TEAM}}`), filled from config or env at import time by a script.
   - AC: no project-specific string in any prompt file.
 - [ ] **P6.4 [CC] Memory.**
@@ -535,7 +535,7 @@ Measured on the Island central model: raw 3.4 MB (~860k tokens) → aggregate by
   - `.env.example` listing every variable.
   - `scripts/import_workflows.sh` (`n8n import:workflow`).
   - AC: `docker compose up` + the import script yields a working Concho against the fixture data.
-- [ ] **P6.7 [CC] Model configuration** in one place (env): router model, subagent model and TTS model. Default: gpt-4o-mini everywhere.
+- [ ] 🟡 **P6.7 [CC] Model configuration** in one place (env) *(env variables in `agent/.env.example`, read by the chat-model nodes at run time; 🟡 until run in n8n)*: router model, subagent model and TTS model. Default: gpt-4o-mini everywhere.
 - [ ] **P6.8 [CC] Evaluation harness.**
   - `tests/agent_eval/questions.yaml` with 40+ questions and expected answers from the Island fixture: cost, carbon, quantities, schedule (dates, tasks, takt zones, deliveries), what-if, multi-language (DE/ES/PL), follow-up and out-of-scope.
   - `scripts/run_eval.py` posts each question to the webhook and scores numeric match, language match, latency and tool-response size.

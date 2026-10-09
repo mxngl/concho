@@ -1,0 +1,1869 @@
+{
+  "name": "Concho",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "REPLACE_WITH_RANDOM_WEBHOOK_PATH",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "f9a24362-b8b0-5d74-a4e8-65bc0ba4c6a6",
+      "name": "Webhook",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "concho-webhook-auth",
+          "name": "Concho webhook token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "7e0652f4-7e61-538d-9d1b-d840c37eaee3",
+              "name": "message",
+              "value": "={{ ($json.body.content ?? $json.body.message ?? '').toString().trim() }}",
+              "type": "string"
+            },
+            {
+              "id": "5147ae61-7ebb-599c-b075-854f26018762",
+              "name": "user_id",
+              "value": "={{ ($json.body.author_id ?? $json.body.user_id ?? '').toString() }}",
+              "type": "string"
+            },
+            {
+              "id": "7ec8fd4d-7880-5d5d-8d1f-17df233bedaa",
+              "name": "user_name",
+              "value": "={{ ($json.body.author_name ?? '').toString() }}",
+              "type": "string"
+            },
+            {
+              "id": "1223cc8f-1ad4-5a14-a24e-2ead9c417230",
+              "name": "channel_id",
+              "value": "={{ ($json.body.thread_id ?? $json.body.channel_id ?? '').toString() }}",
+              "type": "string"
+            },
+            {
+              "id": "bf3ffd8d-5eee-515d-833e-bb923c6c4fb1",
+              "name": "guild_id",
+              "value": "={{ ($json.body.guild_id ?? '').toString() }}",
+              "type": "string"
+            },
+            {
+              "id": "ee26a415-845b-5d02-82a3-6fb015487f00",
+              "name": "message_id",
+              "value": "={{ ($json.body.message_id ?? '').toString() }}",
+              "type": "string"
+            },
+            {
+              "id": "cbdf3fe7-9ad9-5a3e-8f92-b01c0f34c747",
+              "name": "source",
+              "value": "={{ ($json.body.source ?? 'discord').toString().toLowerCase() }}",
+              "type": "string"
+            },
+            {
+              "id": "f0fc7cb9-d2d9-5598-b53e-8df7dca60e2b",
+              "name": "attachments",
+              "value": "={{ $json.body.attachments ?? [] }}",
+              "type": "array"
+            }
+          ]
+        },
+        "includeOtherFields": false,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        240,
+        0
+      ],
+      "id": "07ccddf8-3abb-561c-8bac-20dcf8a8f391",
+      "name": "Normalize input"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.message }}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "@@PROMPT:router@@",
+          "maxIterations": 2
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        480,
+        0
+      ],
+      "id": "1ea3f553-4a47-5327-a503-6f541e300588",
+      "name": "Router",
+      "retryOnFail": true,
+      "maxTries": 2,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $env.CONCHO_MODEL_ROUTER || 'gpt-4o-mini' }}"
+        },
+        "builtInTools": {},
+        "options": {
+          "temperature": 0
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        400,
+        200
+      ],
+      "id": "5e9ec7e1-ef57-58fc-be6f-4f54bca6f2c0",
+      "name": "Router Model",
+      "credentials": {
+        "openAiApi": {
+          "id": "concho-openai",
+          "name": "Concho OpenAI"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"category\": {\n      \"type\": \"string\",\n      \"enum\": [\n        \"COST\",\n        \"CARBON\",\n        \"QUANTITY\",\n        \"SCHEDULE\",\n        \"GENERAL\",\n        \"OTHER\"\n      ]\n    },\n    \"language\": {\n      \"type\": \"string\",\n      \"description\": \"ISO 639-1 code of the message language\"\n    }\n  },\n  \"required\": [\n    \"category\",\n    \"language\"\n  ],\n  \"additionalProperties\": false\n}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        560,
+        200
+      ],
+      "id": "7644a3b0-5389-5300-bfd2-d503f5baa654",
+      "name": "Router Output"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        720,
+        0
+      ],
+      "id": "0dd4ab9c-da67-5625-a50d-2bebe2173051",
+      "name": "Router + context"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "7e0652f4-7e61-538d-9d1b-d840c37eaee3",
+              "name": "message",
+              "value": "={{ $json.message }}",
+              "type": "string"
+            },
+            {
+              "id": "5147ae61-7ebb-599c-b075-854f26018762",
+              "name": "user_id",
+              "value": "={{ $json.user_id }}",
+              "type": "string"
+            },
+            {
+              "id": "7ec8fd4d-7880-5d5d-8d1f-17df233bedaa",
+              "name": "user_name",
+              "value": "={{ $json.user_name }}",
+              "type": "string"
+            },
+            {
+              "id": "1223cc8f-1ad4-5a14-a24e-2ead9c417230",
+              "name": "channel_id",
+              "value": "={{ $json.channel_id }}",
+              "type": "string"
+            },
+            {
+              "id": "bf3ffd8d-5eee-515d-833e-bb923c6c4fb1",
+              "name": "guild_id",
+              "value": "={{ $json.guild_id }}",
+              "type": "string"
+            },
+            {
+              "id": "ee26a415-845b-5d02-82a3-6fb015487f00",
+              "name": "message_id",
+              "value": "={{ $json.message_id }}",
+              "type": "string"
+            },
+            {
+              "id": "cbdf3fe7-9ad9-5a3e-8f92-b01c0f34c747",
+              "name": "source",
+              "value": "={{ $json.source }}",
+              "type": "string"
+            },
+            {
+              "id": "c18529da-6913-59df-a1ec-f3c6605dea59",
+              "name": "category",
+              "value": "={{ String($json.output?.category || 'OTHER').toUpperCase().trim() }}",
+              "type": "string"
+            },
+            {
+              "id": "8499b61b-3201-50df-9101-4121c8d2fe33",
+              "name": "language",
+              "value": "={{ String($json.output?.language || '').toLowerCase().trim() }}",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": false,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        900,
+        0
+      ],
+      "id": "0d07cb51-4ecc-537e-9c71-c91512a3cc92",
+      "name": "Classified"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "d79dcc6d-2927-54b8-b85c-45c079efdbae",
+                    "leftValue": "={{ $json.category }}",
+                    "rightValue": "COST",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "COST"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "f81c32b4-bb7f-5761-ac22-49d2f83d80a8",
+                    "leftValue": "={{ $json.category }}",
+                    "rightValue": "CARBON",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "CARBON"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "b618c690-ae53-536e-a16b-f2c507644633",
+                    "leftValue": "={{ $json.category }}",
+                    "rightValue": "QUANTITY",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "QUANTITY"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "276033b2-b98e-5ac1-800b-2ab6bf8d12cd",
+                    "leftValue": "={{ $json.category }}",
+                    "rightValue": "GENERAL",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "GENERAL"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "1871b264-bc2b-568e-8b0c-f0a3d299e84e",
+                    "leftValue": "={{ $json.category }}",
+                    "rightValue": "SCHEDULE",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "SCHEDULE"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra",
+          "renameFallbackOutput": "OTHER"
+        }
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        1080,
+        0
+      ],
+      "id": "1d07b5d5-7a49-5a4a-959e-82787a044519",
+      "name": "Route"
+    },
+    {
+      "parameters": {
+        "toolDescription": "TVD cost summary: grand total, target, delta, status, cost per SF and one row per cluster (estimate, target, delta). The answer names its snapshot. If it is an error with the code too_many_results, ask the user to narrow the question instead of calling again.",
+        "url": "={{ $env.CONCHO_API_URL }}/cost/summary",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.CONCHO_API_TOKEN }}"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "snapshot",
+              "value": "={{ $fromAI('snapshot', 'Snapshot id. Leave empty for the latest snapshot; only set it when the user names a snapshot.', 'string', '') }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.4,
+      "position": [
+        1560,
+        20
+      ],
+      "id": "3f7d6f9f-ae2a-50fb-b5c2-5258f5bc2b66",
+      "name": "get_cost_summary"
+    },
+    {
+      "parameters": {
+        "toolDescription": "Cost line items (largest first) with matched_lines and matched_total. Filter by cluster name and/or Assembly Code prefix (Uniformat, e.g. B30). The answer names its snapshot. If it is an error with the code too_many_results, ask the user to narrow the question instead of calling again.",
+        "url": "={{ $env.CONCHO_API_URL }}/cost",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.CONCHO_API_TOKEN }}"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "cluster",
+              "value": "={{ $fromAI('cluster', 'Cost cluster name, e.g. Shell. Leave empty for all.', 'string', '') }}"
+            },
+            {
+              "name": "ac",
+              "value": "={{ $fromAI('ac', 'Assembly Code prefix, e.g. B30 or B3010. Leave empty for all.', 'string', '') }}"
+            },
+            {
+              "name": "snapshot",
+              "value": "={{ $fromAI('snapshot', 'Snapshot id. Leave empty for the latest snapshot; only set it when the user names a snapshot.', 'string', '') }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.4,
+      "position": [
+        1650,
+        60
+      ],
+      "id": "f4e30f76-0edd-5a9b-a787-c1879d4c443f",
+      "name": "get_cost_items"
+    },
+    {
+      "parameters": {
+        "toolDescription": "Scenario computed on the server: the cost of all line items with this Assembly Code prefix changes by change_pct percent (roof +10% is ac B30, change_pct 10). Returns the new grand total and the delta to the target. Labelled what_if. The answer names its snapshot. If it is an error with the code too_many_results, ask the user to narrow the question instead of calling again.",
+        "url": "={{ $env.CONCHO_API_URL }}/cost/what_if",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.CONCHO_API_TOKEN }}"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "ac",
+              "value": "={{ $fromAI('ac', 'Assembly Code prefix, e.g. B30', 'string', '') }}"
+            },
+            {
+              "name": "change_pct",
+              "value": "={{ $fromAI('change_pct', 'Percent change of the cost, e.g. 10 for +10 percent or -5', 'number') }}"
+            },
+            {
+              "name": "snapshot",
+              "value": "={{ $fromAI('snapshot', 'Snapshot id. Leave empty for the latest snapshot; only set it when the user names a snapshot.', 'string', '') }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.4,
+      "position": [
+        1740,
+        20
+      ],
+      "id": "8ce3e85c-6dbe-5816-b6a8-6af0941bec0e",
+      "name": "cost_what_if"
+    },
+    {
+      "parameters": {
+        "toolDescription": "STV summary: life cycle, embodied and use-phase values per metric (kgCO2e, MJ, kg), percent of target, top STV assemblies and warnings. The answer names its snapshot. If it is an error with the code too_many_results, ask the user to narrow the question instead of calling again.",
+        "url": "={{ $env.CONCHO_API_URL }}/carbon/summary",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.CONCHO_API_TOKEN }}"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "snapshot",
+              "value": "={{ $fromAI('snapshot', 'Snapshot id. Leave empty for the latest snapshot; only set it when the user names a snapshot.', 'string', '') }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.4,
+      "position": [
+        1560,
+        360
+      ],
+      "id": "b38aeee4-d338-5a66-bb8d-bdbfbd12e5ce",
+      "name": "get_carbon_summary"
+    },
+    {
+      "parameters": {
+        "toolDescription": "STV items with amount, unit, kgCO2e, MJ and water in kg. Filter by STV assembly and/or material type (substring). The answer names its snapshot. If it is an error with the code too_many_results, ask the user to narrow the question instead of calling again.",
+        "url": "={{ $env.CONCHO_API_URL }}/carbon",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.CONCHO_API_TOKEN }}"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "stv_assembly",
+              "value": "={{ $fromAI('stv_assembly', 'STV assembly name. Leave empty for all.', 'string', '') }}"
+            },
+            {
+              "name": "material",
+              "value": "={{ $fromAI('material', 'Part of the material type, e.g. concrete. Leave empty for all.', 'string', '') }}"
+            },
+            {
+              "name": "snapshot",
+              "value": "={{ $fromAI('snapshot', 'Snapshot id. Leave empty for the latest snapshot; only set it when the user names a snapshot.', 'string', '') }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.4,
+      "position": [
+        1650,
+        400
+      ],
+      "id": "6a3487b4-47fd-50f6-ae19-f8b9e0a245ff",
+      "name": "get_carbon_items"
+    },
+    {
+      "parameters": {
+        "toolDescription": "Scenario: all of material_from replaced by material_to (same amount). Returns embodied and life cycle before and after. material_to must already occur in the project with the same unit. Labelled what_if. The answer names its snapshot. If it is an error with the code too_many_results, ask the user to narrow the question instead of calling again.",
+        "url": "={{ $env.CONCHO_API_URL }}/carbon/what_if",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.CONCHO_API_TOKEN }}"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "material_from",
+              "value": "={{ $fromAI('material_from', 'Material type to replace, e.g. Concrete', 'string', '') }}"
+            },
+            {
+              "name": "material_to",
+              "value": "={{ $fromAI('material_to', 'Material type to use instead; must already occur in the project', 'string', '') }}"
+            },
+            {
+              "name": "stv_assembly",
+              "value": "={{ $fromAI('stv_assembly', 'Limit the swap to one STV assembly. Leave empty for all.', 'string', '') }}"
+            },
+            {
+              "name": "snapshot",
+              "value": "={{ $fromAI('snapshot', 'Snapshot id. Leave empty for the latest snapshot; only set it when the user names a snapshot.', 'string', '') }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.4,
+      "position": [
+        1740,
+        360
+      ],
+      "id": "32a4d6da-dba4-560a-88c1-67b22522e6ca",
+      "name": "carbon_what_if"
+    },
+    {
+      "parameters": {
+        "toolDescription": "Quantities per category, level and Assembly Code: element count, area in SF, length in LF, volume in CF, plus totals. The answer names its snapshot. If it is an error with the code too_many_results, ask the user to narrow the question instead of calling again.",
+        "url": "={{ $env.CONCHO_API_URL }}/quantities",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.CONCHO_API_TOKEN }}"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "category",
+              "value": "={{ $fromAI('category', 'Revit category, e.g. Walls. Leave empty for all.', 'string', '') }}"
+            },
+            {
+              "name": "level",
+              "value": "={{ $fromAI('level', 'Level name, e.g. Level 1. Leave empty for all.', 'string', '') }}"
+            },
+            {
+              "name": "ac",
+              "value": "={{ $fromAI('ac', 'Assembly Code prefix, e.g. B20. Leave empty for all.', 'string', '') }}"
+            },
+            {
+              "name": "snapshot",
+              "value": "={{ $fromAI('snapshot', 'Snapshot id. Leave empty for the latest snapshot; only set it when the user names a snapshot.', 'string', '') }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.4,
+      "position": [
+        1560,
+        700
+      ],
+      "id": "04a25578-4f37-5063-8c2f-b5102da85b3b",
+      "name": "get_quantities"
+    },
+    {
+      "parameters": {
+        "toolDescription": "Number of elements (DNC elements excluded), per discipline. Filter by category, level, Assembly Code prefix and/or discipline. The answer names its snapshot. If it is an error with the code too_many_results, ask the user to narrow the question instead of calling again.",
+        "url": "={{ $env.CONCHO_API_URL }}/elements/count",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.CONCHO_API_TOKEN }}"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "category",
+              "value": "={{ $fromAI('category', 'Revit category, e.g. Doors. Leave empty for all.', 'string', '') }}"
+            },
+            {
+              "name": "level",
+              "value": "={{ $fromAI('level', 'Level name. Leave empty for all.', 'string', '') }}"
+            },
+            {
+              "name": "ac",
+              "value": "={{ $fromAI('ac', 'Assembly Code prefix. Leave empty for all.', 'string', '') }}"
+            },
+            {
+              "name": "discipline",
+              "value": "={{ $fromAI('discipline', 'architecture, structural or mep. Leave empty for all.', 'string', '') }}"
+            },
+            {
+              "name": "snapshot",
+              "value": "={{ $fromAI('snapshot', 'Snapshot id. Leave empty for the latest snapshot; only set it when the user names a snapshot.', 'string', '') }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.4,
+      "position": [
+        1650,
+        740
+      ],
+      "id": "80feee82-f422-573f-9094-c62e12dcdad7",
+      "name": "count_elements"
+    },
+    {
+      "parameters": {
+        "toolDescription": "Headline TVD numbers of a snapshot: grand total, target, delta, status, cost per SF, clusters. The answer names its snapshot. If it is an error with the code too_many_results, ask the user to narrow the question instead of calling again.",
+        "url": "={{ $env.CONCHO_API_URL }}/cost/summary",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.CONCHO_API_TOKEN }}"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "snapshot",
+              "value": "={{ $fromAI('snapshot', 'Snapshot id. Leave empty for the latest snapshot; only set it when the user names a snapshot.', 'string', '') }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.4,
+      "position": [
+        1560,
+        1040
+      ],
+      "id": "cc581bb1-0f19-5a9a-9467-d692cff08084",
+      "name": "get_cost_overview"
+    },
+    {
+      "parameters": {
+        "toolDescription": "Headline STV numbers of a snapshot: life cycle, embodied, use phase, percent of target. The answer names its snapshot. If it is an error with the code too_many_results, ask the user to narrow the question instead of calling again.",
+        "url": "={{ $env.CONCHO_API_URL }}/carbon/summary",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.CONCHO_API_TOKEN }}"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "snapshot",
+              "value": "={{ $fromAI('snapshot', 'Snapshot id. Leave empty for the latest snapshot; only set it when the user names a snapshot.', 'string', '') }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.4,
+      "position": [
+        1650,
+        1080
+      ],
+      "id": "0893ed43-1395-554e-a442-4b29afa915d0",
+      "name": "get_carbon_overview"
+    },
+    {
+      "parameters": {
+        "toolDescription": "Data quality of a snapshot: unmapped elements, missing levels, materials or quantities, duplicates removed. The answer names its snapshot. If it is an error with the code too_many_results, ask the user to narrow the question instead of calling again.",
+        "url": "={{ $env.CONCHO_API_URL }}/quality",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.CONCHO_API_TOKEN }}"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "snapshot",
+              "value": "={{ $fromAI('snapshot', 'Snapshot id. Leave empty for the latest snapshot; only set it when the user names a snapshot.', 'string', '') }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.4,
+      "position": [
+        1740,
+        1040
+      ],
+      "id": "a75abff8-8b9a-52f7-9684-61a54a72a9d2",
+      "name": "get_quality"
+    },
+    {
+      "parameters": {
+        "toolDescription": "The pipeline runs (snapshots), newest first, with id, label, timestamp and totals.",
+        "url": "={{ $env.CONCHO_API_URL }}/snapshots",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.CONCHO_API_TOKEN }}"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.4,
+      "position": [
+        1830,
+        1080
+      ],
+      "id": "0c0a498e-6656-5ee2-b53b-b727340e44d8",
+      "name": "list_snapshots"
+    },
+    {
+      "parameters": {
+        "toolDescription": "Snapshot b against snapshot a: cost total and per cluster, carbon, element count. The answer names its snapshot. If it is an error with the code too_many_results, ask the user to narrow the question instead of calling again.",
+        "url": "={{ $env.CONCHO_API_URL }}/compare",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.CONCHO_API_TOKEN }}"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "a",
+              "value": "={{ $fromAI('a', 'Id of the older snapshot, from list_snapshots', 'string', '') }}"
+            },
+            {
+              "name": "b",
+              "value": "={{ $fromAI('b', 'Id of the newer snapshot, from list_snapshots', 'string', '') }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.4,
+      "position": [
+        1920,
+        1040
+      ],
+      "id": "37022fb4-77ef-5697-9a2a-31b811e59fe1",
+      "name": "compare_snapshots"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        2200,
+        0
+      ],
+      "id": "96571410-67d7-5f44-a946-ac7ae5347ab8",
+      "name": "Attach answer"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.message }}",
+        "options": {
+          "systemMessage": "@@PROMPT:cost@@",
+          "maxIterations": 3,
+          "returnIntermediateSteps": true
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        1500,
+        -200
+      ],
+      "id": "abe09ce8-a7e0-5cc1-acf5-9a6685ef8b57",
+      "name": "Cost Agent",
+      "retryOnFail": false,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $env.CONCHO_MODEL_SUBAGENT || 'gpt-4o-mini' }}"
+        },
+        "builtInTools": {},
+        "options": {
+          "temperature": 0.2
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        1500,
+        -40
+      ],
+      "id": "7114cfdb-5d35-57a6-8feb-23a57ef57eca",
+      "name": "Cost Model",
+      "credentials": {
+        "openAiApi": {
+          "id": "concho-openai",
+          "name": "Concho OpenAI"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.message }}",
+        "options": {
+          "systemMessage": "@@PROMPT:carbon@@",
+          "maxIterations": 3,
+          "returnIntermediateSteps": true
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        1500,
+        140
+      ],
+      "id": "64c8c76e-b919-5a55-af8e-c4cb8037e188",
+      "name": "Carbon Agent",
+      "retryOnFail": false,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $env.CONCHO_MODEL_SUBAGENT || 'gpt-4o-mini' }}"
+        },
+        "builtInTools": {},
+        "options": {
+          "temperature": 0.2
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        1500,
+        300
+      ],
+      "id": "1c9614ba-3533-580a-adb2-3e902ecc024b",
+      "name": "Carbon Model",
+      "credentials": {
+        "openAiApi": {
+          "id": "concho-openai",
+          "name": "Concho OpenAI"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.message }}",
+        "options": {
+          "systemMessage": "@@PROMPT:quantity@@",
+          "maxIterations": 3,
+          "returnIntermediateSteps": true
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        1500,
+        480
+      ],
+      "id": "1c658cd6-271c-5b6b-8463-622a73bd6598",
+      "name": "Quantity Agent",
+      "retryOnFail": false,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $env.CONCHO_MODEL_SUBAGENT || 'gpt-4o-mini' }}"
+        },
+        "builtInTools": {},
+        "options": {
+          "temperature": 0.2
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        1500,
+        640
+      ],
+      "id": "caf5fa9c-26a5-5df4-b32e-da65af195f20",
+      "name": "Quantity Model",
+      "credentials": {
+        "openAiApi": {
+          "id": "concho-openai",
+          "name": "Concho OpenAI"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.message }}",
+        "options": {
+          "systemMessage": "@@PROMPT:general@@",
+          "maxIterations": 3,
+          "returnIntermediateSteps": true
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        1500,
+        820
+      ],
+      "id": "9543b1f8-0ea6-57a3-b67c-f67de774e160",
+      "name": "General Agent",
+      "retryOnFail": false,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $env.CONCHO_MODEL_SUBAGENT || 'gpt-4o-mini' }}"
+        },
+        "builtInTools": {},
+        "options": {
+          "temperature": 0.2
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        1500,
+        980
+      ],
+      "id": "b03453bc-4139-5ef8-9c1d-e2a722363b2d",
+      "name": "General Model",
+      "credentials": {
+        "openAiApi": {
+          "id": "concho-openai",
+          "name": "Concho OpenAI"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Category: {{ $json.category }}\nUser message: {{ $json.message }}",
+        "options": {
+          "systemMessage": "@@PROMPT:fallback@@",
+          "maxIterations": 3,
+          "returnIntermediateSteps": true
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        1500,
+        1160
+      ],
+      "id": "42bfe2c2-4d1e-5e0f-9bbc-72631dfe5202",
+      "name": "Fallback Agent",
+      "retryOnFail": false,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $env.CONCHO_MODEL_SUBAGENT || 'gpt-4o-mini' }}"
+        },
+        "builtInTools": {},
+        "options": {
+          "temperature": 0.2
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        1500,
+        1320
+      ],
+      "id": "53c0a826-f059-53df-ac82-a1b5b1711bab",
+      "name": "Fallback Model",
+      "credentials": {
+        "openAiApi": {
+          "id": "concho-openai",
+          "name": "Concho OpenAI"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "bbcefd85-6b32-58ab-aacb-e33dbef16045",
+              "name": "output",
+              "value": "={{ ({ de: 'Entschuldigung, das konnte ich gerade nicht beantworten. Bitte versuche es in einer Minute noch einmal oder formuliere die Frage anders.', es: 'Lo siento, ahora no he podido responder. Inténtalo de nuevo en un minuto o formula la pregunta de otra manera.', pl: 'Przepraszam, nie udało mi się teraz odpowiedzieć. Spróbuj ponownie za minutę lub zadaj pytanie inaczej.' })[$json.language] || 'Sorry, I could not answer that right now. Please try again in a minute or ask the question differently.' }}",
+              "type": "string"
+            },
+            {
+              "id": "e52766b3-1e0f-5f51-ab57-041fafbb4c98",
+              "name": "error",
+              "value": "=true",
+              "type": "boolean"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2200,
+        400
+      ],
+      "id": "7d846e4e-ce26-5c9c-9663-0bcc7a53956e",
+      "name": "Error reply"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "b15e8578-1acd-5132-bbe6-3d9277ed9f81",
+              "name": "reply",
+              "value": "={{ ($json.output || '').toString().slice(0, 1900) }}",
+              "type": "string"
+            },
+            {
+              "id": "b2579bb5-bd6e-5024-8f9b-c141eee36e2b",
+              "name": "tools",
+              "value": "={{ ($json.intermediateSteps || []).map(s => s.action?.tool).filter(Boolean) }}",
+              "type": "array"
+            },
+            {
+              "id": "14867e41-e14d-5333-991a-fbb101ce7bd1",
+              "name": "tool_response_chars",
+              "value": "={{ ($json.intermediateSteps || []).map(s => String(s.observation ?? '').length) }}",
+              "type": "array"
+            },
+            {
+              "id": "7025b00d-b031-5cbb-bf45-4037409096f4",
+              "name": "failed",
+              "value": "={{ $json.error === true }}",
+              "type": "boolean"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2420,
+        0
+      ],
+      "id": "5c7512b3-2f53-505d-b8d2-a96d0d1d6232",
+      "name": "Compose reply"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ reply: $json.reply, category: $json.category, language: $json.language, tools: $json.tools, tool_response_chars: $json.tool_response_chars, failed: $json.failed }) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        2640,
+        0
+      ],
+      "id": "838ffea8-9d9f-52e9-b5da-82f3d990c788",
+      "name": "Respond to caller"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "fe465f18-7191-56b1-b056-de8ef8742e49",
+              "leftValue": "={{ $json.source }}",
+              "rightValue": "discord",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "582d80fb-407f-56ed-993a-83bf918a6109",
+              "leftValue": "={{ $json.channel_id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            },
+            {
+              "id": "a5ea8d8d-c9b2-570a-8733-3a4a6e5a21ed",
+              "leftValue": "={{ $json.reply }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2860,
+        0
+      ],
+      "id": "786577f4-88cd-5067-95ff-934313aecc79",
+      "name": "Reply on Discord?"
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "guildId": {
+          "__rl": true,
+          "value": "={{ $json.guild_id || $env.DISCORD_GUILD_ID }}",
+          "mode": "id"
+        },
+        "channelId": {
+          "__rl": true,
+          "value": "={{ $json.channel_id }}",
+          "mode": "id"
+        },
+        "content": "=<@{{ $json.user_id }}> {{ $json.reply }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.discord",
+      "typeVersion": 2,
+      "position": [
+        3080,
+        -60
+      ],
+      "id": "490788df-4207-587a-8229-ddf96da7fa27",
+      "name": "Send reply",
+      "credentials": {
+        "discordBotApi": {
+          "id": "concho-discord",
+          "name": "Concho Discord bot"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize input": {
+      "main": [
+        [
+          {
+            "node": "Router",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Router + context",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Router Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Router",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Router Output": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Router",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Router": {
+      "main": [
+        [
+          {
+            "node": "Router + context",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Router + context": {
+      "main": [
+        [
+          {
+            "node": "Classified",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Classified": {
+      "main": [
+        [
+          {
+            "node": "Route",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Attach answer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cost Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Cost Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "get_cost_summary": {
+      "ai_tool": [
+        [
+          {
+            "node": "Cost Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "get_cost_items": {
+      "ai_tool": [
+        [
+          {
+            "node": "Cost Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "cost_what_if": {
+      "ai_tool": [
+        [
+          {
+            "node": "Cost Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cost Agent": {
+      "main": [
+        [
+          {
+            "node": "Attach answer",
+            "type": "main",
+            "index": 1
+          }
+        ],
+        [
+          {
+            "node": "Error reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Carbon Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Carbon Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "get_carbon_summary": {
+      "ai_tool": [
+        [
+          {
+            "node": "Carbon Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "get_carbon_items": {
+      "ai_tool": [
+        [
+          {
+            "node": "Carbon Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "carbon_what_if": {
+      "ai_tool": [
+        [
+          {
+            "node": "Carbon Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Carbon Agent": {
+      "main": [
+        [
+          {
+            "node": "Attach answer",
+            "type": "main",
+            "index": 1
+          }
+        ],
+        [
+          {
+            "node": "Error reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Quantity Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Quantity Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "get_quantities": {
+      "ai_tool": [
+        [
+          {
+            "node": "Quantity Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "count_elements": {
+      "ai_tool": [
+        [
+          {
+            "node": "Quantity Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Quantity Agent": {
+      "main": [
+        [
+          {
+            "node": "Attach answer",
+            "type": "main",
+            "index": 1
+          }
+        ],
+        [
+          {
+            "node": "Error reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "General Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "General Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "get_cost_overview": {
+      "ai_tool": [
+        [
+          {
+            "node": "General Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "get_carbon_overview": {
+      "ai_tool": [
+        [
+          {
+            "node": "General Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "get_quality": {
+      "ai_tool": [
+        [
+          {
+            "node": "General Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "list_snapshots": {
+      "ai_tool": [
+        [
+          {
+            "node": "General Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "compare_snapshots": {
+      "ai_tool": [
+        [
+          {
+            "node": "General Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "General Agent": {
+      "main": [
+        [
+          {
+            "node": "Attach answer",
+            "type": "main",
+            "index": 1
+          }
+        ],
+        [
+          {
+            "node": "Error reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fallback Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Fallback Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fallback Agent": {
+      "main": [
+        [
+          {
+            "node": "Attach answer",
+            "type": "main",
+            "index": 1
+          }
+        ],
+        [
+          {
+            "node": "Error reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route": {
+      "main": [
+        [
+          {
+            "node": "Cost Agent",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Carbon Agent",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Quantity Agent",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "General Agent",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Fallback Agent",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Fallback Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Attach answer": {
+      "main": [
+        [
+          {
+            "node": "Compose reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Error reply": {
+      "main": [
+        [
+          {
+            "node": "Compose reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compose reply": {
+      "main": [
+        [
+          {
+            "node": "Respond to caller",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respond to caller": {
+      "main": [
+        [
+          {
+            "node": "Reply on Discord?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reply on Discord?": {
+      "main": [
+        [
+          {
+            "node": "Send reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "errorWorkflow": "concho-error-handler",
+    "executionTimeout": 120
+  },
+  "pinData": {}
+}
