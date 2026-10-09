@@ -9,8 +9,7 @@ repo and publishes a dashboard. The logic lives in
 tests without GitHub Actions.
 
 Scope is **Tier 1** (decision D13): TVD + STV. Not in it yet: the schedule (Tier 2), the SQLite
-ingest (P5.3), the data API (P5.4), Concho chat, new dashboards (P7; TVD uses the existing
-legacy renderer, STV is published as JSON only) and the Discord/budget alert (P5.2 step 9,
+ingest (P5.3), the data API (P5.4), Concho chat, the schedule dashboard (P7.3) and the Discord/budget alert (P5.2 step 9,
 a TODO in the workflow).
 
 ## Private repository required
@@ -60,7 +59,7 @@ one line.
 | 2 | TVD | `concho-tvd --ci` once, with all architecture and structural exports |
 | 3 | STV | `concho-stv` once, with **all** architecture, structural and MEP exports, so the engines' deduplication across exports (D15, P3.9) applies. Skipped with a warning when there is no course STV workbook. |
 | 4 | results | `results/<UTC timestamp>/`, `results/latest/`, a new entry in `results/index.json` (P5.5); committed back to the repo |
-| 6 | dashboards | `run_pipeline.py site`: `site/index.html` (all snapshots), `site/tvd/index.html` (latest TVD dashboard, legacy renderer), `site/results/` (the JSON files) |
+| 6 | dashboards | `run_pipeline.py site`: the static dashboards of `dashboards/site/` (overview, `tvd/`, `stv/`; see "Site" below) + `site/results/` (the JSON files) |
 | 7 | Pages | uploaded as artifact `dashboard` (always) and deployed to GitHub Pages (unless `CONCHO_PAGES=off`) |
 | 9 | alert | TODO: Discord post + budget alert when the TVD estimate exceeds the target |
 
@@ -102,7 +101,7 @@ results/
   <YYYYMMDDTHHMMSSZ>/             one folder per run (UTC)
     run.json                      this run's index entry
     tvd/tvd_results.json          TVD results JSON (docs/engines/tvd.md)
-    tvd/dashboard.html            TVD dashboard (legacy renderer)
+    tvd/dashboard.html            previous TVD dashboard (legacy renderer; site/tvd/legacy.html)
     stv/stv_results.json          STV results JSON, charts, *_schedule_items.json (if STV ran)
   latest/                         copy of the newest run folder
   tvd_history/                    TVD snapshots (history and compare tabs of the TVD dashboard)
@@ -145,6 +144,31 @@ site/                             not committed; built by `site`, published / up
 - Snapshots are only appended; the index page lists all of them, newest first, with no code
   change per snapshot.
 
+## Site (`run_pipeline.py site`, P7.1, P7.2, P7.4)
+
+`site/` is not generated from the results. It is a copy of
+
+- `dashboards/site/` (static HTML, CSS and JS, [`dashboards/README.md`](../dashboards/README.md)):
+  `index.html` (snapshot list, newest first), `tvd/index.html`, `stv/index.html`, `assets/`;
+- `results/` (without `tvd_history/`): the pages fetch `results/index.json` and the
+  `tvd_results.json` / `stv_results.json` of the selected snapshot (`?snapshot=<id>`);
+- `tvd/legacy.html`: the previous TVD dashboard of the latest run, kept for one release and
+  linked from the footer of the TVD page.
+
+Project name, team name, numbers and snapshot labels are read in the browser, so a new
+snapshot needs no site change. The files come from the installed `concho` package
+(`importlib.resources`, package data of `dashboards` in `pyproject.toml`), not from the source
+tree: a team repo only has `scripts/run_pipeline.py` plus the pinned package. The site works on
+GitHub Pages and from the `dashboard` workflow artifact when served over HTTP:
+
+```sh
+unzip dashboard.zip -d site && cd site && python -m http.server 8000
+```
+
+Opening `index.html` as a local file does not work (`fetch` is blocked on `file://`); the page
+says so. A site without snapshots is not built (`site` stops with an error); the pages still
+render an empty `results/index.json` ("No snapshots yet").
+
 ## Run it locally
 
 ```sh
@@ -158,7 +182,7 @@ python run_pipeline.py all --repo path/to/team-repo
 `tests/pipeline/test_pipeline.py` copies `template/` into a temporary team repo, adds the
 invented exports and 5-row cost DB of
 [`tests/fixtures/pipeline_team/`](../tests/fixtures/pipeline_team/) and runs the script:
-full run (TVD total pinned), appended snapshots, labels, several exports per discipline,
+full run (TVD total pinned, site files), appended snapshots, labels, several exports per discipline,
 validation errors (missing column, not UTF-8, no exports, invalid config / cost DB, public
 repo with cost data or a workbook), and the workflow file. The STV step runs only with
 `$COURSE_STV_XLSX`; without it the tests check the "STV skipped" note. The CI job `pipeline`
@@ -166,10 +190,18 @@ runs them with concho installed non-editable, as in a team repo.
 
 ## Known gaps (follow-ups)
 
+- The dashboards read only what the results JSON has. Not in it yet: the **list of unmapped
+  TVD rows** (only `meta.unmapped_count`; the legacy page still offers the CSV), a
+  `project_name` in `stv_results.json` (the header takes it from the TVD results), and the
+  mapping-rule `note` of proxy rules (the STV page shows category / keyword / material).
+
 - `concho-tvd` takes one `--arch` and one `--struct` file; the pipeline joins several exports
   per discipline, so TVD sees one file per discipline and not the individual exports.
 - The STV default mapping table (`template/stv_mapping.csv`) is found by a path relative to
   the source tree, so an installed package has no default table; the pipeline therefore
-  requires `files.stv_mapping` or `stv_mapping.csv` in the repo.
-- Budget alert / Discord post (P5.2 step 9), SQLite ingest (P5.3), data API (P5.4), static
-  TVD/STV dashboards (P7.1/P7.2) are later tasks.
+  requires `files.stv_mapping` or `stv_mapping.csv` in the repo. The dashboard files do not
+  repeat this: they are listed as package data and `tests/site/test_site.py` checks that
+  every file of `dashboards/site/` is covered (and, in the CI job `pipeline`, that they are
+  found in the non-editable install).
+- Budget alert / Discord post (P5.2 step 9), SQLite ingest (P5.3), data API (P5.4) and the
+  schedule dashboard (P7.3) are later tasks.

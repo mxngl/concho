@@ -15,8 +15,9 @@ Subcommands (each takes ``--repo DIR``, default: the current folder):
   exports, so the D15 deduplication of the engines applies; skipped with a note when no course
   STV workbook is found), then ``results/<UTC timestamp>/``, ``results/latest/`` and one new
   entry in ``results/index.json``.
-- ``site``: ``site/`` with the latest TVD dashboard (legacy renderer), an index page listing
-  every snapshot, and a copy of ``results/`` (JSON files the index links to).
+- ``site``: ``site/`` = the static dashboards of ``dashboards/site/`` (overview, TVD, STV; they
+  read the JSON files in the browser) + a copy of ``results/`` + the legacy TVD page as
+  ``tvd/legacy.html``.
 - ``all``: the three in a row (what the tests run).
 
 The course STV workbook comes from ``$COURSE_STV_XLSX``, else from ``course/`` in the team
@@ -28,7 +29,6 @@ from __future__ import annotations
 
 import argparse
 import csv
-import html
 import json
 import os
 import re
@@ -609,45 +609,36 @@ def _num(value) -> str:
     return "–" if value is None else f"{value:,.0f}"
 
 
-def _when(timestamp: str) -> str:
-    """``2026-09-28T15:15:20Z`` → ``2026-09-28 15:15 UTC``."""
-    return timestamp[:16].replace("T", " ") + " UTC" if len(timestamp) >= 16 else timestamp
+SITE_PACKAGE = "dashboards"
+SITE_SUBDIR = "site"
 
 
-def _link(href: str | None, text: str) -> str:
-    if not href:
-        return '<span class="muted">–</span>'
-    return f'<a href="{html.escape(href, quote=True)}">{html.escape(text)}</a>'
+def _copy_site_files(dest: Path) -> None:
+    """Copy the static dashboard (``dashboards/site/``, P7) into ``dest``.
 
+    Read through ``importlib.resources`` so it works from an installed (non-editable)
+    package as well as from the source tree; ``pyproject.toml`` ships the files as package
+    data of ``dashboards``."""
+    from importlib import resources
 
-PAGE_CSS = """
-:root { --bg:#fff; --fg:#1b1f24; --muted:#5b636e; --line:#d8dde3; --accent:#0b5cad;
-        --over:#b42318; --under:#067647; }
-@media (prefers-color-scheme: dark) {
-  :root { --bg:#0f1115; --fg:#e6e8eb; --muted:#9aa3ad; --line:#2a2f37; --accent:#6cb0ff;
-          --over:#ff8a80; --under:#6fdc9a; }
-}
-body { background:var(--bg); color:var(--fg); margin:0;
-       font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif; }
-main { max-width:1000px; margin:0 auto; padding:24px 16px 48px; }
-h1 { font-size:1.5rem; margin:0 0 4px; } h2 { font-size:1.1rem; margin:32px 0 8px; }
-a { color:var(--accent); } .muted { color:var(--muted); }
-.cards { display:flex; flex-wrap:wrap; gap:12px; margin-top:16px; }
-.card { border:1px solid var(--line); border-radius:8px; padding:12px 16px; min-width:200px; }
-.card b { display:block; font-size:1.25rem; }
-.over { color:var(--over); } .under { color:var(--under); }
-.scroll { overflow-x:auto; }
-table { border-collapse:collapse; width:100%; font-variant-numeric:tabular-nums; }
-th, td { text-align:left; padding:6px 10px; border-bottom:1px solid var(--line);
-         white-space:nowrap; }
-td.num, th.num { text-align:right; } td.label { white-space:normal; min-width:160px; }
-td.files { white-space:normal; min-width:150px; }
-"""
+    try:
+        source = resources.files(SITE_PACKAGE) / SITE_SUBDIR
+    except ModuleNotFoundError as exc:
+        raise PipelineError("The 'dashboards' package of Concho is not installed; install "
+                            "concho (pip install \"concho[stv] @ git+…@<tag>\").") from exc
+    with resources.as_file(source) as folder:
+        if not (folder / "index.html").is_file():
+            raise PipelineError(f"The installed Concho package has no dashboard files "
+                                f"({SITE_PACKAGE}/{SITE_SUBDIR}/index.html is missing).")
+        shutil.copytree(folder, dest, ignore=shutil.ignore_patterns("__pycache__"),
+                        dirs_exist_ok=True)
 
 
 def build_site(root: Path, site: Path | None = None) -> Path:
-    """Step 6: ``site/`` with ``index.html`` (all snapshots), ``tvd/index.html`` (latest TVD
-    dashboard) and ``results/`` (the JSON files and dashboards the index links to)."""
+    """Step 6 (P7.1, P7.2, P7.4): ``site/`` = the static dashboard of ``dashboards/site/``
+    (index, ``tvd/``, ``stv/``, shared ``assets/``) + ``results/`` (the JSON files the pages
+    fetch) + the legacy TVD page as ``tvd/legacy.html``. Nothing in it is generated from the
+    results here: project and team name, numbers and snapshot list are read by the pages."""
     repo = load_repo(root)
     results_root = repo.root / RESULTS_DIR
     index = load_index(results_root)
@@ -658,89 +649,15 @@ def build_site(root: Path, site: Path | None = None) -> Path:
     if site.exists():
         shutil.rmtree(site)
     site.mkdir(parents=True)
+    _copy_site_files(site)
     shutil.copytree(results_root, site / RESULTS_DIR,
                     ignore=shutil.ignore_patterns(TVD_HISTORY))
-    latest = snapshots[-1]
-    (site / "tvd").mkdir()
-    shutil.copy2(repo.root / latest["paths"]["tvd_dashboard"], site / "tvd" / "index.html")
+    # The previous TVD page, kept for one release (linked from the footer of tvd/).
+    legacy = repo.root / snapshots[-1]["paths"]["tvd_dashboard"]
+    shutil.copy2(legacy, site / "tvd" / "legacy.html")
     (site / ".nojekyll").write_text("", encoding="utf-8")
-    (site / "index.html").write_text(render_index(repo.config, index), encoding="utf-8")
     info(f"Site built: {repo.rel(site)}/ ({len(snapshots)} snapshot(s)).")
     return site
-
-
-def render_index(config, index: dict) -> str:
-    snapshots = index.get("snapshots", [])
-    latest = snapshots[-1]
-    title = f"{config.project.name} – {config.project.team_name}"
-    tvd = latest.get("tvd") or {}
-    stv = latest.get("stv") or {}
-    total, target = tvd.get("grand_total"), tvd.get("tvd_target")
-    cls = ""
-    if total is not None and target is not None:
-        cls = "over" if total > target else "under"
-    stv_card = (f"<b>{_num(stv.get('life_cycle_kgco2e'))} kgCO₂e</b>"
-                f"<span class=muted>life cycle; target {_num(stv.get('target_kgco2e'))}</span>"
-                if stv else f"<b>–</b><span class=muted>{html.escape(latest.get('stv_note') or '')}"
-                "</span>")
-    rows = []
-    for snap in reversed(snapshots):
-        paths = snap.get("paths", {})
-        s_tvd = snap.get("tvd") or {}
-        s_stv = snap.get("stv") or {}
-        commit = (snap.get("commit") or "")[:7]
-        rows.append(
-            "<tr>"
-            f"<td>{html.escape(_when(snap.get('timestamp', '')))}</td>"
-            f"<td class=label>{html.escape(snap.get('label', ''))}</td>"
-            f"<td><code>{html.escape(commit)}</code></td>"
-            f"<td class=num>{_money(s_tvd.get('grand_total'))}</td>"
-            f"<td class=num>{_money(s_tvd.get('tvd_target'))}</td>"
-            f"<td class=num>{_num(s_stv.get('life_cycle_kgco2e'))}</td>"
-            f"<td class=files>{_link(paths.get('tvd_dashboard'), 'dashboard')} · "
-            f"{_link(paths.get('tvd_results'), 'TVD JSON')} · "
-            f"{_link(paths.get('stv_results'), 'STV JSON')}</td>"
-            "</tr>")
-    stv_item = (_link("results/latest/stv/stv_results.json", "STV results (JSON)") if stv
-                else '<span class=muted>STV results: not available (see the note above)</span>')
-    return f"""<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{html.escape(title)}</title>
-<style>{PAGE_CSS}</style>
-</head>
-<body>
-<main>
-<h1>{html.escape(title)}</h1>
-<p class=muted>Latest run {html.escape(_when(latest.get('timestamp', '')))}:
-{html.escape(latest.get('label', ''))}. Built by the Concho pipeline.</p>
-<div class=cards>
-  <div class=card><span class=muted>TVD estimate</span><b class="{cls}">{_money(total)}</b>
-    <span class=muted>target {_money(target)}</span></div>
-  <div class=card><span class=muted>STV carbon</span>{stv_card}</div>
-</div>
-<h2>Latest results</h2>
-<ul>
-  <li>{_link('tvd/index.html', 'TVD dashboard')}</li>
-  <li>{stv_item}</li>
-  <li>{_link('results/index.json', 'Snapshot index (JSON)')}</li>
-</ul>
-<h2>Snapshots ({len(snapshots)})</h2>
-<div class=scroll>
-<table>
-<thead><tr><th>Time (UTC)</th><th>Label</th><th>Commit</th><th class=num>TVD estimate</th>
-<th class=num>TVD target</th><th class=num>STV kgCO₂e</th><th>Files</th></tr></thead>
-<tbody>
-{chr(10).join(rows)}
-</tbody>
-</table>
-</div>
-</main>
-</body>
-</html>
-"""
 
 
 # --------------------------------------------------------------------------- CLI

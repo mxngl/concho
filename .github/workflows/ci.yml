@@ -95,7 +95,7 @@ jobs:
           pip install ".[stv,dev]"
 
       - name: Test the team pipeline
-        run: pytest tests/pipeline
+        run: pytest tests/pipeline tests/site
 
   revit-addin:
     # P4.2: build the Revit add-in for every supported Revit version (build only, no Revit
