@@ -218,6 +218,7 @@ def _cli(monkeypatch, tmp_path, reference, *args: str) -> dict:
 def test_cli_config(monkeypatch, tmp_path, reference_with_river, capsys):
     results = _cli(monkeypatch, tmp_path, reference_with_river, "--config", str(RIVER_CONFIG))
     assert results["team"] == "River"
+    assert results["project_name"] == "River test pavilion"
     assert results["lifetime_years"] == 50
     assert results["breakdown"]["use_electricity"]["carbon"] == pytest.approx(0.2 * 100_000 * 50)
 
@@ -478,3 +479,20 @@ def test_island_use_phase_example_config():
     assert {k: v for k, v in ex.items() if k != "stv"} == {
         k: v for k, v in ref.items() if k != "stv"}
     assert ref["stv"]["use_phase"]["not_modeled"] is True
+
+
+def test_project_name_empty_without_config_and_round_trips(monkeypatch, tmp_path, reference):
+    results = _cli(monkeypatch, tmp_path, reference)
+    assert results["project_name"] == ""
+    assert STVResults.from_dict(results).project_name == ""
+    assert STVResults.from_dict({k: v for k, v in results.items()
+                                 if k != "project_name"}).project_name == ""
+
+
+def test_combine_keeps_project_name(monkeypatch, tmp_path, reference_with_river, river_pv):
+    trades = [_trade_run(monkeypatch, tmp_path, reference_with_river, name, items,
+                         "--config", str(river_pv)) for name, items in TRADE_ITEMS.items()]
+    assert json.loads(trades[0].read_text())["project_name"] == "River test pavilion"
+    for args in ((), ("--config", str(river_pv))):
+        assert _combine(monkeypatch, tmp_path, trades, *args)["project_name"] == (
+            "River test pavilion")

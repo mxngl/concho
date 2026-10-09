@@ -11,8 +11,10 @@ How much of the Revit exports the STV mapping table covers, per discipline:
 
 plus, over all disciplines, the rule statistics (``rules``: elements each rule won, and how
 many it lost to a rule of the same specificity with a lower priority or to a more specific
-rule) and ``cross_discipline_elements``: ElementIds that appear in more than one discipline
-export among the mapped rows, with how each one maps. Since P3.9 ``concho-stv`` maps only the
+rule; ``proxy`` marks a proxy rule (P3.7) and ``proxy_note`` is its mapping-table note, which
+says what the proxy stands in for, e.g. bamboo booked as glulam or concrete, else ``null``)
+and ``cross_discipline_elements``: ElementIds that appear in more than one discipline export
+among the mapped rows, with how each one maps. Since P3.9 ``concho-stv`` maps only the
 rows the duplicate / Parts rule keeps (``engines/common/dedup.py``, the ``deduplication``
 block), so in a CLI run this list is empty unless the rule kept two rows of one ElementId.
 
@@ -219,7 +221,8 @@ def build_mapping_coverage(
         "total": _total(disciplines),
         "disciplines": disciplines,
         "rules": [
-            {**rule.summary(), "won": won[rule.row], "won_zero_quantity": won_zero[rule.row],
+            {**rule.summary(), "proxy_note": rule.note if rule.is_proxy else None,
+             "won": won[rule.row], "won_zero_quantity": won_zero[rule.row],
              "lost_to_priority": lost_priority[rule.row],
              "lost_to_specificity": lost_specificity[rule.row]}
             for rule in mapping.rules

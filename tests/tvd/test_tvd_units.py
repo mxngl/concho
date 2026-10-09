@@ -182,10 +182,11 @@ def test_cluster_summary_and_payload(run):
     assert set(payload) == {
         "meta", "financials", "cluster_targets", "cluster_summary", "target_derivation",
         "target_consistency", "cost_db_validation", "reliability", "quantity_parse_warnings",
-        "deduplication", "line_items",
+        "deduplication", "unmapped_rows", "line_items",
     }
-    assert list(payload)[-5:] == ["cost_db_validation", "reliability",
-                                  "quantity_parse_warnings", "deduplication", "line_items"]
+    assert list(payload)[-6:] == ["cost_db_validation", "reliability",
+                                  "quantity_parse_warnings", "deduplication", "unmapped_rows",
+                                  "line_items"]
     dedup = payload["deduplication"]
     assert (dedup["rows_in"], dedup["rows_kept"], dedup["dropped"]) == (21, 20, 1)
     assert dedup["by_reason"] == {"host_of_parts": 0, "duplicate_without_code": 1,
@@ -207,6 +208,12 @@ def test_cluster_summary_and_payload(run):
     assert payload["meta"]["dnc_count"] == 2
     assert "Special Construction" in payload["cluster_targets"]
     assert payload["meta"]["project_name"] == "Island 2026 university building"
+    unmapped = payload["unmapped_rows"]
+    assert (unmapped["total"], unmapped["listed"], unmapped["cap"]) == (2, 2, 100)
+    assert unmapped["total"] == payload["meta"]["unmapped_count"]
+    assert {r["reason"] for r in unmapped["rows"]} == {"no Assembly Code"}
+    assert set(unmapped["rows"][0]) == {"element_id", "category", "family", "type", "level",
+                                        "area_sf", "length_lf", "volume_cf", "reason"}
     shell = next(c for c in payload["cluster_summary"] if c["cluster"] == "Shell")
     assert shell["target"] == 3_826_446
     assert [li["ac"] for li in payload["line_items"]["Interiors"]][:2] == ["C1010", "C1020"]
@@ -294,3 +301,20 @@ def test_cli_ci_mode(tmp_path, synthetic_paths, monkeypatch):
 def test_cli_requires_inputs(capsys):
     with pytest.raises(SystemExit):
         main(["--out", "x"])
+
+
+def test_unmapped_rows_block_is_capped_and_ranked():
+    from engines.tvd.results_writer import UNMAPPED_ROWS_CAP, unmapped_rows_block
+
+    rows = [{"ElementId": str(i), "Category": "Walls", "Family": "F", "Type": "T",
+             "Level": "L1", "Area": f"{i} SF", "Length": "", "Volume": "1,5 x"}
+            for i in range(UNMAPPED_ROWS_CAP + 5)]
+    block = unmapped_rows_block(rows)
+    assert (block["total"], block["listed"], block["cap"]) == (
+        UNMAPPED_ROWS_CAP + 5, UNMAPPED_ROWS_CAP, UNMAPPED_ROWS_CAP)
+    assert [r["element_id"] for r in block["rows"][:2]] == [str(UNMAPPED_ROWS_CAP + 4),
+                                                           str(UNMAPPED_ROWS_CAP + 3)]
+    assert block["rows"][0]["area_sf"] == UNMAPPED_ROWS_CAP + 4
+    assert block["rows"][0]["volume_cf"] == 0.0  # unreadable cell: 0, no exception
+    assert unmapped_rows_block([]) == {"total": 0, "listed": 0, "cap": UNMAPPED_ROWS_CAP,
+                                       "ranked_by": block["ranked_by"], "rows": []}

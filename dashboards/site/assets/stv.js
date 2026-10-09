@@ -133,7 +133,8 @@ function flags(res) {
     proxyRules.length ? [el("h3", { text: "Proxy mapping rules" }), table([
       { label: "Discipline", value: (r) => r.discipline || "any" }, { label: "Category", value: (r) => r.category },
       { label: "Keyword", value: (r) => r.keyword || "" }, { label: "Counted as", wrap: true, value: (r) => `${r.stv_assembly} / ${r.stv_material_type}` },
-      { label: "Elements", num: true, value: (r) => num(r.won) }], proxyRules)] : null,
+      { label: "Elements", num: true, value: (r) => num(r.won) },
+      { label: "Note", wrap: true, value: (r) => r.proxy_note || "" }], proxyRules)] : null,
     p.length ? [el("h3", { text: "Items with a proxy part" }), table([
       { label: "STV assembly", value: (r) => r.assembly }, { label: "Material", wrap: true, value: (r) => r.material_type },
       { label: "Proxy amount", num: true, value: (r) => `${num(r.proxy_amount, 1)} of ${num(r.amount, 1)}` },

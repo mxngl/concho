@@ -60,7 +60,8 @@ ISLAND_MAPPING = REPO_ROOT / "engines" / "stv" / "examples" / "island" / "stv_ma
 # proxies), P3.8 (use-phase status), P3.9 (deduplication block, DNC rows).
 ADDED_ITEM_KEYS = ("estimated", "estimated_amount", "custom_material", "custom_material_source",
                    "proxy", "proxy_amount", "origin")
-ADDED_RESULT_KEYS = ("data_flags", "use_phase_status", "deduplication", "dnc_rows")
+ADDED_RESULT_KEYS = ("data_flags", "use_phase_status", "deduplication", "dnc_rows",
+                     "project_name")
 WORKBOOK = "STV_Template/STV_ConceptA_Bambo.xlsx"
 SCHEDULES = "revit_schedules/Current"
 

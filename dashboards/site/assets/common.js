@@ -302,7 +302,7 @@ export function showError(err) {
 /** Names for the header: from the TVD results of the snapshot, else from the STV team. */
 export function namesOf(tvd, stv) {
   return {
-    projectName: get(tvd || {}, "meta.project_name") || "",
+    projectName: get(tvd || {}, "meta.project_name") || get(stv || {}, "project_name") || "",
     teamName: get(tvd || {}, "meta.team_name") || get(stv || {}, "team") || "",
   };
 }
