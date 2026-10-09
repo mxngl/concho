@@ -78,7 +78,11 @@ export const PATHS = {
       "deduplication.rows_in", "deduplication.rows_kept", "deduplication.dropped",
       "deduplication.by_reason", "deduplication.dropped_rows[].element_id",
       "deduplication.dropped_rows[].category", "deduplication.dropped_rows[].reason",
-      "deduplication.dropped_rows[].kept_export", "deduplication.dropped_rows[].dropped_export"
+      "deduplication.dropped_rows[].kept_export", "deduplication.dropped_rows[].dropped_export",
+      "unmapped_rows.total", "unmapped_rows.listed", "unmapped_rows.cap", "unmapped_rows.ranked_by",
+      "unmapped_rows.rows[].element_id", "unmapped_rows.rows[].category", "unmapped_rows.rows[].family",
+      "unmapped_rows.rows[].type", "unmapped_rows.rows[].level", "unmapped_rows.rows[].area_sf",
+      "unmapped_rows.rows[].length_lf", "unmapped_rows.rows[].volume_cf", "unmapped_rows.rows[].reason"
     ]
   },
   "stv": {
@@ -105,6 +109,7 @@ export const PATHS = {
       "construction_items[].estimated"
     ],
     "optional": [
+      "project_name", "mapping_coverage.rules[].proxy_note",
       "use_phase_status.modeled", "use_phase_status.not_modeled_reason",
       "use_phase_status.all_zero", "use_phase_status.source",
       "data_flags.proxy", "data_flags.custom_material",

@@ -456,6 +456,9 @@ class STVResults:
     # did not come from mapped exports.
     deduplication: dict[str, Any] | None = None
     dnc_rows: list[dict[str, Any]] | None = None
+    # Project name from project_config (project.name), like meta.project_name of the TVD
+    # results; "" when the run had no --config.
+    project_name: str = ""
 
     def metric_summary(self) -> dict[str, dict[str, float | None]]:
         totals = self.breakdown.life_cycle
@@ -470,6 +473,7 @@ class STVResults:
     def to_dict(self) -> dict[str, Any]:
         payload = {
             "team": self.team,
+            "project_name": self.project_name,
             "targets": self.targets.to_dict(),
             "metric_summary": self.metric_summary(),
             "breakdown": self.breakdown.to_dict(),
@@ -505,6 +509,7 @@ class STVResults:
             use_phase_status=payload.get("use_phase_status"),
             deduplication=payload.get("deduplication"),
             dnc_rows=payload.get("dnc_rows"),
+            project_name=payload.get("project_name") or "",
         )
 
     @classmethod
@@ -514,6 +519,7 @@ class STVResults:
         *,
         team: str | None = None,
         project: STVResults | None = None,
+        project_name: str | None = None,
     ) -> STVResults:
         """Combine per-trade (or per-export) results into one project result.
 
@@ -527,6 +533,9 @@ class STVResults:
         - otherwise: the inputs that have a use phase must all have the same one, which is
           taken once; the same holds for their config items. Different ones raise
           ``ValueError`` (combine with the config instead).
+
+        ``project_name``: given, else the name of ``project``, else the first non-empty name
+        of the inputs.
         """
         if not results:
             raise ValueError("At least one STV result is required to create a project STV.")
@@ -604,6 +613,8 @@ class STVResults:
             use_phase_status=status,
             deduplication=combined_deduplication(results),
             dnc_rows=[row for rows in dnc_lists for row in rows] if dnc_lists else None,
+            project_name=(project_name or (project.project_name if project else "")
+                          or next((r.project_name for r in results if r.project_name), "")),
         )
 
 

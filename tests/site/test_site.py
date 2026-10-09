@@ -174,6 +174,14 @@ def test_stv_paths_in_invented_results(demo):
     assert seen == 2
 
 
+def test_proxy_rules_carry_their_note(tmp_path: Path):
+    rules = build_stv_results(tmp_path / "stv_exports")["mapping_coverage"]["rules"]
+    proxies = [r for r in rules if r["proxy"]]
+    assert [r["proxy_note"] for r in proxies] == [
+        "proxy: timber floor booked as concrete slab (catalog has no timber floor)"]
+    assert all(r["proxy_note"] is None for r in rules if not r["proxy"])
+
+
 def test_stv_units_are_the_engines(demo):
     """P7.2 (from P2.3): energy is MJ and water kg, not kWh and L."""
     js = (SITE_SRC / "assets" / "stv.js").read_text(encoding="utf-8")

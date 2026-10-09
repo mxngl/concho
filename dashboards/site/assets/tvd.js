@@ -235,8 +235,22 @@ function dataQuality(res) {
   const parts = [
     kv([["Elements without Assembly Code (not priced)", num(unmapped)], ["Rows marked DNC (skipped)", num(dnc)],
       ["Duplicate rows dropped (D15)", num(dups)]]),
-    el("p", { class: "muted", text: unmapped ? "The list of unmapped rows is not part of the results JSON (the legacy dashboard offers it as a CSV download)." : "" }),
   ];
+  const um = get(res, "unmapped_rows");
+  if (um && um.rows.length) {
+    const capped = um.total > um.listed;
+    parts.push(details(`Unmapped rows: ${capped ? `top ${um.listed} of ${num(um.total)}` : num(um.total)}`, false,
+      el("p", { class: "muted", text: `Rows without Assembly Code, not priced. Largest first (${um.ranked_by}).${capped ? ` The list is capped at ${um.cap} rows; the other ${num(um.total - um.listed)} are in the count only.` : ""}` }),
+      table([
+        { label: "ElementId", value: (r) => r.element_id }, { label: "Category", value: (r) => r.category },
+        { label: "Family / type", wrap: true, value: (r) => [r.family, r.type].filter(Boolean).join(" / ") },
+        { label: "Level", value: (r) => r.level },
+        { label: "Area (SF)", num: true, value: (r) => num(r.area_sf, 1) }, { label: "Volume (CF)", num: true, value: (r) => num(r.volume_cf, 1) },
+        { label: "Length (LF)", num: true, value: (r) => num(r.length_lf, 1) },
+        { label: "Reason", wrap: true, value: (r) => r.reason }], um.rows)));
+  } else if (unmapped) {
+    parts.push(el("p", { class: "muted", text: "This snapshot has no list of unmapped rows (it was created before the results JSON had one)." }));
+  }
   const dd = get(res, "deduplication");
   if (dd) {
     parts.push(details(`Duplicates and Parts: ${dd.dropped} of ${dd.rows_in} rows dropped`, false,

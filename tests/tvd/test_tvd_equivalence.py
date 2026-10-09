@@ -117,6 +117,8 @@ def _strip_meta(payload: dict) -> dict:
     payload.pop("quantity_parse_warnings", None)
     # P3.9: new block, not in the original; tested in test_island_deduplication.
     payload.pop("deduplication", None)
+    # P7 follow-up: new block, not in the original; tested in test_island_unmapped_rows.
+    payload.pop("unmapped_rows", None)
     for key in ("generated_at", "date", "label", "data_source", "project_name", "team_name"):
         payload["meta"].pop(key, None)
     return payload
@@ -356,3 +358,15 @@ def test_island_deduplication(outputs, run):
     assert [(e["discipline"], e["rows"]) for e in block["exports"]] == [
         ("architecture", 2321), ("structural", 287)]
     assert new["meta"]["duplicates_removed"] == 0
+
+
+# P7 follow-up: the unmapped rows are listed (capped), the totals are unchanged.
+@pytest.mark.parametrize("run", ["new", "corrected"])
+def test_island_unmapped_rows(outputs, run):
+    new = _load(outputs[run] / "results" / "latest.json")
+    block = new["unmapped_rows"]
+    assert block["total"] == new["meta"]["unmapped_count"]
+    assert block["listed"] == len(block["rows"]) == min(block["total"], block["cap"])
+    areas = [(r["area_sf"], r["volume_cf"], r["length_lf"]) for r in block["rows"]]
+    assert areas == sorted(areas, reverse=True)
+    assert {r["reason"] for r in block["rows"]} == {"no Assembly Code"}

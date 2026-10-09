@@ -4,6 +4,44 @@ import json
 import os
 from datetime import datetime
 
+from engines.common.quantities import AREA, LENGTH, VOLUME, parse_quantity
+
+# Cap of ``unmapped_rows.rows`` in the results JSON; ``unmapped_rows.total`` stays the full count.
+UNMAPPED_ROWS_CAP = 100
+UNMAPPED_REASON = "no Assembly Code"
+
+
+def unmapped_rows_block(rows: list[dict], cap: int = UNMAPPED_ROWS_CAP) -> dict:
+    """The ``unmapped_rows`` block: the ``cap`` largest rows without Assembly Code.
+
+    Ranked by area (SF), then volume (CF), then length (LF), largest first; ties keep export
+    order. Quantities are parsed with the tolerant parser without logging (the
+    ``quantity_parse_warnings`` count only aggregated cells). ``total`` is the number of
+    unmapped rows, ``listed`` the length of ``rows``, so ``total > listed`` means "capped".
+    """
+    parsed = []
+    for row in rows:
+        parsed.append({
+            "element_id": row.get("ElementId", ""),
+            "category":   row.get("Category", ""),
+            "family":     row.get("Family", ""),
+            "type":       row.get("Type", ""),
+            "level":      row.get("Level", ""),
+            "area_sf":    round(parse_quantity(row.get("Area"), AREA).value, 4),
+            "length_lf":  round(parse_quantity(row.get("Length"), LENGTH).value, 4),
+            "volume_cf":  round(parse_quantity(row.get("Volume"), VOLUME).value, 4),
+            "reason":     UNMAPPED_REASON,
+        })
+    parsed.sort(key=lambda r: (-r["area_sf"], -r["volume_cf"], -r["length_lf"]))
+    listed = parsed[:cap]
+    return {
+        "total":     len(parsed),
+        "listed":    len(listed),
+        "cap":       cap,
+        "ranked_by": "area_sf, volume_cf, length_lf (largest first)",
+        "rows":      listed,
+    }
+
 
 def build_results_payload(
     results: list[dict],
@@ -27,6 +65,7 @@ def build_results_payload(
     tracking: dict | None = None,
     quantity_parse_warnings: dict | None = None,
     deduplication: dict | None = None,
+    unmapped_rows: list[dict] | None = None,
 ) -> dict:
     """
     Build the structured results dict of a run.
@@ -68,6 +107,12 @@ def build_results_payload(
                         dropped_rows [{element_id, category, kept_export, kept_discipline,
                         dropped_export, dropped_discipline, reason}] (no quantities);
                         meta.duplicates_removed = dropped; see docs/model-requirements.md
+    unmapped_rows     – rows without Assembly Code, which are not priced (only if given; the
+                        raw rows are the engine's ``unmapped_rows``): total (all such rows,
+                        = meta.unmapped_count), listed, cap (UNMAPPED_ROWS_CAP = 100),
+                        ranked_by, rows [{element_id, category, family, type, level, area_sf,
+                        length_lf, volume_cf, reason}] – the ``cap`` largest by area, then
+                        volume, then length; the list is cut at the cap, ``total`` is not
     line_items        – dict of cluster → list of full line-item rows
     """
     ts       = ts or datetime.now()
@@ -147,6 +192,8 @@ def build_results_payload(
         payload["quantity_parse_warnings"] = quantity_parse_warnings
     if deduplication is not None:
         payload["deduplication"] = deduplication
+    if unmapped_rows is not None:
+        payload["unmapped_rows"] = unmapped_rows_block(unmapped_rows)
     payload["line_items"] = grouped
     return payload
 

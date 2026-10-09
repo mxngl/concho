@@ -405,6 +405,30 @@ excluded category):
 `examples` holds up to 20 distinct raw cell strings per column, nothing else from the row (no
 ElementId). `metric_converted` values are counted (converted); all other issues count 0.
 
+### `unmapped_rows` block
+
+Every results JSON from the engine has it: the rows without Assembly Code that are not priced
+(coded rows, DNC rows and excluded categories are not in it), so the dashboard can show them.
+The raw rows are `TvdRun.unmapped_rows`; `meta.unmapped_count` stays the full count.
+
+```json
+"unmapped_rows": {
+  "total": 1693, "listed": 100, "cap": 100,
+  "ranked_by": "area_sf, volume_cf, length_lf (largest first)",
+  "rows": [{"element_id": "123456", "category": "Walls", "family": "Basic Wall",
+            "type": "Generic - 8\"", "level": "Level 1", "area_sf": 3384.0,
+            "length_lf": 0.0, "volume_cf": 0.0, "reason": "no Assembly Code"}]
+}
+```
+
+**Cap:** `rows` holds at most `UNMAPPED_ROWS_CAP` = 100 rows (`engines/tvd/results_writer.py`), the
+largest by area, then volume, then length (ties keep export order). `total` is the number of
+all unmapped rows and is not capped, so `total > listed` means the list is cut. Quantities are
+read with the tolerant parser (SF / CF / LF; an unreadable cell is 0) and, unlike the aggregated
+cells, do not count in `quantity_parse_warnings`. `reason` is always `no Assembly Code` today.
+Mark, Material and Comments of the export rows are not copied. Results from before this block
+have no `unmapped_rows`.
+
 ### Legacy mode
 
 `--legacy-length-parsing` (hidden CLI flag; `legacy_length_parsing=True` in `compute()` /

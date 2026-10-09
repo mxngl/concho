@@ -33,6 +33,8 @@ class STVProjectSettings:
     stv_mapping: Path | None = None
     # P3.8: stv.construction_items in the STVInputs.from_dict format (origin project_config).
     construction_items: list[dict[str, Any]] = field(default_factory=list)
+    # project.name of the config, written to stv_results.json as project_name.
+    project_name: str = ""
 
     @classmethod
     def from_config(
@@ -72,6 +74,7 @@ class STVProjectSettings:
             custom_materials=custom,
             warnings=warnings,
             stv_mapping=None if mapping is None else Path(config_dir) / mapping,
+            project_name=config.project.name,
             construction_items=[
                 {"assembly": i.assembly, "material_type": i.material_type,
                  "amount": i.amount, "origin": CONFIG_ORIGIN}

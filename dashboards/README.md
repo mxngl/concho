@@ -31,7 +31,7 @@ python -m http.server 8000      # then http://localhost:8000/
 - **Snapshot:** `?snapshot=<id>` (the id from `results/index.json`); the selector in the header
   sets it. Default: the latest.
 - **Project and team name:** from `meta.project_name` / `meta.team_name` of the snapshot's
-  `tvd_results.json` (STV falls back to its `team`). Nothing project-specific is in the code.
+  `tvd_results.json` (STV falls back to its `project_name` and `team`). Nothing project-specific is in the code.
 - **PDF:** the "Print / PDF" button opens the print dialog (white page, controls hidden, all
   line items open); choose "Save as PDF". The JPG chart export of the legacy page is dropped.
 - **Data quality** (unmapped count, parse warnings, proxies, dropped duplicates, DNC rows) is

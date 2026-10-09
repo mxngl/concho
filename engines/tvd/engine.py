@@ -71,6 +71,7 @@ class TvdRun:
             tracking=tracking,
             quantity_parse_warnings=self.quantity_parse_warnings,
             deduplication=self.deduplication,
+            unmapped_rows=self.unmapped_rows,
         )
 
 

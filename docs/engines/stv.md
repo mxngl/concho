@@ -218,6 +218,9 @@ When Revit exports are mapped, `stv_results.json` gets a `mapping_coverage` bloc
 - `rules`: every rule with `won` (elements it mapped, `won_zero_quantity` of them with 0
   quantity), `lost_to_priority` (it matched, but a rule of the same specificity with a lower
   priority won) and `lost_to_specificity` (a more specific rule won), so overlaps are visible;
+  `proxy` is true for a proxy rule and `proxy_note` then holds its mapping-table `note` (what
+  it stands in for, e.g. bamboo booked as glulam or concrete), else `null`, so labels can be
+  shown downstream; results from before this field have no `proxy_note`;
 - `cross_discipline_elements`: ElementIds in more than one discipline export among the
   mapped rows, with how each occurrence maps. Since P3.9 `concho-stv` maps only the rows the
   duplicate / Parts rule keeps (see "Duplicates and Parts" below), so in a CLI run the list is
@@ -408,6 +411,10 @@ an item can be part proxy). The results JSON gets a `data_flags` block:
 | `proxies.embodied`, `share_of_embodied`, `share_of_life_cycle` | the same for proxies (item impacts × `proxy_amount` / `amount`) |
 | `proxies.items` | each item with a proxy part: amount, `proxy_amount`, embodied impacts of the proxy part |
 | `by_assembly.<assembly>` | `custom_material`, `proxy` (flags), `embodied`, `custom_material_embodied`, `proxy_embodied` |
+
+`stv_results.json` also has `project_name` at the top (`project.name` of `--config`, `""`
+without one; `--combine-results` takes it from `--config`, else from the first input that has
+one), like `meta.project_name` of the TVD results.
 
 The use phase never rests on custom materials or proxies. `--combine-results` keeps the item
 fields, so the block of a combined result is recomputed from all items. The mapping coverage

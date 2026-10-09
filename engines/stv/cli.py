@@ -234,6 +234,7 @@ def _project_level_result(
     result = _run_stv(payload, team=team, template_path="", lifetime_years=lifetime_years,
                       reference_data=reference_data)
     result.use_phase_status.update(settings.use_phase_status())
+    result.project_name = settings.project_name
     return result
 
 
@@ -282,6 +283,7 @@ def _run_architecture_history(
     mapping: StvMapping,
     reference_data: STVReferenceData,
     lifetime_years: int = LIFETIME_YEARS,
+    project_name: str = "",
 ) -> dict[str, object]:
     schedule_paths = sorted(
         schedule_dir.glob("*.csv"),
@@ -302,6 +304,7 @@ def _run_architecture_history(
             payload, team=team, template_path=template_path, lifetime_years=lifetime_years,
             reference_data=reference_data,
         )
+        results.project_name = project_name
         results.mapping_coverage = build_mapping_coverage([report], mapping, results)
         results.deduplication = dedup.block()
         results.dnc_rows = dnc_rows([report])
@@ -495,7 +498,9 @@ def main() -> None:
             project = _project_level_result(parser, settings, team or settings.team,
                                             reference_data, lifetime_years)
         try:
-            combined_results = STVResults.combine(loaded_results, team=team, project=project)
+            combined_results = STVResults.combine(
+                loaded_results, team=team, project=project,
+                project_name=settings.project_name if settings else None)
         except ValueError as exc:
             parser.error(str(exc))
         print(f"note: {combined_results.use_phase_status.get('combined')}", file=sys.stderr)
@@ -537,6 +542,7 @@ def main() -> None:
             mapping=_load_mapping(parser, args.stv_mapping, settings, reference_data),
             reference_data=reference_data,
             lifetime_years=lifetime_years,
+            project_name=settings.project_name if settings else "",
         )
         print(json.dumps(response, indent=2))
         return
@@ -620,6 +626,8 @@ def main() -> None:
         payload, team=team, template_path=args.template, lifetime_years=lifetime_years,
         reference_data=reference_data,
     )
+    if settings is not None:
+        results.project_name = settings.project_name
     status = results.use_phase_status
     if settings is not None and not args.no_use_phase:
         status.update(settings.use_phase_status())

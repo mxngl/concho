@@ -191,10 +191,10 @@ runs them with concho installed non-editable, as in a team repo.
 
 ## Known gaps (follow-ups)
 
-- The dashboards read only what the results JSON has. Not in it yet: the **list of unmapped
-  TVD rows** (only `meta.unmapped_count`; the legacy page still offers the CSV), a
-  `project_name` in `stv_results.json` (the header takes it from the TVD results), and the
-  mapping-rule `note` of proxy rules (the STV page shows category / keyword / material).
+- The dashboards read only what the results JSON has. The unmapped TVD rows (`unmapped_rows`,
+  capped at 100, docs/engines/tvd.md), `project_name` of `stv_results.json` and the note of
+  proxy rules (`mapping_coverage.rules[].proxy_note`) are in it since the P7 follow-ups.
+  Results from before that have none of them; the pages then show the counts only.
 
 - `concho-tvd` takes one `--arch` and one `--struct` file; the pipeline joins several exports
   per discipline, so TVD sees one file per discipline and not the individual exports.
