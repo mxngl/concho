@@ -8,9 +8,10 @@ repo and publishes a dashboard. The logic lives in
 [`scripts/run_pipeline.py`](../scripts/run_pipeline.py), so it also runs locally and in the
 tests without GitHub Actions.
 
-Scope is **Tier 1** (decision D13): TVD + STV. Not in it yet: the schedule (Tier 2), the SQLite
-ingest (P5.3), the data API (P5.4), Concho chat, the schedule dashboard (P7.3) and the Discord/budget alert (P5.2 step 9,
-a TODO in the workflow).
+Scope is **Tier 1** (decision D13): TVD + STV. Not in it yet: the schedule (Tier 2), Concho chat,
+the schedule dashboard (P7.3) and the Discord/budget alert (P5.2 step 9, a TODO in the workflow).
+The SQLite ingest and the local data API (P5.3, P5.4) read the `results/` this pipeline writes
+but are not a workflow step yet: [`data-api.md`](data-api.md).
 
 ## Private repository required
 
@@ -63,7 +64,7 @@ one line.
 | 7 | Pages | uploaded as artifact `dashboard` (always) and deployed to GitHub Pages (unless `CONCHO_PAGES=off`) |
 | 9 | alert | TODO: Discord post + budget alert when the TVD estimate exceeds the target |
 
-Steps 3b (schedule), 5 (SQLite) and 8 (data API) are not in Tier 1.
+Steps 3b (schedule), 5 (SQLite ingest; the code exists, `concho-api ingest`, but is not a workflow step yet, see [`data-api.md`](data-api.md)) and 8 (push to the data API, D2) are not in the workflow.
 
 ## `scripts/run_pipeline.py`
 
@@ -203,5 +204,5 @@ runs them with concho installed non-editable, as in a team repo.
   repeat this: they are listed as package data and `tests/site/test_site.py` checks that
   every file of `dashboards/site/` is covered (and, in the CI job `pipeline`, that they are
   found in the non-editable install).
-- Budget alert / Discord post (P5.2 step 9), SQLite ingest (P5.3), data API (P5.4) and the
-  schedule dashboard (P7.3) are later tasks.
+- Budget alert / Discord post (P5.2 step 9), the ingest as a workflow step, hosting the data
+  API (P5.4, D2) and the schedule dashboard (P7.3) are later tasks.

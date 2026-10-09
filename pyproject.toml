@@ -20,11 +20,19 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
+    # P5.4: the data API and its tests (TestClient needs httpx2 with this starlette).
+    "concho[api]",
+    "httpx2==2.13.0",
     "jsonschema==4.26.0",
     "pytest==9.1.1",
     # P5.2: tests/pipeline/ parses the team workflow template (pipeline.yml).
     "pyyaml==6.0.3",
     "ruff==0.16.9",
+]
+# P5.3/P5.4: the local data API (`concho-api serve`); ingest and queries need only the stdlib.
+api = [
+    "fastapi==0.136.0",
+    "uvicorn==0.53.0",
 ]
 stv = [
     "openpyxl==3.1.5",
@@ -42,6 +50,7 @@ schedule = [
 
 [project.scripts]
 concho = "engines.cli:main"
+concho-api = "engines.api.cli:main"
 concho-schedule = "engines.schedule.cli:main"
 concho-stv = "engines.stv.cli:main"
 concho-tvd = "engines.tvd.cli:main"
