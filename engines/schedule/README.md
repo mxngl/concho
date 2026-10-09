@@ -192,7 +192,7 @@ the bamboo design:
   ```
 - `tests/schedule/test_schedule_equivalence.py` (needs the IPD_Challenge@989a6b7 checkout:
   `IPD_CHALLENGE_DIR`, or `IPD_Challenge` in the P2.1 fixture folder from
-  `scripts/fetch_fixtures.py`; runs in the CI job `reference`, skipped elsewhere): runs the
+  `scripts/fetch_fixtures.py` (private repo `mxngl/concho-fixtures`, see `tests/README.md`); runs in the CI job `reference`, skipped elsewhere): runs the
   original scripts in a temporary copy of the checkout, then each migrated step on the
   original run's intermediate files (per step in isolation, since P3B.8). Every
   CSV/MD/HTML/XML/xlsx output of the 14 original steps must match; only run-root paths, the
