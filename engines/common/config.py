@@ -800,14 +800,6 @@ class ScheduleSection(_Model):
 # ---------------------------------------------------------------------------
 
 
-class Models(_Model):
-    """Model names per agent role (D6: provider still open)."""
-
-    router: NonEmptyStr = Field(description="Model for the router agent.")
-    subagent: NonEmptyStr = Field(description="Model for the subagents.")
-    tts: NonEmptyStr | None = Field(default=None, description="Text-to-speech model (optional).")
-
-
 class Discord(_Model):
     """Discord IDs are given as env var NAMES only, never as IDs."""
 
@@ -833,7 +825,6 @@ class AgentSection(_Model):
     default_language: Annotated[str, StringConstraints(pattern=r"^[a-z]{2}(-[A-Z]{2})?$")] = (
         Field(default="en", description="Answer language (ISO 639-1, e.g. 'en', 'de').")
     )
-    models: Models
     discord: Discord = Field(default_factory=Discord)
     extensions: Extensions = Field(default_factory=Extensions)
 

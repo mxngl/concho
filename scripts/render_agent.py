@@ -30,6 +30,9 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from agent_env import load_env  # noqa: E402
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
 AGENT_DIR = REPO_ROOT / "agent"
 PROMPTS_DIR = AGENT_DIR / "prompts"
@@ -198,17 +201,21 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--config", type=Path, metavar="FILE",
                         help="the team's project_config.json (values may also come from env)")
+    parser.add_argument("--env-file", type=Path, metavar="FILE",
+                        help="read CONCHO_* values from this .env file (the process "
+                             "environment wins)")
     parser.add_argument("--out", type=Path, default=DEFAULT_OUT, metavar="DIR",
                         help=f"output folder (default {DEFAULT_OUT.relative_to(REPO_ROOT)})")
     args = parser.parse_args(argv)
     try:
-        written = render_all(args.out, args.config)
-    except RenderError as exc:
+        env = load_env(args.env_file) if args.env_file else os.environ
+        written = render_all(args.out, args.config, env)
+    except (RenderError, OSError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
     for path in written:
         print(f"wrote {path}")
-    models = model_settings()
+    models = model_settings(env)
     print("models (from env, default {}): router={router} subagent={subagent} tts={tts}"
           .format(DEFAULT_MODEL, **models))
     return 0

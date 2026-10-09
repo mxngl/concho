@@ -25,3 +25,6 @@ exports/**/raw/
 # TVD engine data and outputs (never commit: cost data is RSMeans-derived)
 cost_data.csv
 TVD_Dashboard.html
+
+# Eval reports contain answers built on project data (scripts/run_eval.py)
+eval-report*.json

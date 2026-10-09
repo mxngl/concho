@@ -95,11 +95,6 @@
   },
   "agent": {
     "default_language": "en",
-    "models": {
-      "router": "gpt-4o",
-      "subagent": "gpt-4o-mini",
-      "tts": null
-    },
     "discord": {
       "guild": "DISCORD_GUILD_ID",
       "channels": {

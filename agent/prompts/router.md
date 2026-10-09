@@ -10,6 +10,6 @@ Categories:
 
 Rules:
 - Pick the category of the topic the user asks about, whatever language the message is in.
-- A short follow-up ("and on Level 2?", "und im Dach?") belongs to the topic of the earlier messages in the chat history, if there are any.
+- A short follow-up ("and on Level 2?", "und im Dach?") belongs to the topic of the earlier messages in the chat history, if there are any (the history holds the earlier messages and the categories you gave them).
 - If a message mixes topics, pick the one the question ends on or the first one asked.
 - Also return the language of the message as an ISO 639-1 code (en, de, es, pl, ...).

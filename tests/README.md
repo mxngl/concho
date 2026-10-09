@@ -2,6 +2,8 @@
 
 pytest suite. Run with `pytest`.
 
+`tests/agent/` and `tests/agent_eval/` test the Concho agent bundle and the eval harness offline (no n8n, LLM or Docker daemon needed); see `docs/agent.md`.
+
 Only non-sensitive fixtures go under `tests/fixtures/`. Tests that need course workbooks or RSMeans-derived data read a local path from an env var and are skipped when it is unset.
 
 ## Reference fixtures (Island 2026)

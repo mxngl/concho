@@ -1,0 +1,2 @@
+# discord.py brings aiohttp, which the bot uses for the webhook POST
+discord.py==2.5.2

@@ -39,9 +39,6 @@
           "title": "Default Language",
           "type": "string"
         },
-        "models": {
-          "$ref": "#/$defs/Models"
-        },
         "discord": {
           "$ref": "#/$defs/Discord"
         },
@@ -49,9 +46,6 @@
           "$ref": "#/$defs/Extensions"
         }
       },
-      "required": [
-        "models"
-      ],
       "title": "AgentSection",
       "type": "object"
     },
@@ -571,44 +565,6 @@
         }
       },
       "title": "FilesSection",
-      "type": "object"
-    },
-    "Models": {
-      "additionalProperties": false,
-      "description": "Model names per agent role (D6: provider still open).",
-      "properties": {
-        "router": {
-          "description": "Model for the router agent.",
-          "minLength": 1,
-          "title": "Router",
-          "type": "string"
-        },
-        "subagent": {
-          "description": "Model for the subagents.",
-          "minLength": 1,
-          "title": "Subagent",
-          "type": "string"
-        },
-        "tts": {
-          "anyOf": [
-            {
-              "minLength": 1,
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "Text-to-speech model (optional).",
-          "title": "Tts"
-        }
-      },
-      "required": [
-        "router",
-        "subagent"
-      ],
-      "title": "Models",
       "type": "object"
     },
     "OwnerRatings": {

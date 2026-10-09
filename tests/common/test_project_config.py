@@ -122,6 +122,13 @@ def test_unknown_field_is_rejected(base):
     assert "project.gross_sqft: unknown field" in _errors(base)
 
 
+def test_agent_models_are_not_configured_here(base):
+    """P6.7: models live in the env (CONCHO_MODEL_*), no longer in project_config.json."""
+    base["agent"]["models"] = {"router": "gpt-4o-mini", "subagent": "gpt-4o-mini"}
+    assert "agent.models: unknown field" in _errors(base)
+    assert "models" not in json.loads(ISLAND.read_text(encoding="utf-8"))["agent"]
+
+
 def test_invalid_enum_value(base):
     base["stv"]["course_team"] = "Lagoon"
     assert "stv.course_team" in _errors(base)

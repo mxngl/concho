@@ -1,0 +1,14 @@
+# Build context of agent/api/Dockerfile (the repository root): only the package is needed.
+.git
+.fixtures
+.github
+.pytest_cache
+.ruff_cache
+**/__pycache__
+*.egg-info
+tests
+docs
+revit-addin
+template
+agent/build
+.env

@@ -133,7 +133,7 @@ def test_normalizer_is_one_set_node_with_the_agreed_fields(wf):
     assert norm["type"] == "n8n-nodes-base.set"
     fields = {a["name"] for a in norm["parameters"]["assignments"]["assignments"]}
     assert fields == {"message", "user_id", "user_name", "channel_id", "guild_id", "message_id",
-                      "source", "attachments"}
+                      "session_id", "source", "attachments"}
     assert norm["parameters"]["includeOtherFields"] is False
     feeds = {s for s, d, k, _ in h.edges(wf) if d == "Normalize input" and k == "main"}
     assert feeds == {"Webhook"}

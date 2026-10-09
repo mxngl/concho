@@ -53,8 +53,7 @@
     "adapters": {"alice": false, "fuzor": false, "manufacton": false}
   },
   "agent": {
-    "default_language": "en",
-    "models": {"router": "router-model", "subagent": "subagent-model", "tts": null}
+    "default_language": "en"
   },
   "files": {
     "cost_db": "../tvd_synthetic/cost_db.csv"
