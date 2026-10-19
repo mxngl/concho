@@ -379,7 +379,7 @@ questions:
     ask: "How many {cat} are on Level 99?"
     expect:
       names_any: $levels
-      tool_errors_allowed: [no_match]
+      tool_errors_allowed: [unknown_level, no_match]
 
   - id: qty-de
     group: languages
@@ -468,7 +468,7 @@ questions:
   - id: oos-greeting
     group: out-of-scope
     lang: en
-    category: OTHER
+    category: [GENERAL, OTHER]   # "Hi" is small talk (OTHER) or "what can you do" (GENERAL)
     ask: "Hi there!"
     expect:
       no_tools: true

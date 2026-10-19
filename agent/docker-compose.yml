@@ -14,7 +14,7 @@ name: concho
 
 services:
   postgres:
-    image: postgres:16-alpine
+    image: postgres:17-alpine   # n8n 2.43.8 supports Postgres 17, not 16 (warning at start)
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-concho}

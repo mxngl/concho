@@ -62,6 +62,28 @@ def test_nodes_and_connections_are_consistent(name):
         assert dst in names, f"connection to unknown node {dst!r}"
         assert kind in ("main", "ai_languageModel", "ai_tool", "ai_outputParser", "ai_memory")
 
+UUID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
+
+
+def test_the_webhook_node_has_a_fixed_webhook_id(wf):
+    """Without ``webhookId`` n8n registers the production URL as
+    ``/webhook/<workflow id>/<node name lowercased>/<path>`` (the bot and the eval got HTTP 404
+    on ``/webhook/<path>``). The id must be fixed in the export so every import registers the
+    short URL; it is a UUID and the node is the only webhook of the workflow."""
+    hooks = [n for n in wf["nodes"] if n["type"] == "n8n-nodes-base.webhook"]
+    assert len(hooks) == 1
+    assert UUID_RE.match(hooks[0].get("webhookId", "")), "Webhook node needs a UUID webhookId"
+    assert hooks[0]["webhookId"] != hooks[0]["id"]
+    assert hooks[0]["parameters"]["path"] == render_agent.WEBHOOK_PLACEHOLDER
+    # rendering for a team keeps the id (only the path changes)
+    values = render_agent.resolve_values(None, {"CONCHO_PROJECT_NAME": "P", "CONCHO_LOCATION": "L",
+                                                "CONCHO_COMPLETION_DATE": "2030-01-01",
+                                                "CONCHO_TEAM": "T"})
+    out = render_agent.render_workflow(wf, values, "a" * 32)
+    hook = next(n for n in out["nodes"] if n["type"] == "n8n-nodes-base.webhook")
+    assert hook["webhookId"] == hooks[0]["webhookId"] and hook["parameters"]["path"] == "a" * 32
+
+
 
 def test_every_node_is_reachable_from_a_trigger(wf, err):
     for workflow, trigger in ((wf, "Webhook"), (err, "Error Trigger")):

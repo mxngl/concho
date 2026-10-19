@@ -68,9 +68,54 @@ def test_number_matching_uses_tolerance_and_rounding():
     ("pl", "Klaster Shell jest powyżej celu.", "Shell", "over_target", True),
     ("pl", "Klaster Shell jest poniżej celu.", "Shell", "over_target", False),
     ("en", "I do not know.", "Shell", "over_target", False),
+    # without what_if the first status in the reply wins: "Before" is read as the answer
+    ("en", "Before: Shell is 3,500,000, under target. After: Shell is 4,467,302, over target.",
+     "Shell", "over_target", False),
 ])
 def test_status_heuristic(lang, reply, subject, expected, ok):
     assert ev.check_status(reply, lang, expected, subject)[0] is ok
+
+
+# what-if replies state "before" and "after"; only the status after the change counts
+WHATIF_REPLIES = [
+    # the reply of cost-whatif-cluster-over-target that scored a false negative
+    ("en", "What-if scenario (not the current estimate): Before: Shell is 3,500,000, which is "
+           "under target. After: Shell is 4,467,302, which is over target.", "Shell"),
+    ("de", "Szenario (What-if, nicht der aktuelle Stand): Vorher: Shell liegt mit 3.500.000 "
+           "unter dem Zielwert. Nachher: Shell liegt mit 4.467.302 über dem Zielwert.", "Shell"),
+    ("es", "Escenario hipotetico (no es la estimacion actual): Antes: Shell esta en 3.500.000, "
+           "por debajo del objetivo. Después: Shell esta en 4.467.302, por encima del objetivo.",
+     "Shell"),
+    ("pl", "Scenariusz (what-if, nie obecny kosztorys): Przed: Shell 3 500 000, poniżej celu. "
+           "Po: Shell 4 467 302, powyżej celu.", "Shell"),
+    # the total stays under target while the cluster goes over
+    ("en", "What-if scenario: Before: the grand total is under target. After: the grand total "
+           "is still under target, but Shell is over its target.", "Shell"),
+]
+
+
+@pytest.mark.parametrize("lang, reply, subject", WHATIF_REPLIES)
+def test_what_if_status_is_the_one_after_the_change(lang, reply, subject):
+    assert ev.check_status(reply, lang, "over_target", subject, what_if=True)[0]
+    assert not ev.check_status(reply, lang, "under_target", subject, what_if=True)[0]
+
+
+def test_what_if_reply_without_after_is_read_as_a_whole():
+    reply = "The Shell cluster would be over its target."
+    assert ev.check_status(reply, "en", "over_target", "Shell", what_if=True)[0]
+    assert not ev.check_status(reply, "en", "under_target", "Shell", what_if=True)[0]
+
+
+def test_what_if_question_uses_the_status_after_in_the_score():
+    q = {"id": "cost-whatif-cluster-over-target", "lang": "en", "category": "COST",
+         "expect": {"scenario_label": True, "needs_tools": True,
+                    "status": {"value": "over_target", "subject": "Shell"}}}
+    reply = ("What-if scenario (not the current estimate): Before: Shell is 3,500,000, under "
+             "target. After: Shell is 4,467,302, over target. Snapshot: Week 3 (2027-01-17)")
+    response = dict(GOOD, reply=reply, category="COST")
+    result = ev.score_question(q, response, 2.0)
+    assert result["checks"]["status"]["ok"], result["checks"]["status"]
+    assert result["correct"]
 
 
 # ------------------------------------------------------------------ tool errors and language
@@ -169,6 +214,23 @@ def test_category_is_required_only_where_declared():
     assert not ev.score_question(q, wrong, 1)["correct"]
 
 
+def test_a_set_of_categories_is_accepted():
+    """A greeting may be routed to GENERAL ("what can you do") or OTHER (small talk)."""
+    q = dict(question(no_tools=True), category=["GENERAL", "OTHER"])
+    reply = "Hello there, I can answer questions about cost, carbon and quantities."
+    for category in ("GENERAL", "OTHER"):
+        r = ev.score_question(q, dict(GOOD, reply=reply, category=category, tools=[],
+                                      tool_response_chars=[]), 1)
+        assert r["checks"]["category"]["ok"], category
+    wrong = ev.score_question(q, dict(GOOD, reply=reply, category="COST", tools=[],
+                                      tool_response_chars=[]), 1)
+    assert not wrong["checks"]["category"]["ok"]
+    assert "GENERAL or OTHER" in wrong["checks"]["category"]["detail"]
+    q["expect"]["category_required"] = True
+    assert not ev.score_question(q, dict(GOOD, reply=reply, category="COST", tools=[],
+                                         tool_response_chars=[]), 1)["correct"]
+
+
 def test_overflow_by_size_or_by_message():
     q = question()
     huge = dict(GOOD, tool_response_chars=[ev.TOOL_CHARS_CAP + 1])
@@ -258,8 +320,89 @@ def test_runner_posts_setup_first_in_one_channel_with_the_token(tmp_path, monkey
         {"id": "later", "reason": "tier2"}]
 
 
-def test_a_transport_error_is_scored_not_raised():
-    response, _ = ev.post("http://127.0.0.1:9/none", "t", {"content": "x"})
-    assert response["failed"] is True
+class NotFound(BaseHTTPRequestHandler):
+    """What n8n answers when the production webhook is not registered at this path."""
+    def do_POST(self):
+        data = b'{"code":404,"message":"The requested webhook is not registered."}'
+        self.send_response(404)
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+
+    def log_message(self, *args):
+        pass
+
+
+def free_port() -> int:
+    import socket
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        return sock.getsockname()[1]
+
+
+def test_http_404_is_a_transport_error_not_an_agent_error():
+    server = HTTPServer(("127.0.0.1", 0), NotFound)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        response, _ = ev.post(f"http://127.0.0.1:{server.server_port}/webhook/x", "t",
+                              {"content": "x"})
+    finally:
+        server.shutdown()
+    assert response["transport_error"] == "HTTP 404" and response["failed"] is False
     result = ev.score_question(question(numbers=[number(1.0)]), response, 1.0)
-    assert not result["correct"] and result["tool_error"]
+    assert not result["correct"]
+    assert result["tool_error"] == ("transport error: HTTP 404, is the workflow active / "
+                                    "webhook registered?")
+    assert "agent error" not in result["tool_error"]
+    assert result["transport_error"] == "HTTP 404"
+
+
+def test_connection_refused_is_a_transport_error():
+    response, _ = ev.post(f"http://127.0.0.1:{free_port()}/webhook/x", "t", {"content": "x"})
+    assert response["transport_error"] == "connection refused"
+    error = ev.detect_tool_error(response, [])
+    assert error.startswith("transport error: connection refused,")
+    assert "agent error" not in error
+
+
+def test_unauthorized_names_the_token_and_a_non_json_answer_is_a_transport_error():
+    assert "CONCHO_WEBHOOK_TOKEN" in ev.transport_error_message("HTTP 403")
+    assert "CONCHO_WEBHOOK_TOKEN" in ev.transport_error_message("HTTP 401")
+
+    class Html(NotFound):
+        def do_POST(self):
+            data = b"<html>proxy</html>"
+            self.send_response(200)
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+
+    server = HTTPServer(("127.0.0.1", 0), Html)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        response, _ = ev.post(f"http://127.0.0.1:{server.server_port}/x", "t", {})
+    finally:
+        server.shutdown()
+    assert response["transport_error"] == "the answer is not JSON"
+
+
+def test_the_runner_reports_transport_errors_separately(tmp_path, monkeypatch, capsys):
+    server = HTTPServer(("127.0.0.1", 0), NotFound)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    eval_set = {"snapshot": {"id": "S"}, "settings": {}, "questions": [
+        {"id": "q1", "group": "cost", "lang": "en", "category": "COST", "ask": "total?",
+         "expect": {"numbers": [number(4467302.0)]}}]}
+    path = tmp_path / "set.json"
+    path.write_text(json.dumps(eval_set), encoding="utf-8")
+    monkeypatch.setenv("CONCHO_WEBHOOK_TOKEN", "t0k")
+    try:
+        code = ev.main(["--set", str(path), "--report", str(tmp_path / "r.json"),
+                        "--url", f"http://127.0.0.1:{server.server_port}/webhook/x"])
+    finally:
+        server.shutdown()
+    out = capsys.readouterr().out
+    assert code == 1
+    assert "transport error: HTTP 404, is the workflow active / webhook registered?" in out
+    assert "failed=true" not in out
+    report = json.loads((tmp_path / "r.json").read_text(encoding="utf-8"))
+    assert report["summary"]["transport_errors"] == 1

@@ -136,6 +136,11 @@ def test_unknown_names_questions_list_valid_names(built):
     assert set(q["cost-unknown-cluster"]["expect"]["names_any"]) == set(syn.LINE_ITEMS)
     assert "L1" in q["qty-unknown-level"]["expect"]["names_any"]
     assert q["oos-weather"]["expect"]["no_tools"] and q["oos-weather"]["category"] == "OTHER"
+    # a greeting is small talk (OTHER) or "what can you do" (GENERAL); an unknown level is an
+    # unknown_level error of /elements/count (no_match for /quantities)
+    assert q["oos-greeting"]["category"] == ["GENERAL", "OTHER"]
+    assert {"unknown_level", "no_match"} <= set(
+        q["qty-unknown-level"]["expect"]["tool_errors_allowed"])
 
 
 def test_the_set_is_valid_json_and_names_the_snapshot(built):

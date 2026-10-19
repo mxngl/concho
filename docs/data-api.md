@@ -116,9 +116,9 @@ All `GET` unless noted; all take an optional `snapshot=<id>` (default: the lates
 | `/cost/what_if?ac=&change_pct=` | scenario, computed server-side: the line items of that code cost `change_pct` % more (e.g. `ac=B30&change_pct=10` = "roof +10 %"); new grand total, delta to target, affected clusters, each with its own `target`, `delta_to_target_after` and `status_after` (`over_target` / `under_target` / `on_target`; agents quote it and never compare numbers themselves). Percent-of-subtotal lines (contingency) not selected by the code are rescaled with the subtotal; fixed lump sums are unchanged. Labelled `what_if` |
 | `/carbon/summary` | STV life cycle / embodied / use phase per metric (kgCO2e, MJ, kg, kg CFC-11e), % of target, top assemblies, use-phase-modeled warning, mapping coverage |
 | `/carbon?stv_assembly=&material=` | STV items (`material` = substring of the material type) with amount, unit, kgCO2e, MJ, water |
-| `/carbon/what_if?material_from=&material_to=&stv_assembly=` | all of `material_from` replaced by `material_to` (same amount): embodied and life cycle before/after. `ac` is accepted as an alias of `stv_assembly` (STV items are keyed by STV assembly, not by Uniformat code). The per-unit factor of `material_to` is read from this snapshot's results: the API has **no LCA catalog** (course data), so `material_to` must already occur in the project, with the same unit (else `unknown_material_factor`, `unit_mismatch`) |
+| `/carbon/what_if?material_from=&material_to=&stv_assembly=` | all of `material_from` replaced by `material_to` (same amount): embodied and life cycle before/after. `ac` is accepted as an alias of `stv_assembly` (STV items are keyed by STV assembly, not by Uniformat code). The per-unit factor of `material_to` is read from this snapshot's results: the API has **no LCA catalog** (course data), so `material_to` must already occur in the project, with the same unit (else `unknown_material_factor`, `unit_mismatch`). Names are exact, with the unit suffix (`Concrete (sf)`); `no_match` / `unknown_material_factor` list the valid names in `similar` (or `materials`) |
 | `/quantities?category=&level=&ac=` | category x level x AC rows with element count, area (SF), length (LF), volume (CF), and totals |
-| `/elements/count?category=&level=&ac=&discipline=` | number of (non-DNC) elements, per discipline |
+| `/elements/count?category=&level=&ac=&discipline=` | number of (non-DNC) elements, per discipline; a `level` that does not exist is `unknown_level` with the valid `levels`, not count 0 |
 | `/quality` | the `data_quality` rows; notes whether elements are stale |
 | `/snapshots?limit=` | snapshots, newest first (default 20), with totals and element status |
 | `/compare?a=&b=` | snapshot `b` against `a`: cost total and per cluster, carbon, element count |
@@ -140,7 +140,7 @@ All `GET` unless noted; all take an optional `snapshot=<id>` (default: the lates
   proxy-rule quantities says so in `labels`, and each STV row has `custom_material` / `proxy` /
   `estimated`. What-if and free-SQL answers are labelled `what_if` / `sql`.
 - Errors are `{"error": code, "hint": …}`: 401 `unauthorized`; 404 `unknown_snapshot`,
-  `unknown_cluster`, `no_match`, `no_stv`, `elements_unavailable`, `unknown_material_factor`,
+  `unknown_cluster`, `unknown_level` (`/elements/count`, lists the valid `levels`), `no_match`, `no_stv`, `elements_unavailable`, `unknown_material_factor`,
   `no_snapshots`; 409 `ambiguous_factor`; 422 `bad_parameter`, `bad_change_pct`,
   `unit_mismatch`; 400 `not_a_select`, `sql_error`, `query_too_slow`.
 

@@ -18,6 +18,7 @@
       ],
       "id": "f9a24362-b8b0-5d74-a4e8-65bc0ba4c6a6",
       "name": "Webhook",
+      "webhookId": "7c1e5b0a-3d84-4f6a-9b52-0e8a6d1c47f3",
       "credentials": {
         "httpHeaderAuth": {
           "id": "concho-webhook-auth",
@@ -608,7 +609,7 @@
     },
     {
       "parameters": {
-        "toolDescription": "Scenario: all of material_from replaced by material_to (same amount). Returns embodied and life cycle before and after. material_to must already occur in the project with the same unit. Labelled what_if. The answer names its snapshot. If it is an error with the code too_many_results, ask the user to narrow the question instead of calling again.",
+        "toolDescription": "Scenario: all of material_from replaced by material_to (same amount). Returns embodied and life cycle before and after. Material names are exact, including the unit suffix (for example 'Concrete (sf)', not 'Concrete'). material_to must already occur in the project with the same unit. If it answers no_match or unknown_material_factor, the result lists the valid names in 'similar' / 'materials': call once more with the closest one. Labelled what_if. The answer names its snapshot. If it is an error with the code too_many_results, ask the user to narrow the question instead of calling again.",
         "url": "={{ $env.CONCHO_API_URL }}/carbon/what_if",
         "sendHeaders": true,
         "headerParameters": {
@@ -631,11 +632,11 @@
           "parameters": [
             {
               "name": "material_from",
-              "value": "={{ $fromAI('material_from', 'Material type to replace, e.g. Concrete', 'string', '') }}"
+              "value": "={{ $fromAI('material_from', 'Material type to replace, exactly as named in the data including the unit suffix, e.g. Concrete (sf)', 'string', '') }}"
             },
             {
               "name": "material_to",
-              "value": "={{ $fromAI('material_to', 'Material type to use instead; must already occur in the project', 'string', '') }}"
+              "value": "={{ $fromAI('material_to', 'Material type to use instead, exactly as named in the data including the unit suffix; must already occur in the project', 'string', '') }}"
             },
             {
               "name": "stv_assembly",
@@ -710,7 +711,7 @@
     },
     {
       "parameters": {
-        "toolDescription": "Number of elements (DNC elements excluded), per discipline. Filter by category, level, Assembly Code prefix and/or discipline. The answer names its snapshot. If it is an error with the code too_many_results, ask the user to narrow the question instead of calling again.",
+        "toolDescription": "Number of elements (DNC elements excluded), per discipline. Filter by category, level, Assembly Code prefix and/or discipline. A level that does not exist answers the error unknown_level with the valid levels. It cannot count unmapped elements (use get_quality for that). The answer names its snapshot. If it is an error with the code too_many_results, ask the user to narrow the question instead of calling again.",
         "url": "={{ $env.CONCHO_API_URL }}/elements/count",
         "sendHeaders": true,
         "headerParameters": {
@@ -737,7 +738,7 @@
             },
             {
               "name": "level",
-              "value": "={{ $fromAI('level', 'Level name. Leave empty for all.', 'string', '') }}"
+              "value": "={{ $fromAI('level', 'Level name, as the user wrote it. Leave empty for all.', 'string', '') }}"
             },
             {
               "name": "ac",
@@ -843,7 +844,7 @@
     },
     {
       "parameters": {
-        "toolDescription": "Data quality of a snapshot: unmapped elements, missing levels, materials or quantities, duplicates removed. The answer names its snapshot. If it is an error with the code too_many_results, ask the user to narrow the question instead of calling again.",
+        "toolDescription": "Data quality of a snapshot: unmapped elements (metric unmapped_elements: scope tvd = elements without an Assembly Code, not priced; scope stv = elements not mapped to a carbon material), missing levels, materials or quantities, duplicates removed. Use it for every question about unmapped elements or data gaps; never answer those with a total element count. The answer names its snapshot. If it is an error with the code too_many_results, ask the user to narrow the question instead of calling again.",
         "url": "={{ $env.CONCHO_API_URL }}/quality",
         "sendHeaders": true,
         "headerParameters": {
@@ -1257,7 +1258,7 @@
             {
               "id": "bce51c09-84f4-536d-b6fb-8d7edf462d72",
               "name": "tool_errors",
-              "value": "={{ ($json.intermediateSteps || []).map(s => { const o = String(s.observation ?? ''); const m = o.match(/\"error\"\\s*:\\s*\"([a-z_]+)\"/); return m ? m[1] : (/^\\s*error|ECONNREFUSED|ENOTFOUND|ETIMEDOUT|status code|socket hang up/i.test(o) ? 'tool_failed' : ''); }).filter(Boolean) }}",
+              "value": "={{ ($json.intermediateSteps || []).map(s => { const o = String(s.observation ?? ''); const m = o.match(/\"error\"\\s*:\\s*\"([a-z_]+)\"/); return m ? m[1] : (/^\\s*error|ECONNREFUSED|ECONNRESET|ENOTFOUND|EAI_AGAIN|ETIMEDOUT|refused the connection|perhaps it is offline|timed out|getaddrinfo|status code|socket hang up/i.test(o) ? 'tool_failed' : ''); }).filter(Boolean) }}",
               "type": "array"
             },
             {
@@ -1270,6 +1271,12 @@
               "id": "7025b00d-b031-5cbb-bf45-4037409096f4",
               "name": "failed",
               "value": "={{ $json.error === true }}",
+              "type": "boolean"
+            },
+            {
+              "id": "d3a6f2c1-7b0e-5c8a-9e41-2f6b8d0a1c57",
+              "name": "data_unreachable",
+              "value": "={{ /not (?:currently )?(?:reachable|accessible|available right now)|unreachable|(?:can'?t|cannot|could not|couldn'?t|unable to|failed to) (?:reach|connect|access|retrieve|fetch|load|get)|temporarily unavailable|service (?:is )?unavailable|connection (?:error|refused|failed)|nicht erreichbar|keine verbindung|kein zugriff|nicht auf die daten zugreifen|vorübergehend nicht verfügbar|no (?:se )?pu(?:do|edo) (?:acceder|conectar|obtener)|no est[áa] disponible en este momento|inaccesible|nie mogę (?:uzyskać|połączyć|pobrać)|brak dostępu|niedostępn|nie udało się (?:połączyć|pobrać)/i.test(($json.output || '').toString()) }}",
               "type": "boolean"
             }
           ]
@@ -1477,6 +1484,26 @@
             {
               "id": "3602e590-e7ca-5eec-ac19-d0430315df7d",
               "leftValue": "={{ $json.failed }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "false",
+                "singleValue": true
+              }
+            },
+            {
+              "id": "6e2b9c40-1a7d-5f38-8c06-b4d9a3e57f12",
+              "leftValue": "={{ ($json.tool_errors || []).length === 0 }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            },
+            {
+              "id": "a81f5d37-c492-5e6b-b0d3-97e4c2a68f05",
+              "leftValue": "={{ $json.data_unreachable }}",
               "rightValue": "",
               "operator": {
                 "type": "boolean",

@@ -5,9 +5,11 @@ itself runs against a real Postgres when ``CONCHO_TEST_PSQL`` holds psql's conne
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import shlex
+import shutil
 import subprocess
 
 import agent_helpers as h
@@ -95,13 +97,116 @@ def test_history_reaches_the_router_and_every_subagent(wf):
     assert "history" in classified, "the history travels with the item to the subagents"
 
 
+def js(expression: str, item: dict):
+    """Evaluate an n8n ``={{ ... }}`` expression with ``$json`` = ``item`` in node."""
+    assert expression.startswith("={{") and expression.endswith("}}"), expression
+    code = ("const $json = JSON.parse(require('fs').readFileSync(0, 'utf8'));"
+            f"process.stdout.write(JSON.stringify({expression[3:-2]}));")
+    proc = subprocess.run(["node", "-e", code], input=json.dumps(item), capture_output=True,
+                          text=True)
+    assert proc.returncode == 0, proc.stderr
+    return json.loads(proc.stdout)
+
+
+needs_node = pytest.mark.skipif(shutil.which("node") is None, reason="node is not installed")
+
+
+def gate(wf, item: dict, evaluate=js) -> bool:
+    """Does ``Remember turn?`` let this item through? (all conditions, combinator AND)"""
+    for cond in h.by_name(wf)["Remember turn?"]["parameters"]["conditions"]["conditions"]:
+        value = evaluate(cond["leftValue"], item)
+        op = cond["operator"]
+        if op["type"] == "boolean":
+            ok = value is (op["operation"] == "true")
+        else:
+            assert op["operation"] == "notEmpty"
+            ok = bool(value)
+        if not ok:
+            return False
+    return True
+
+
 def test_only_successful_turns_of_known_users_are_saved(wf):
-    gate = h.by_name(wf)["Remember turn?"]["parameters"]["conditions"]["conditions"]
-    left = {c["leftValue"] for c in gate}
+    gate_nodes = h.by_name(wf)["Remember turn?"]["parameters"]["conditions"]
+    assert gate_nodes["combinator"] == "and"
+    left = {c["leftValue"] for c in gate_nodes["conditions"]}
     assert left == {"={{ $json.failed }}", "={{ $json.user_id }}", "={{ $json.reply }}",
-                    "={{ $json.channel_id }}"}
-    assert next(c for c in gate if c["leftValue"] == "={{ $json.failed }}")["operator"][
-        "operation"] == "false"
+                    "={{ $json.channel_id }}", "={{ ($json.tool_errors || []).length === 0 }}",
+                    "={{ $json.data_unreachable }}"}
+    assert next(c for c in gate_nodes["conditions"] if c["leftValue"] == "={{ $json.failed }}")[
+        "operator"]["operation"] == "false"
+
+
+GOOD_TURN = {"failed": False, "user_id": "u1", "channel_id": "c1", "reply": "Total is 16,081,484.",
+             "tool_errors": [], "data_unreachable": False}
+
+
+@needs_node
+@pytest.mark.parametrize("change, saved", [
+    ({}, True),
+    ({"tool_errors": ["tool_failed"]}, False),         # data API stopped
+    ({"tool_errors": ["too_many_results"]}, False),    # any tool error: not stored
+    ({"tool_errors": ["unknown_cluster", "no_match"]}, False),
+    ({"data_unreachable": True}, False),               # "data not reachable" fallback reply
+    ({"failed": True}, False),
+    ({"reply": ""}, False),
+    ({"user_id": ""}, False),
+    ({"channel_id": ""}, False),
+])
+def test_turns_with_a_tool_error_are_not_saved(wf, change, saved):
+    """Max saw the "data not reachable" reply in concho_memory after stopping the data API:
+    neither the user message nor the reply of such a turn may be stored."""
+    assert gate(wf, {**GOOD_TURN, **change}) is saved
+
+
+@needs_node
+def test_a_tool_failure_and_an_unreachable_reply_are_detected_in_compose_reply(wf):
+    assigns = {a["name"]: a["value"] for a in
+               h.by_name(wf)["Compose reply"]["parameters"]["assignments"]["assignments"]}
+
+    def step(observation):
+        return {"action": {"tool": "get_cost_summary"}, "observation": observation}
+
+    def errors(observation):
+        return js(assigns["tool_errors"], {"intermediateSteps": [step(observation)]})
+
+    # what the HTTP tool returns when the data API is stopped, in the wording of n8n
+    assert errors("The service refused the connection - perhaps it is offline") == ["tool_failed"]
+    assert errors("connect ECONNREFUSED 172.19.0.3:8000") == ["tool_failed"]
+    assert errors("getaddrinfo ENOTFOUND data-api") == ["tool_failed"]
+    assert errors('{"error": "unknown_cluster", "hint": "x"}') == ["unknown_cluster"]
+    assert errors('{"snapshot": {"id": "S"}, "grand_total": 1}') == []
+    assert js(assigns["tool_errors"], {"intermediateSteps": []}) == []
+
+    def unreachable(reply):
+        return js(assigns["data_unreachable"], {"output": reply})
+
+    for reply in ("Sorry, the data is currently not reachable. Please try again later.",
+                  "I could not retrieve the data right now.",
+                  "I can't access the project data at the moment.",
+                  "Die Daten sind nicht erreichbar.",
+                  "Ich habe keine Verbindung zur Datenquelle.",
+                  "No se pudo acceder a los datos.",
+                  "No puedo acceder a los datos.",
+                  "Brak dostępu do danych.",
+                  "Nie udało się pobrać danych."):
+        assert unreachable(reply) is True, reply
+    for reply in ("The grand total is 16,081,484 and the target is 15,500,000.",
+                  "Der Gesamtbetrag liegt unter dem Zielwert.", "", "Hi! I can help with cost."):
+        assert unreachable(reply) is False, reply
+
+
+def test_memory_sql_and_docs_say_tool_error_turns_are_not_stored():
+    def flat(text: str) -> str:
+        return re.sub(r"\s*--\s*|\s+", " ", text)
+
+    sql = flat(SQL_FILE.read_text(encoding="utf-8"))
+    docs = flat((h.REPO_ROOT / "docs" / "agent.md").read_text(encoding="utf-8"))
+    for text in (sql, docs):
+        assert "Failed turns are not stored" not in text
+        assert "tool_errors not empty" in text or "tool_errors` not empty" in text
+    assert "neither the question nor the reply is stored" in sql
+    assert "**not stored**" in docs and "data_unreachable" in docs
 
 
 def test_prompts_use_the_history_only_for_follow_ups():

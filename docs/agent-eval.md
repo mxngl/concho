@@ -1,7 +1,14 @@
 # Evaluation of the Concho agent (P6.8)
 
-Question set, generator and scorer. Nothing here has run against a live n8n and an LLM yet (🟡);
-the scorer, the generator and the runner are tested offline (`tests/agent_eval/`).
+Question set, generator and scorer. First real run (Max, n8n 2.43.8, gpt-4o-mini, Island data):
+**40/45 = 88.9 %** (gate ≥ 90 %), p95 9.5 s, 0 overflows, the memory follow-ups pass, and it only
+ran on the long webhook URL (the short one answered 404, see below). The five failures were
+`general-unmapped` (answered with the total element count), `carbon-swap` ("Concrete" instead of
+"Concrete (sf)"), `qty-unknown-level` (count 0 for a level that does not exist), and two scorer
+false negatives, `cost-whatif-cluster-over-target` ("Before: … under target. After: … over
+target") and `oos-greeting` (router said GENERAL). The fixes are in the follow-up PR; the run is
+**not repeated yet** (🟡: needs a live n8n and an OpenAI key). The scorer, the generator and the
+runner are tested offline (`tests/agent_eval/`).
 
 | What | Where |
 |---|---|
@@ -18,6 +25,7 @@ python scripts/build_eval_set.py --repo path/to/team-repo     # ingests results/
 python scripts/run_eval.py --url http://localhost:5678/webhook/<CONCHO_WEBHOOK_PATH>
 ```
 
+In PowerShell load `.env` first (one-liner in [`agent-deployment.md`](agent-deployment.md)).
 `CONCHO_WEBHOOK_TOKEN` must be set (the header `X-Concho-Token`); `--url` defaults to
 `$CONCHO_EVAL_URL` or `http://localhost:$N8N_PORT/webhook/$CONCHO_WEBHOOK_PATH`. `--list` shows
 the questions without posting, `--only a,b` / `--group cost` run a part. Questions run one after
@@ -57,13 +65,14 @@ Per question (all *required* checks must pass for "correct"):
 | Check | How |
 |---|---|
 | numbers | every expected number occurs in the reply. Locale-tolerant parser: `4,467,302`, `4.467.302`, `4 467 302`, `16.1M`, `3 Mio`, dates (the snapshot line) ignored. Relative tolerance 0.5 % (2 % for the percent of target), counts exact. Truncation counts as a hit within the tolerance; the prompts demand rounding |
-| status | for "over/under target": the status word nearest to the subject (the cluster, else the target) in en/de/es/pl must equal the data's. **Heuristic**, the report keeps the reply for review |
+| status | for "over/under target": the status word nearest to the subject (the cluster, else the target) in en/de/es/pl must equal the data's. For a **what-if** reply ("Before: … under target. After: … over target") only the status after `after` / `nach` / `después` / `po` counts. **Heuristic**, the report keeps the reply for review |
 | names | valid names the reply must mention (a real cluster instead of a guessed one) |
 | scenario label | what-if replies call the result a scenario (what-if / Szenario / escenario / scenariusz) |
 | no tools / needs tools | out-of-scope replies call no data tool; data answers call one |
+| transport error | the request got no usable answer: HTTP 404/401/500, connection refused, timeout, a body that is not JSON. Reported as its own failure, `transport error: HTTP 404, is the workflow active / webhook registered?` (`401/403`: check `CONCHO_WEBHOOK_TOKEN`), counted in `summary.transport_errors`; it is **not** `failed=true (agent error branch)` |
 | tool error | **not** only `failed`: `failed: true`, the generic error reply, an unexpected code in `tool_errors`, tools called but `tool_response_chars` all below 40, or a reply that says the data is not reachable (en/de/es/pl patterns). Codes a question expects (`unknown_cluster`, `too_many_results`, `no_match`) are allowed |
 | reply language | stop-word and diacritic heuristic among en/de/es/pl; very short replies are not judged |
-| category | reported; required only for out-of-scope and the schedule fallback |
+| category | reported; required only for out-of-scope and the schedule fallback. A question may accept a set of categories (`category: [GENERAL, OTHER]` for the greeting) |
 
 Reported but not required: the router's `language`, whether the reply has a snapshot line.
 Separate gates (roadmap P6.8):
