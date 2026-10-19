@@ -374,6 +374,18 @@ def carbon(conn: sqlite3.Connection, snap: sqlite3.Row, stv_assembly: str | None
                  rows=[_item_row(r) for r in rows])
 
 
+def _material_names(conn: sqlite3.Connection, sid: str, text: str) -> tuple[list[str], list[str]]:
+    """``(similar, materials)`` for a material name that did not match: the material types that
+    contain ``text`` (or are contained in it, e.g. ``Concrete`` for ``Concrete (sf)``), and, when
+    none does, the material types of the project (so the caller can pick a valid one)."""
+    wanted = text.strip().lower()
+    names = [r[0] for r in conn.execute(
+        "SELECT DISTINCT material_type FROM stv_items WHERE snapshot_id=? AND material_type "
+        "IS NOT NULL AND material_type <> '' ORDER BY material_type", (sid,))]
+    similar = [n for n in names if wanted and (wanted in n.lower() or n.lower() in wanted)]
+    return similar[:20], ([] if similar else names[:MAX_ROWS])
+
+
 def carbon_what_if(conn: sqlite3.Connection, snap: sqlite3.Row, material_from: str,
                    material_to: str, stv_assembly: str | None = None) -> dict[str, Any]:
     """Scenario: all of ``material_from`` is ``material_to`` instead (same quantity).
@@ -392,20 +404,21 @@ def carbon_what_if(conn: sqlite3.Connection, snap: sqlite3.Row, material_from: s
     src = conn.execute(f"SELECT * FROM stv_items WHERE {' AND '.join(where)} ORDER BY item_no",
                        args).fetchall()
     if not src:
-        have = [r[0] for r in conn.execute(
-            "SELECT DISTINCT material_type FROM stv_items WHERE snapshot_id=? "
-            "AND instr(lower(material_type), lower(?)) > 0 LIMIT 20", (sid, material_from))]
-        raise ApiError(404, "no_match", "material_from must be a material_type of this project "
-                       "(exact name, see GET /carbon)", material_from=material_from,
-                       similar=have)
+        similar, materials = _material_names(conn, sid, material_from)
+        raise ApiError(404, "no_match", "material_from must be a material_type of this project, "
+                       "spelled exactly as in the data including the unit suffix; retry once "
+                       "with the closest name in similar (or materials)",
+                       material_from=material_from, similar=similar, materials=materials)
     dest = conn.execute(
         "SELECT * FROM stv_items WHERE snapshot_id=? AND lower(material_type)=lower(?) "
         "AND carbon_per_unit IS NOT NULL", (sid, material_to.strip())).fetchall()
     if not dest:
+        similar, materials = _material_names(conn, sid, material_to)
         raise ApiError(404, "unknown_material_factor",
                        "the API has no LCA catalog: material_to must already be used in this "
-                       "project (GET /carbon); add it to the model or mapping first",
-                       material_to=material_to)
+                       "project, spelled exactly as in the data including the unit suffix "
+                       "(see similar / materials); add it to the model or mapping first",
+                       material_to=material_to, similar=similar, materials=materials)
     out_rows, before, after = [], 0.0, 0.0
     for s in src:
         same = [d for d in dest if d["assembly"] == s["assembly"]] or dest
@@ -507,11 +520,23 @@ def quantities(conn: sqlite3.Connection, snap: sqlite3.Row, category: str | None
               for r in rows])
 
 
+def _check_level(conn: sqlite3.Connection, sid: str, level: str | None) -> None:
+    if not level or not level.strip():
+        return
+    names = [r[0] for r in conn.execute(
+        "SELECT DISTINCT level FROM elements WHERE snapshot_id=? AND level IS NOT NULL "
+        "AND level <> '' ORDER BY level", (sid,))]
+    if level.strip().lower() not in {n.lower() for n in names}:
+        raise ApiError(404, "unknown_level", "use one of the levels of this snapshot",
+                       level=level, levels=names[:MAX_ROWS])
+
+
 def elements_count(conn: sqlite3.Connection, snap: sqlite3.Row, category: str | None = None,
                    level: str | None = None, ac: str | None = None,
                    discipline: str | None = None) -> dict[str, Any]:
     _require_elements(snap)
     sid = snap["snapshot_id"]
+    _check_level(conn, sid, level)   # a level that does not exist is an error, not "0 elements"
     where, args = ["snapshot_id = ?"], [sid]
     if category:
         where.append("lower(category) = lower(?)")

@@ -3,8 +3,8 @@ You classify one chat message of a project team into exactly one category. The p
 Categories:
 - COST: price, budget, estimate, target, over or under budget, cost per SF, cost clusters, cost line items, Assembly Codes with money, cost what-if scenarios ("what if the roof costs 10% more").
 - CARBON: CO2 or kgCO2e, embodied carbon, life cycle, energy, water, ozone, sustainability targets (STV), materials by emissions, material swap scenarios for emissions.
-- QUANTITY: how many or how much of building elements: counts, areas, lengths, volumes per category, level or Assembly Code (walls, floors, doors, ...).
-- GENERAL: the project as a whole or the data itself: overview, status, snapshots and history, comparing two snapshots, data quality or missing parameters, what the assistant can do, greetings that ask for help.
+- QUANTITY: how many or how much of building elements: counts, areas, lengths, volumes per category, level or Assembly Code (walls, floors, doors, ...). Not for questions about what is missing or unmapped in the data: those are GENERAL.
+- GENERAL: the project as a whole or the data itself: overview, status, snapshots and history, comparing two snapshots, data quality, unmapped elements or elements without an Assembly Code, missing levels, materials or quantities, duplicates ("how many elements have no Assembly Code?" is GENERAL, not QUANTITY), what the assistant can do, greetings that ask for help.
 - SCHEDULE: dates, durations, sequence, phases, tasks, deliveries, takt, who works where and when.
 - OTHER: anything else (small talk, general knowledge, requests unrelated to the project data).
 

@@ -146,3 +146,71 @@ def test_prompts_name_exactly_the_tools_of_their_agent():
         text = ra.render_prompt(name, FICTIONAL)
         named = {t for t in every if re.search(rf"\b{t}\b", text)}
         assert named == expected, f"{name}: {sorted(named ^ expected)}"
+
+
+# ------------------------------------------------------------------ fixes from the first real run
+
+
+def rendered(name: str) -> str:
+    return ra.render_prompt(name, FICTIONAL)
+
+
+def tool_nodes():
+    return h.by_name(h.load("concho.json"))
+
+
+def test_unmapped_and_data_quality_questions_are_routed_to_general():
+    """"How many elements have no Assembly Code?" went to QUANTITY and was answered with the
+    total element count (2,533 instead of the 1,693 unmapped)."""
+    router = rendered("router")
+    general = next(ln for ln in router.splitlines() if ln.startswith("- GENERAL:"))
+    quantity = next(ln for ln in router.splitlines() if ln.startswith("- QUANTITY:"))
+    assert "unmapped" in general and "without an Assembly Code" in general
+    assert "data quality" in general
+    assert "GENERAL" in quantity and "unmapped" in quantity   # QUANTITY says: not for these
+
+
+def test_the_agent_that_answers_unmapped_questions_has_the_quality_tool():
+    wf = h.load("concho.json")
+    tools = {s for s, d, kind, _ in h.edges(wf) if d == "General Agent" and kind == "ai_tool"}
+    assert "get_quality" in tools
+    desc = tool_nodes()["get_quality"]["parameters"]["toolDescription"]
+    assert "unmapped_elements" in desc and "Assembly Code" in desc
+    general = rendered("general")
+    assert "get_quality" in general and "unmapped_elements" in general
+    assert "Never answer with the number of all elements" in general
+
+
+def test_a_total_is_never_the_answer_to_unmapped_in_any_agent():
+    common = (h.PROMPTS / "common.md").read_text(encoding="utf-8")
+    assert re.search(r"count of all elements or any total never answers a question about "
+                     r"unmapped elements", common)
+    for name in ("cost", "carbon", "quantity", "general", "fallback"):
+        assert "never answers a question about unmapped" in rendered(name), name
+    quantity = rendered("quantity")
+    assert "cannot count unmapped elements" in quantity
+    assert "Never answer such a question" in quantity
+
+
+def test_material_names_are_exact_and_one_retry_uses_the_names_the_tool_offers():
+    """The agent called carbon_what_if with "Concrete" instead of "Concrete (sf)", got no_match
+    and asked the user."""
+    carbon = rendered("carbon")
+    assert "including the unit suffix" in carbon and '"Concrete (sf)"' in carbon
+    assert "no_match" in carbon and "similar" in carbon and "materials" in carbon
+    assert "once more with the closest name" in carbon and "Do not ask the user first" in carbon
+    tool = tool_nodes()["carbon_what_if"]["parameters"]
+    assert "unit suffix" in tool["toolDescription"] and "no_match" in tool["toolDescription"]
+    params = {p["name"]: p["value"] for p in tool["queryParameters"]["parameters"]}
+    assert "unit suffix" in params["material_from"] and "unit suffix" in params["material_to"]
+    assert "e.g. Concrete'" not in params["material_from"]   # the old example without the suffix
+    # the retry fits the budget of two calls per question
+    assert "at most 2 tool calls" in rendered("carbon")
+
+
+def test_unknown_level_is_explained_not_reported_as_zero():
+    quantity = rendered("quantity")
+    assert "unknown_level" in quantity and "does not exist" in quantity
+    assert "list the valid levels" in quantity and 'never report "0 elements"' in quantity
+    desc = tool_nodes()["count_elements"]["parameters"]["toolDescription"]
+    assert "unknown_level" in desc

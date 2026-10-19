@@ -106,6 +106,16 @@ def test_data_api_reads_the_team_repo_read_only_and_keeps_its_db_in_a_volume(com
     assert compose["services"]["n8n"]["depends_on"]["data-api"]["condition"] == "service_healthy"
 
 
+def test_postgres_is_a_version_n8n_supports(compose):
+    """n8n 2.43.8 warns that Postgres 16 is outside its supported range; memory.sql was
+    re-checked on 17. An existing version-16 pgdata volume does not start on 17: the docs say
+    to remove it."""
+    assert compose["services"]["postgres"]["image"] == "postgres:17-alpine"
+    deployment = (h.REPO_ROOT / "docs" / "agent-deployment.md").read_text(encoding="utf-8")
+    assert "postgres:17-alpine" in deployment and "docker compose" in deployment
+    assert "down -v" in deployment
+
+
 def test_postgres_creates_the_memory_table_on_first_start(compose):
     volumes = compose["services"]["postgres"]["volumes"]
     assert "./memory.sql:/docker-entrypoint-initdb.d/10-memory.sql:ro" in volumes
@@ -115,6 +125,9 @@ def test_postgres_creates_the_memory_table_on_first_start(compose):
 def test_the_bot_only_talks_to_the_webhook(compose):
     env = compose["services"]["bot"]["environment"]
     assert env["CONCHO_WEBHOOK_URL"].startswith("http://n8n:5678/webhook/${CONCHO_WEBHOOK_PATH")
+    # the short URL, no workflow id and no node name in it (needs webhookId in concho.json)
+    assert re.fullmatch(r"http://n8n:5678/webhook/\$\{CONCHO_WEBHOOK_PATH[^}]*\}",
+                        env["CONCHO_WEBHOOK_URL"])
     assert set(env) == {"DISCORD_BOT_TOKEN", "DISCORD_GUILD_ID", "DISCORD_CHANNEL_ID_ASK",
                         "CONCHO_WEBHOOK_URL", "CONCHO_WEBHOOK_TOKEN"}
     assert "USER concho" in (h.AGENT / "bot" / "Dockerfile").read_text(encoding="utf-8")

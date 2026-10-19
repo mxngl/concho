@@ -47,7 +47,10 @@ every agent: error output ▶ Error reply (user-readable, de/es/pl/en) ▶ Compo
 ```
 
 - **Input contract.** The caller (Discord bot, later Telegram, the eval) POSTs JSON to
-  `/webhook/<CONCHO_WEBHOOK_PATH>` with the header `X-Concho-Token`:
+  `/webhook/<CONCHO_WEBHOOK_PATH>` with the header `X-Concho-Token` (the Webhook node has a
+  fixed `webhookId`; without one n8n registers `/webhook/<workflow id>/<node name>/<path>`, which
+  is what gave the bot and the eval HTTP 404 in the first real run; **the short URL is untested
+  until Max re-imports**, see below):
   `content` (or `message`), `author_id` (or `user_id`), `author_name`, `channel_id`,
   optional `thread_id` (wins over `channel_id`: a Discord thread is a channel, so the reply
   lands in the thread), `guild_id`, `message_id`, `source` (default `discord`; the eval sends
@@ -76,11 +79,22 @@ every agent: error output ▶ Error reply (user-readable, de/es/pl/en) ▶ Compo
   from `get_cost_summary`; an `unknown_cluster` error lists the valid names and the agent asks
   which one is meant.
   STV units are exactly the data's: kgCO2e, MJ, water in kg, ozone in kg CFC-11e.
+- **Names are exact.** Material names are passed with their unit suffix (`Concrete (sf)`, not
+  `Concrete`). `/carbon/what_if` answers `no_match` / `unknown_material_factor` with `similar`
+  (names containing the given one) or, if none, `materials` (the project's names); the carbon
+  agent retries **once** with the closest name before it asks the user. A level that does not
+  exist answers `unknown_level` with the valid `levels` on `/elements/count` (it used to answer
+  `count: 0`); the quantity agent says the level does not exist and lists them.
+- **Data-quality questions go to GENERAL.** "How many elements have no Assembly Code?" is
+  routed to GENERAL (router prompt) and answered from `get_quality` (`unmapped_elements`, scope
+  `tvd` = no Assembly Code, scope `stv` = no carbon material); the shared rules say a total
+  element count is never the answer to an unmapped / data-gap question.
 - **Reply.** Discord node → `channel_id` of the normalizer (thread or channel), content
   `<@user_id> reply`. The webhook answers the caller first with
   `{reply, category, language, tools, tool_response_chars, tool_errors, failed}` (the eval reads
   this). `tool_errors` lists the `"error"` codes of the tool results (`too_many_results`,
-  `unknown_cluster`, `tool_failed` for a transport error); `failed` is only true when an agent
+  `unknown_cluster`, `unknown_level`, `no_match`, `tool_failed` for a transport error such as
+  "The service refused the connection"); `failed` is only true when an agent
   node itself failed, so the eval also looks at the reply and `tool_response_chars`.
 - **Errors.** Each agent has an error output → short readable message to the user. Anything
   else (Discord send, normalizer, …) runs the global error workflow, which posts workflow,
@@ -135,12 +149,16 @@ no retention):
   follow-up questions, its numbers are old): … Latest message: …`.
 - **Save turn** runs after the caller got its answer (`Respond to caller`): it inserts the
   user's message and the reply, and deletes everything older than the retention in the same
-  statement (retention without a cron job). Failed turns, turns without user or channel id and
-  empty replies are not stored (`Remember turn?`).
+  statement (retention without a cron job). A turn is stored only if it worked (`Remember turn?`):
+  turns where an agent failed, **turns whose reply reports a tool error** (`tool_errors` not
+  empty, which includes the data API being down, `too_many_results`, `unknown_cluster`), replies
+  that say the data is not reachable (`data_unreachable`, a word-list check of the reply in
+  en/de/es/pl), turns without user or channel id and empty replies are **not stored**: neither the
+  user's message nor the reply, so a follow-up never sees an error as "history".
 - A Discord thread is a channel of its own, so each thread has its own memory.
 - Both nodes continue on error: if Postgres is down, Concho answers without history.
 - The prompts say the history is only for understanding a follow-up; every number must come from
-  a tool call of this turn. The SQL is tested on a real Postgres 16 (`CONCHO_TEST_PSQL`, see
+  a tool call of this turn. The SQL is tested on a real Postgres 17 (`CONCHO_TEST_PSQL`, see
   `tests/agent/test_agent_memory.py`): window of 6, other users and channels excluded, rows older
   than 30 days neither read nor kept, `memory.sql` idempotent.
 - Stored: chat text of the team's channel for at most 30 days; nothing is written to the repo.
@@ -169,6 +187,10 @@ scorer and the question generator.
 
 **Not tested here (needs a running n8n and an OpenAI key; Max to check):**
 
+0. The short production URL `/webhook/<CONCHO_WEBHOOK_PATH>` after the `webhookId` fix: import
+   again (`import_workflows.sh`), then `curl -i -X POST` with the token must not answer 404.
+   The long URL `/webhook/concho-main/webhook/<path>` of the first run should be gone.
+
 1. The JSON imports into n8n (node `typeVersion`s follow the legacy export: agent 3.1, OpenAI
    chat model 1.3, HTTP tool 4.4, Switch 3.4, Merge 3.2, Set 3.4; Structured Output Parser
    1.3, IF 2.2, Respond to Webhook 1.4, Discord 2 are new in this workflow).
@@ -186,5 +208,9 @@ scorer and the question generator.
 9. `list_cost_clusters` is called instead of a guessed cluster name; the what-if answer quotes
    the cluster's own `status_after`; no call is repeated.
 
-Checked by Max on n8n 2.43.8 with the Island data (before PR 2): router, tools, snapshot line,
-labels and languages work. Still untested: the error output of an agent node, the Discord thread.
+Checked by Max on n8n 2.43.8 with the Island data: router, tools, snapshot line, labels and
+languages work. First real run of the bundle (Docker Desktop, n8n 2.43.8, Postgres 16, gpt-4o-mini,
+Island data): eval 40/45 = 88.9 %, p95 9.5 s, 0 overflows, memory follow-ups pass, but only on the
+long webhook URL. The failures it showed are fixed in the follow-up PR (webhookId, unmapped
+routing, material names, unknown level, no memory for error turns) and still need a second live
+run. Still untested: the error output of an agent node after the fix, the Discord thread.

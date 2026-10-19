@@ -200,6 +200,29 @@ def test_carbon_what_if_needs_a_factor_in_the_project(api):
     assert nothing.json()["error"] == "no_match"
 
 
+def test_carbon_what_if_no_match_carries_the_valid_names(api):
+    """The agent called the tool with "Concrete" instead of "Concrete (sf)" and asked the user.
+    The error must carry the exact names so one retry with the closest name works."""
+    short = api.get("/carbon/what_if", params={"material_from": "Concrete",
+                                               "material_to": "Timber (sf)"})
+    assert short.status_code == 404 and short.json()["error"] == "no_match"
+    assert "Concrete (sf)" in short.json()["similar"]
+    assert "unit suffix" in short.json()["hint"]
+    # the name the tool offers works
+    retry = api.get("/carbon/what_if", params={"material_from": short.json()["similar"][0],
+                                               "material_to": "Timber (sf)"})
+    assert retry.status_code == 200
+    # nothing similar: the project's material names, so the caller can still choose
+    nothing = api.get("/carbon/what_if", params={"material_from": "Gold",
+                                                 "material_to": "Timber (sf)"}).json()
+    assert nothing["similar"] == [] and "Concrete (sf)" in nothing["materials"]
+    # a material_to without its suffix gets the names too
+    to_short = api.get("/carbon/what_if", params={"material_from": "Concrete (sf)",
+                                                  "material_to": "Timber"}).json()
+    assert to_short["error"] in ("unknown_material_factor", "no_match")
+    assert "Timber (sf)" in (to_short.get("similar") or to_short.get("materials"))
+
+
 def test_snapshot_without_stv(repo):
     syn.add_snapshot(repo, "20270201T080000Z", stv=None)
     api = client_for(repo)
@@ -233,6 +256,22 @@ def test_elements_count(api):
     assert api.get("/elements/count", params={"level": "L1", "category": "Walls"}
                    ).json()["count"] == 2
     assert api.get("/elements/count", params={"discipline": "mep"}).json()["count"] == 2
+
+
+def test_elements_count_of_a_level_that_does_not_exist_is_an_error(api):
+    """/elements/count answered count 0 for "Level 99"; like unknown_cluster it now lists the
+    valid levels."""
+    unknown = api.get("/elements/count", params={"level": "L99", "category": "Walls"})
+    assert unknown.status_code == 404 and unknown.json()["error"] == "unknown_level"
+    body = unknown.json()
+    assert body["level"] == "L99" and body["levels"] == ["L1", "L2", "L3"]
+    assert "levels" in body["hint"]
+    # known levels (any case) and "no level" are unchanged; a known level with no match is 0
+    assert api.get("/elements/count", params={"level": "l2"}).json()["count"] > 0
+    assert api.get("/elements/count", params={"level": " L1 "}).status_code == 200
+    assert api.get("/elements/count", params={"level": ""}).json()["count"] == syn.ELEMENT_ROWS - 1
+    assert api.get("/elements/count", params={"level": "L2", "category": "Doors"}
+                   ).json()["count"] == 0
 
 
 def test_quantities_unavailable_for_stale_snapshot(repo):

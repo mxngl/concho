@@ -17,6 +17,9 @@ Per question (see :func:`score_question`)
               ``language`` the router reported
   tool error  a tool error is detected from the reply text and ``tool_response_chars``, not only
               from ``failed`` (an error comes back as ``failed: false`` and a polite reply)
+  transport   no answer from the workflow (HTTP 404, connection refused, timeout, not JSON) is
+              its own failure: "transport error: HTTP 404, is the workflow active / webhook
+              registered?", not an agent error
   size        the largest tool response is under the cap (8,000 tokens ~ 24,000 characters);
               a context overflow in the reply or above the cap counts as an overflow
   latency     seconds until the webhook answered
@@ -216,11 +219,29 @@ def _status_words(low: str, lang: str) -> list[tuple[int, str]]:
     return hits
 
 
-def check_status(reply: str, lang: str, expected: str, subject: str | None) -> tuple[bool, str]:
+# A what-if reply states the status twice: "Before: ... under target. After: ... over target".
+_AFTER = re.compile(r"\b(?:after(?:wards)?|nach(?:her)?|despu[eé]s|po)\b", re.IGNORECASE)
+
+
+def check_status(reply: str, lang: str, expected: str, subject: str | None,
+                 what_if: bool = False) -> tuple[bool, str]:
     """The reply says ``expected`` (over_target / under_target) about ``subject`` (a cluster) or,
     without subject, about the target. In a segment that mentions several statuses ("the total
     is under target, Shell is over its target") the status word nearest to the subject wins.
+    For a ``what_if`` reply only the part that follows "after" / "nach" / "después" / "po" counts
+    (the "before" status is the current state); the last such marker that gives a clear answer
+    wins, and a reply without marker is read as a whole.
     Heuristic: the JSON report keeps the reply for review."""
+    if what_if:
+        for marker in reversed(list(_AFTER.finditer(reply))):
+            ok, why = _check_status_in(reply[marker.start():], lang, expected, subject)
+            if not why.startswith("reply says nothing"):
+                return ok, why
+    return _check_status_in(reply, lang, expected, subject)
+
+
+def _check_status_in(reply: str, lang: str, expected: str,
+                     subject: str | None) -> tuple[bool, str]:
     for segment in _segments(reply):
         low = f" {segment.lower()} "
         if subject:
@@ -243,10 +264,25 @@ def check_status(reply: str, lang: str, expected: str, subject: str | None) -> t
     return False, f"reply says nothing clear about the status{of}"
 
 
+def transport_error_message(what: str) -> str:
+    """The failure text for a request that got no answer from the workflow (not an agent error).
+    ``what`` is ``HTTP 404``, ``connection refused``, ... A 404 on a webhook URL means the
+    workflow is not active or the production webhook is registered under another path."""
+    if what.startswith("HTTP 40") and what[-1] in "13":   # 401 / 403
+        hint = "is CONCHO_WEBHOOK_TOKEN the token of the Concho webhook credential?"
+    elif what.startswith("HTTP"):
+        hint = "is the workflow active / webhook registered?"
+    else:
+        hint = "is n8n running and is the URL right?"
+    return f"transport error: {what}, {hint}"
+
+
 def detect_tool_error(response: dict, allowed: list[str]) -> str | None:
     """A tool error the question did not expect, from ``failed``, ``tool_errors``, the size of
     the tool responses and the reply text. Returns a short reason, or ``None``."""
     reply = response.get("reply") or ""
+    if response.get("transport_error"):
+        return transport_error_message(response["transport_error"])
     if response.get("failed"):
         return "failed=true (agent error branch)"
     if _ERROR_REPLY.search(reply):
@@ -284,7 +320,8 @@ def score_question(question: dict, response: dict, latency_s: float) -> dict:
         record(f"number:{spec.get('label')}", ok, f"expected {spec['value']:,.2f}")
     if "status" in expect:
         wanted = expect["status"]
-        ok, why = check_status(reply, lang, wanted["value"], wanted.get("subject"))
+        ok, why = check_status(reply, lang, wanted["value"], wanted.get("subject"),
+                               what_if=bool(expect.get("scenario_label")))
         record("status", ok, why)
     low = reply.lower()
     if expect.get("names_any"):
@@ -303,8 +340,10 @@ def score_question(question: dict, response: dict, latency_s: float) -> dict:
     if expect.get("needs_tools"):
         record("tools_called", bool(tools), "the answer needs data but no tool was called")
     if question.get("category"):
-        record("category", response.get("category") == question["category"],
-               f"router said {response.get('category')}, expected {question['category']}",
+        accepted = question["category"]
+        accepted = [accepted] if isinstance(accepted, str) else list(accepted)
+        record("category", response.get("category") in accepted,
+               f"router said {response.get('category')}, expected {' or '.join(accepted)}",
                required=bool(expect.get("category_required")))
     detected, scores = detect_language(reply)
     record("reply_language", detected in (None, lang),
@@ -323,7 +362,8 @@ def score_question(question: dict, response: dict, latency_s: float) -> dict:
         "correct": all(c["ok"] for c in checks.values() if c["required"]),
         "checks": checks, "latency_s": round(latency_s, 2), "overflow": overflow,
         "max_tool_chars": biggest, "snapshot_line": snapshot_line,
-        "tool_error": error, "reply": reply, "tools": tools,
+        "tool_error": error, "transport_error": response.get("transport_error"),
+        "reply": reply, "tools": tools,
     }
 
 
@@ -358,6 +398,7 @@ def summarize(results: list[dict], settings: dict, skipped: list[dict]) -> dict:
     return {
         "questions": n, "correct": correct, "skipped": len(skipped),
         "tool_errors": sum(r["tool_error"] is not None for r in results),
+        "transport_errors": sum(bool(r.get("transport_error")) for r in results),
         "snapshot_line": f"{sum(lines)}/{len(lines)}" if lines else "-",
         "by_group": {g: f"{c}/{t}" for g, (c, t) in sorted(by_group.items())},
         "gates": gates, "passed": all(g["ok"] for g in gates.values()) and n > 0,
@@ -368,23 +409,41 @@ def summarize(results: list[dict], settings: dict, skipped: list[dict]) -> dict:
 
 
 def post(url: str, token: str, payload: dict) -> tuple[dict, float]:
-    """POST ``payload``; returns ``(response JSON, seconds)``. Transport errors become a
-    response with ``failed: true`` so they are scored instead of raised."""
+    """POST ``payload``; returns ``(response JSON, seconds)``. A request that gets no usable
+    answer (HTTP error status, connection refused, timeout, a body that is not JSON) becomes a
+    response with ``transport_error`` so it is scored as its own failure instead of raised."""
     request = urllib.request.Request(
         url, data=json.dumps(payload).encode("utf-8"), method="POST",
         headers={"Content-Type": "application/json", "X-Concho-Token": token})
     started = time.monotonic()
+
+    def transport(what: str, reply: str = "") -> tuple[dict, float]:
+        return ({"reply": reply or f"[transport error: {what}]", "failed": False,
+                 "transport_error": what, "tools": [], "tool_response_chars": []},
+                time.monotonic() - started)
+
     try:
         with urllib.request.urlopen(request, timeout=REQUEST_TIMEOUT_S) as handle:
             body = handle.read().decode("utf-8")
         elapsed = time.monotonic() - started
         try:
-            return json.loads(body), elapsed
+            parsed = json.loads(body)
         except ValueError:
-            return {"reply": body, "failed": True, "tools": [], "tool_response_chars": []}, elapsed
-    except (urllib.error.URLError, TimeoutError, OSError) as exc:
-        return ({"reply": f"[transport error: {exc}]", "failed": True, "tools": [],
-                 "tool_response_chars": []}, time.monotonic() - started)
+            parsed = None
+        if not isinstance(parsed, dict):
+            return transport("the answer is not JSON", body[:200])
+        return parsed, elapsed
+    except urllib.error.HTTPError as exc:
+        return transport(f"HTTP {exc.code}")
+    except urllib.error.URLError as exc:
+        reason = exc.reason
+        if isinstance(reason, ConnectionRefusedError):
+            return transport("connection refused")
+        return transport(f"{reason}")
+    except TimeoutError:
+        return transport(f"no answer within {REQUEST_TIMEOUT_S} s")
+    except OSError as exc:
+        return transport(str(exc))
 
 
 def message(question_text: str, run: str, qid: str, n: int) -> dict:
@@ -454,6 +513,8 @@ def main(argv: list[str] | None = None) -> int:
         results.append(result)
         bad = [f"{k}: {v['detail']}" for k, v in result["checks"].items()
                if v["required"] and not v["ok"]]
+        if result["transport_error"]:   # nothing else can be judged without an answer
+            bad = [result["tool_error"]]
         mark = "ok  " if result["correct"] else "FAIL"
         print(f"{mark} {q['id']:<34} {result['latency_s']:>5.1f}s"
               + ("" if result["correct"] else "  <- " + "; ".join(bad)))

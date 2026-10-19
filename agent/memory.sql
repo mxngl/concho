@@ -12,7 +12,11 @@
 --                   thread is a channel of its own, so every thread has its own memory.
 --   "Save turn"     stores the user's message and Concho's reply after the answer was sent and
 --                   deletes everything older than CONCHO_MEMORY_DAYS in the same statement
---                   (retention without a cron job). Failed turns are not stored.
+--                   (retention without a cron job). A turn is stored only when it worked:
+--                   neither the question nor the reply is stored when an agent failed, when
+--                   the reply reports a tool error (tool_errors not empty: data API down,
+--                   too_many_results, unknown_cluster, ...) or says the data is not reachable,
+--                   or when the reply is empty (node "Remember turn?").
 --
 -- Stored text: chat messages of the team's own Discord channel and the replies, for at most
 -- 30 days. Nothing here is project data; the numbers in old replies are never reused, the
