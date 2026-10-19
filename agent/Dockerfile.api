@@ -1,0 +1,21 @@
+# Data API of the Concho bundle (P6.6): `concho-api serve` on a team repo's results/.
+# Build context is the repo root (see agent/docker-compose.yml). Only the package is copied;
+# .dockerignore keeps .env, .fixtures and data out of the build context.
+FROM python:3.12-slim
+
+WORKDIR /app
+COPY pyproject.toml README.md ./
+COPY engines ./engines
+COPY dashboards ./dashboards
+RUN pip install --no-cache-dir ".[api]" \
+ && useradd --create-home --uid 10001 concho \
+ && mkdir /db && chown concho /db
+USER concho
+
+# /data = the team repo (results/, exports/), mounted read-only; /db = the SQLite database
+# (a named volume): ingest never writes into the team repo.
+EXPOSE 8000
+HEALTHCHECK --interval=15s --timeout=5s --start-period=40s --retries=5 \
+  CMD ["python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=4).status == 200 else 1)"]
+# The token comes from $CONCHO_API_TOKEN (the server does not start without it).
+CMD ["concho-api", "serve", "--repo", "/data", "--db", "/db/concho.db", "--host", "0.0.0.0", "--port", "8000"]

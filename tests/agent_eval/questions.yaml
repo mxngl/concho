@@ -1,0 +1,536 @@
+# Evaluation questions for the Concho agent (roadmap P6.8).
+#
+# This file holds question TEMPLATES and expectations BY REFERENCE only: no project number is
+# typed in. `python scripts/build_eval_set.py --repo <team repo>` resolves every `fact:` against
+# the data API's database (scripts/build_eval_set.py, FACTS) and picks names (a cluster, a
+# level, a category) from the data. The result goes to tests/agent_eval/generated/ (git-ignored:
+# it contains project numbers). `python scripts/run_eval.py` posts the questions to the webhook.
+#
+# Question fields
+#   id, group, lang (reply language: en|de|es|pl), tier (1 = runs, 2 = skipped until Tier 2)
+#   category   expected router category (COST CARBON QUANTITY GENERAL SCHEDULE OTHER)
+#   bind       names/values from the data: bind: {cluster: {fact: cost.top_cluster}}
+#   requires   facts that must be truthy, else the question is skipped with a reason
+#   setup      earlier messages of the same conversation (memory, P6.4), sent first and not scored
+#   ask        the message under test; {name} and {name[key]} are filled from `bind`
+#   expect
+#     numbers            [{fact: ..., label?, tol?, exact?}]  each must occur in the reply
+#     status             {value: over_target|under_target, subject?: name}  what the reply says
+#                        about the subject (a cluster) or, without subject, about the reply
+#     names_any/_all     names (e.g. valid cluster names) the reply must mention
+#     scenario_label     the reply labels the result as a what-if scenario
+#     no_tools           no data tool may be called
+#     tool_errors_allowed  tool error codes that are the expected outcome of this question
+#     asks_to_narrow     the reply asks the user to narrow the question
+#     category_required  a wrong router category fails the question (else: reported only)
+version: 1
+
+defaults:
+  number_tolerance: 0.005     # relative; counts use exact: true
+  latency_p95_s: 20
+  min_accuracy: 0.9
+
+questions:
+  # ------------------------------------------------------------------ cost
+  - id: cost-total
+    group: cost
+    lang: en
+    category: COST
+    ask: "What is our current cost estimate, and are we over or under the target?"
+    expect:
+      numbers: [{fact: cost.grand_total}]
+      status: {value: {fact: cost.status}}
+
+  - id: cost-target
+    group: cost
+    lang: en
+    category: COST
+    ask: "What is the TVD cost target of the project?"
+    expect:
+      numbers: [{fact: cost.target}]
+
+  - id: cost-delta
+    group: cost
+    lang: en
+    category: COST
+    ask: "By how much are we away from the cost target?"
+    expect:
+      numbers: [{fact: cost.delta}]
+      status: {value: {fact: cost.status}}
+
+  - id: cost-per-sf
+    group: cost
+    lang: en
+    category: COST
+    ask: "What is the cost per square foot?"
+    expect:
+      numbers: [{fact: cost.per_sf}]
+
+  - id: cost-top-cluster
+    group: cost
+    lang: en
+    category: COST
+    bind:
+      cluster: {fact: cost.top_cluster}
+    ask: "Which cost cluster is the most expensive, and how much is it?"
+    expect:
+      numbers: [{fact: cost.cluster_estimate, cluster: $cluster}]
+      names_all: [$cluster]
+
+  - id: cost-cluster-status
+    group: cost
+    lang: en
+    category: COST
+    bind:
+      cluster: {fact: cost.top_cluster}
+    ask: "How does the {cluster} cluster compare to its target?"
+    expect:
+      numbers:
+        - {fact: cost.cluster_estimate, cluster: $cluster}
+        - {fact: cost.cluster_target, cluster: $cluster}
+      status: {value: {fact: cost.cluster_status, cluster: $cluster}, subject: $cluster}
+
+  - id: cost-assembly-code
+    group: cost
+    lang: en
+    category: COST
+    bind:
+      ac: {fact: cost.top_ac}
+    ask: "What do the line items with Assembly Code {ac} cost in total?"
+    expect:
+      numbers: [{fact: cost.ac_total, ac: $ac}]
+
+  - id: cost-whatif-plus-10
+    group: what-if
+    lang: en
+    category: COST
+    bind:
+      ac: {fact: cost.top_ac}
+      w: {fact: cost.whatif, ac: $ac, pct: 10}
+    ask: "What if the cost of everything under Assembly Code {ac} goes up by 10 percent?"
+    expect:
+      numbers: [{ref: w.grand_total_after, label: grand total after}]
+      scenario_label: true
+
+  - id: cost-whatif-minus-20
+    group: what-if
+    lang: en
+    category: COST
+    bind:
+      ac: {fact: cost.top_ac}
+      w: {fact: cost.whatif, ac: $ac, pct: -20}
+    ask: "And what would happen to the grand total if {ac} became 20 percent cheaper?"
+    expect:
+      numbers: [{ref: w.grand_total_after, label: grand total after}]
+      scenario_label: true
+
+  # The case behind the "remains under target" bug: after the what-if one cluster is over its
+  # own target. The reply must say so, whatever the grand total does.
+  - id: cost-whatif-cluster-over-target
+    group: what-if
+    lang: en
+    category: COST
+    bind:
+      w: {fact: cost.whatif_flip}
+    ask: >-
+      What if the cost of Assembly Code {w[ac]} increases by {w[pct]} percent?
+      How does the {w[cluster]} cluster stand against its target afterwards?
+    expect:
+      numbers:
+        - {ref: w.cluster_after, label: cluster after}
+        - {ref: w.grand_total_after, label: grand total after}
+      status: {value: over_target, subject: $w.cluster}
+      scenario_label: true
+
+  - id: cost-unknown-cluster
+    group: robustness
+    lang: en
+    category: COST
+    bind:
+      names: {fact: cost.cluster_names}
+    ask: "How much does the Zebra Annex cluster cost?"
+    expect:
+      names_any: $names
+      tool_errors_allowed: [unknown_cluster, no_match]
+
+  - id: cost-too-many-results
+    group: robustness
+    lang: en
+    category: COST
+    requires: [{fact: cost.many_line_items}]
+    ask: "List every single cost line item with its unit cost and quantity."
+    expect:
+      asks_to_narrow: true
+      tool_errors_allowed: [too_many_results]
+
+  - id: cost-followup-code
+    group: follow-up
+    lang: en
+    category: COST
+    bind:
+      ac1: {fact: cost.top_ac}
+      ac2: {fact: cost.second_ac}
+    setup: ["What do the line items with Assembly Code {ac1} cost in total?"]
+    ask: "And for {ac2}?"
+    expect:
+      numbers: [{fact: cost.ac_total, ac: $ac2}]
+
+  - id: cost-de
+    group: languages
+    lang: de
+    category: COST
+    ask: "Wie hoch ist unsere aktuelle Kostenschätzung im Vergleich zum Zielwert?"
+    expect:
+      numbers: [{fact: cost.grand_total}]
+      status: {value: {fact: cost.status}}
+
+  - id: cost-es
+    group: languages
+    lang: es
+    category: COST
+    bind:
+      cluster: {fact: cost.top_cluster}
+    ask: "¿Cuánto cuesta el grupo {cluster} y está por encima o por debajo de su objetivo?"
+    expect:
+      numbers: [{fact: cost.cluster_estimate, cluster: $cluster}]
+      status: {value: {fact: cost.cluster_status, cluster: $cluster}, subject: $cluster}
+
+  - id: cost-pl
+    group: languages
+    lang: pl
+    category: COST
+    ask: "Jaki jest docelowy koszt projektu?"
+    expect:
+      numbers: [{fact: cost.target}]
+
+  - id: cost-whatif-de
+    group: languages
+    lang: de
+    category: COST
+    bind:
+      ac: {fact: cost.top_ac}
+      w: {fact: cost.whatif, ac: $ac, pct: 10}
+    ask: "Was passiert mit den Gesamtkosten, wenn {ac} um 10 Prozent teurer wird?"
+    expect:
+      numbers: [{ref: w.grand_total_after, label: grand total after}]
+      scenario_label: true
+
+  # ------------------------------------------------------------------ carbon
+  - id: carbon-life-cycle
+    group: carbon
+    lang: en
+    category: CARBON
+    ask: "What is the life-cycle carbon of the project, and how far along is it against the target?"
+    expect:
+      numbers:
+        - {fact: carbon.life_cycle}
+        - {fact: carbon.percent_of_target, tol: 0.02}
+
+  - id: carbon-embodied
+    group: carbon
+    lang: en
+    category: CARBON
+    ask: "How much embodied carbon does the project have?"
+    expect:
+      numbers: [{fact: carbon.embodied}]
+
+  - id: carbon-use-phase
+    group: carbon
+    lang: en
+    category: CARBON
+    ask: "How much of the carbon comes from the use phase?"
+    expect:
+      numbers: [{fact: carbon.use_phase}]
+
+  - id: carbon-top-assembly
+    group: carbon
+    lang: en
+    category: CARBON
+    bind:
+      assembly: {fact: carbon.top_assembly}
+    ask: "Which assembly emits the most carbon, and how much?"
+    expect:
+      numbers: [{fact: carbon.assembly_embodied, assembly: $assembly}]
+      names_all: [$assembly]
+
+  - id: carbon-energy
+    group: carbon
+    lang: en
+    category: CARBON
+    ask: "What is the life-cycle energy use of the project?"
+    expect:
+      numbers: [{fact: carbon.energy}]
+
+  - id: carbon-water
+    group: carbon
+    lang: en
+    category: CARBON
+    ask: "How much water does the project use over its life cycle?"
+    expect:
+      numbers: [{fact: carbon.water}]
+
+  - id: carbon-swap
+    group: what-if
+    lang: en
+    category: CARBON
+    bind:
+      s: {fact: carbon.swap}
+    ask: "What if we replaced all {s[from]} with {s[to]}? How much does the embodied carbon change?"
+    expect:
+      numbers: [{ref: s.change, label: change in kgCO2e}]
+      scenario_label: true
+
+  - id: carbon-followup-assembly
+    group: follow-up
+    lang: en
+    category: CARBON
+    bind:
+      a1: {fact: carbon.top_assembly}
+      a2: {fact: carbon.second_assembly}
+    setup: ["How much embodied carbon does the assembly {a1} have?"]
+    ask: "And {a2}?"
+    expect:
+      numbers: [{fact: carbon.assembly_embodied, assembly: $a2}]
+
+  - id: carbon-de
+    group: languages
+    lang: de
+    category: CARBON
+    ask: "Wie hoch sind die Lebenszyklus-Emissionen des Projekts?"
+    expect:
+      numbers: [{fact: carbon.life_cycle}]
+
+  - id: carbon-es
+    group: languages
+    lang: es
+    category: CARBON
+    ask: "¿Cuál es el carbono incorporado total del proyecto?"
+    expect:
+      numbers: [{fact: carbon.embodied}]
+
+  - id: carbon-pl
+    group: languages
+    lang: pl
+    category: CARBON
+    ask: "Jakie jest zużycie energii w całym cyklu życia projektu?"
+    expect:
+      numbers: [{fact: carbon.energy}]
+
+  # ------------------------------------------------------------------ quantities
+  - id: qty-total-elements
+    group: quantities
+    lang: en
+    category: QUANTITY
+    ask: "How many elements are in the model?"
+    expect:
+      numbers: [{fact: qty.total_elements, exact: true}]
+
+  - id: qty-category-count
+    group: quantities
+    lang: en
+    category: QUANTITY
+    bind:
+      cat: {fact: qty.category}
+    ask: "How many {cat} do we have?"
+    expect:
+      numbers: [{fact: qty.count, category: $cat, exact: true}]
+
+  - id: qty-area-on-level
+    group: quantities
+    lang: en
+    category: QUANTITY
+    bind:
+      cat: {fact: qty.area_category}
+      level: {fact: qty.level, category: $cat}
+    ask: "What is the total area of {cat} on {level}?"
+    expect:
+      numbers: [{fact: qty.area, category: $cat, level: $level}]
+
+  - id: qty-level-count
+    group: quantities
+    lang: en
+    category: QUANTITY
+    bind:
+      level: {fact: qty.level_with_most_elements}
+    ask: "How many elements are on {level}?"
+    expect:
+      numbers: [{fact: qty.count, level: $level, exact: true}]
+
+  - id: qty-followup-level
+    group: follow-up
+    lang: en
+    category: QUANTITY
+    bind:
+      cat: {fact: qty.category}
+      l1: {fact: qty.level, category: $cat, rank: 0}
+      l2: {fact: qty.level, category: $cat, rank: 1}
+    setup: ["How many {cat} are there on {l1}?"]
+    ask: "And on {l2}?"
+    expect:
+      numbers: [{fact: qty.count, category: $cat, level: $l2, exact: true}]
+
+  - id: qty-unknown-level
+    group: robustness
+    lang: en
+    category: QUANTITY
+    bind:
+      cat: {fact: qty.category}
+      levels: {fact: qty.level_names}
+    ask: "How many {cat} are on Level 99?"
+    expect:
+      names_any: $levels
+      tool_errors_allowed: [no_match]
+
+  - id: qty-de
+    group: languages
+    lang: de
+    category: QUANTITY
+    bind:
+      cat: {fact: qty.category}
+    ask: "Wie viele Elemente der Kategorie {cat} gibt es im Modell?"
+    expect:
+      numbers: [{fact: qty.count, category: $cat, exact: true}]
+
+  - id: qty-es
+    group: languages
+    lang: es
+    category: QUANTITY
+    bind:
+      cat: {fact: qty.area_category}
+    ask: "¿Cuál es el área total de {cat}?"
+    expect:
+      numbers: [{fact: qty.area, category: $cat}]
+
+  - id: qty-pl
+    group: languages
+    lang: pl
+    category: QUANTITY
+    bind:
+      level: {fact: qty.level_with_most_elements}
+    ask: "Ile elementów jest na poziomie {level}?"
+    expect:
+      numbers: [{fact: qty.count, level: $level, exact: true}]
+
+  # ------------------------------------------------------------------ general
+  - id: general-overview
+    group: general
+    lang: en
+    category: GENERAL
+    ask: "Give me a short overview of the project: cost and carbon."
+    expect:
+      numbers:
+        - {fact: cost.grand_total}
+        - {fact: carbon.life_cycle}
+
+  - id: general-unmapped
+    group: general
+    lang: en
+    category: GENERAL
+    ask: "How many elements have no Assembly Code, so they are not priced?"
+    expect:
+      numbers: [{fact: quality.unmapped_elements, exact: true}]
+
+  - id: general-snapshots
+    group: general
+    lang: en
+    category: GENERAL
+    ask: "How many snapshots (pipeline runs) do we have?"
+    expect:
+      numbers: [{fact: snap.count, exact: true}]
+
+  - id: general-compare
+    group: general
+    lang: en
+    category: GENERAL
+    requires: [{fact: snap.has_two}]
+    ask: "Compare the latest snapshot with the one before it. What changed in cost?"
+    expect:
+      numbers: [{fact: cost.grand_total}]
+
+  - id: general-capabilities
+    group: general
+    lang: en
+    category: GENERAL
+    ask: "What can you help me with?"
+    expect:
+      no_tools: true
+
+  # ------------------------------------------------------------------ out of scope
+  - id: oos-weather
+    group: out-of-scope
+    lang: en
+    category: OTHER
+    ask: "What's the weather going to be like tomorrow?"
+    expect:
+      no_tools: true
+      category_required: true
+
+  - id: oos-greeting
+    group: out-of-scope
+    lang: en
+    category: OTHER
+    ask: "Hi there!"
+    expect:
+      no_tools: true
+      category_required: true
+
+  - id: oos-poem-de
+    group: out-of-scope
+    lang: de
+    category: OTHER
+    ask: "Schreib mir bitte ein Gedicht über Beton."
+    expect:
+      no_tools: true
+      category_required: true
+
+  - id: oos-es
+    group: out-of-scope
+    lang: es
+    category: OTHER
+    ask: "¿Quién ganó el mundial de fútbol de 2010?"
+    expect:
+      no_tools: true
+      category_required: true
+
+  - id: oos-pl
+    group: out-of-scope
+    lang: pl
+    category: OTHER
+    ask: "Jaka jest stolica Francji?"
+    expect:
+      no_tools: true
+      category_required: true
+
+  # ------------------------------------------------------------------ schedule
+  # Tier 1: the schedule agent is not built yet (P6.5). The router must still recognise the
+  # topic and the fallback agent must say it is not available, without touching a data tool.
+  - id: schedule-not-available
+    group: schedule
+    lang: en
+    category: SCHEDULE
+    ask: "When will the superstructure be complete?"
+    expect:
+      no_tools: true
+      category_required: true
+
+  # Tier 2: skipped until P6.5 (schedule endpoints) exists.
+  - id: schedule-day
+    group: schedule
+    tier: 2
+    lang: en
+    category: SCHEDULE
+    ask: "What's happening on Level 1 on December 15?"
+
+  - id: schedule-milestone
+    group: schedule
+    tier: 2
+    lang: en
+    category: SCHEDULE
+    ask: "When is the superstructure complete?"
+
+  - id: schedule-deliveries
+    group: schedule
+    tier: 2
+    lang: en
+    category: SCHEDULE
+    ask: "How many deliveries are planned in week 12?"

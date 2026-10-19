@@ -29,6 +29,20 @@ def _r(value: Any, digits: int = 2) -> Any:
     return None if value is None else round(float(value), digits)
 
 
+def target_status(value: float | None, target: float | None) -> str | None:
+    """``over_target`` / ``under_target`` / ``on_target`` for a cost against its target.
+
+    The agents quote this instead of comparing numbers themselves (an LLM compared a cluster
+    after a what-if with the grand-total status and got it backwards).
+    """
+    if value is None or target is None:
+        return None
+    rounded_value, rounded_target = round(float(value), 2), round(float(target), 2)
+    if rounded_value > rounded_target:
+        return "over_target"
+    return "under_target" if rounded_value < rounded_target else "on_target"
+
+
 # --------------------------------------------------------------------------- snapshots
 
 
@@ -123,8 +137,30 @@ def cost_summary(conn: sqlite3.Connection, snap: sqlite3.Row) -> dict[str, Any]:
             "note": "elements without an Assembly Code are not priced"},
         rows=[{"cluster": c["cluster"], "estimate": _r(c["estimate"]),
                "target": _r(c["target"]), "delta": _r(c["delta"]),
+               "status": target_status(c["estimate"], c["target"]),
                "delta_pct": c["delta_pct"], "share_of_total": c["share_of_total"]}
               for c in clusters])
+
+
+def cost_clusters(conn: sqlite3.Connection, snap: sqlite3.Row) -> dict[str, Any]:
+    """The valid cluster names (exact spelling) with the Assembly Code groups they contain.
+
+    A lookup for the agents, so they never guess a cluster name (``GET /cost?cluster=``).
+    """
+    sid = snap["snapshot_id"]
+    groups: dict[str, set[str]] = {}
+    for r in conn.execute("SELECT cluster, ac FROM tvd_line_items WHERE snapshot_id=?", (sid,)):
+        if r["ac"]:
+            groups.setdefault(r["cluster"], set()).add(r["ac"].strip().upper()[:3])
+    clusters = conn.execute(
+        "SELECT cluster, estimate, target FROM tvd_clusters WHERE snapshot_id=? "
+        "ORDER BY estimate DESC, cluster LIMIT ?", (sid, _LIMIT)).fetchall()
+    return _body(
+        snap, note="use the cluster names exactly as written here; ac_groups are the Assembly "
+        "Code prefixes (Uniformat level 2) of the cluster's line items",
+        rows=[{"cluster": c["cluster"], "ac_groups": sorted(groups.get(c["cluster"], ())),
+               "estimate": _r(c["estimate"]), "target": _r(c["target"]),
+               "status": target_status(c["estimate"], c["target"])} for c in clusters])
 
 
 def _cluster_rows(conn, sid: str, cluster: str | None, ac: str | None, limit: int = _LIMIT):
@@ -214,7 +250,9 @@ def cost_what_if(conn: sqlite3.Connection, snap: sqlite3.Row, ac: str,
         "SELECT cluster, target FROM tvd_clusters WHERE snapshot_id=?", (sid,))}
     changed = [{"cluster": c, "before": _r(b), "after": _r(a), "change": _r(a - b),
                 "target": _r(targets.get(c)),
-                "delta_to_target_after": _r(a - targets[c]) if c in targets else None}
+                "status_before": target_status(b, targets.get(c)),
+                "delta_to_target_after": _r(a - targets[c]) if c in targets else None,
+                "status_after": target_status(a, targets.get(c))}
                for c, (b, a) in per.items() if abs(a - b) > 0.005]
     direct = sum(a - b for a, b, m in zip(after, before, matched, strict=True) if m)
     return _body(
@@ -228,10 +266,11 @@ def cost_what_if(conn: sqlite3.Connection, snap: sqlite3.Row, ac: str,
         target=_r(target),
         delta_to_target_before=_r(total_before - target) if target is not None else None,
         delta_to_target_after=_r(total_after - target) if target is not None else None,
-        status_after=None if target is None else (
-            "under_target" if total_after < target else
-            "over_target" if total_after > target else "on_target"),
-        notes=["every matched line scales by change_pct (cost = quantity x unit cost, so a "
+        status_after=target_status(total_after, target),
+        notes=["status_after and delta_to_target_after are for the grand total; each row has its "
+               "own cluster status_after (over_target = above the cluster's target): quote "
+               "these, do not compare numbers yourself",
+               "every matched line scales by change_pct (cost = quantity x unit cost, so a "
                "quantity change of that size)",
                "percent-of-subtotal lines (contingency, overhead) are rescaled with the "
                "subtotal; fixed lump sums outside the code are unchanged"],

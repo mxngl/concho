@@ -1,21 +1,25 @@
-# Concho agent (n8n workflow, prompts, model config), Tier 1 (P6.2, P6.3, P6.7)
+# Concho agent (n8n workflow, prompts, memory, model config), Tier 1 (P6.2, P6.3, P6.4, P6.7)
 
 The rebuilt Concho answers from the **data API** ([`data-api.md`](data-api.md)) only: no raw
 files, no GitHub URLs, nothing project-specific in the workflow. Code and files:
 
 | Path | What |
 |---|---|
-| [`agent/workflows/concho.json`](../agent/workflows/concho.json) | the n8n workflow "Concho" (37 nodes) |
+| [`agent/workflows/concho.json`](../agent/workflows/concho.json) | the n8n workflow "Concho" (42 nodes, id `concho-main`) |
 | [`agent/workflows/error-handler.json`](../agent/workflows/error-handler.json) | global error workflow (`id` `concho-error-handler`) |
 | [`agent/prompts/*.md`](../agent/prompts/) | prompts with `{{PLACEHOLDERS}}` (router, cost, carbon, quantity, general, fallback, shared rules in `common.md`) |
-| [`agent/.env.example`](../agent/.env.example) | every variable the workflows and scripts read |
+| [`agent/memory.sql`](../agent/memory.sql) | the chat-memory table in Postgres (P6.4) |
+| [`agent/docker-compose.yml`](../agent/docker-compose.yml), [`agent/bot/`](../agent/bot/) | the deployment bundle and the Discord bot (P6.6, [`agent-deployment.md`](agent-deployment.md)) |
+| [`agent/.env.example`](../agent/.env.example) | every variable the workflows, scripts and the bundle read |
 | [`scripts/render_agent.py`](../scripts/render_agent.py) | fills prompts and webhook path for one team, writes `agent/build/` |
-| `tests/agent/` | offline tests (workflow JSON, prompts, rendering) |
+| [`scripts/import_workflows.sh`](../scripts/import_workflows.sh) | renders, creates the credentials and imports the workflows (P6.6) |
+| [`tests/agent_eval/questions.yaml`](../tests/agent_eval/questions.yaml), [`scripts/run_eval.py`](../scripts/run_eval.py) | the evaluation (P6.8, [`agent-eval.md`](agent-eval.md)) |
+| `tests/agent/`, `tests/agent_eval/` | offline tests (workflow JSON, prompts, rendering, memory SQL, bundle, scorer) |
 
 Scope is **Tier 1** (D13): cost, carbon, quantities, general/data questions. `SCHEDULE` is
 recognised and answered with "not available in this version" (P6.5 follows with Tier 2).
-Memory (P6.4), the deployment bundle (P6.6) and the evaluation harness (P6.8) are the next PR;
-the legacy workflow `agent/workflows/legacy/` is untouched and **not** replaced in n8n by this
+Memory (P6.4), the deployment bundle (P6.6) and the evaluation harness (P6.8) are built (🟡:
+nothing of them has run against a live n8n and an LLM yet); the legacy workflow `agent/workflows/legacy/` is untouched and **not** replaced in n8n by this
 PR (roadmap rule 4).
 
 ## Flow
@@ -24,18 +28,21 @@ PR (roadmap rule 4).
 Webhook (POST, header auth, answers via "Respond to caller")
   ▶ Normalize input        one Set node: message, user_id, user_name, channel_id, guild_id,
   │                        message_id, source, attachments
+  ▶ Load history           Postgres: last 6 messages of this user + channel, < 30 days (P6.4)
+  ▶ With history           merge by position (history + normalized fields)
   ▶ Router                 agent + structured output {category, language}; chat model, no tools
-  ▶ Router + context       merge by position (Router output + normalized fields)
-  ▶ Classified             category (upper case, default OTHER), language
+  ▶ Router + context       merge by position (Router output + the item with history)
+  ▶ Classified             category (upper case, default OTHER), language, history
   ▶ Route (Switch)         COST | CARBON | QUANTITY | GENERAL | SCHEDULE | fallback = OTHER
-       ├─ Cost Agent      get_cost_summary, get_cost_items, cost_what_if
+       ├─ Cost Agent      get_cost_summary, list_cost_clusters, get_cost_items, cost_what_if
        ├─ Carbon Agent    get_carbon_summary, get_carbon_items, carbon_what_if
        ├─ Quantity Agent  get_quantities, count_elements
        ├─ General Agent   get_cost_overview, get_carbon_overview, get_quality,
        │                  list_snapshots, compare_snapshots
        └─ Fallback Agent  no tools (SCHEDULE and OTHER)
   ▶ Attach answer          merge by position (Classified + agent output)
-  ▶ Compose reply ▶ Respond to caller ▶ Reply on Discord? ▶ Send reply (Discord)
+  ▶ Compose reply ▶ Respond to caller ┬▶ Reply on Discord? ▶ Send reply (Discord)
+                                      └▶ Remember turn? ▶ Save turn (Postgres, P6.4)
 every agent: error output ▶ Error reply (user-readable, de/es/pl/en) ▶ Compose reply
 ```
 
@@ -58,12 +65,23 @@ every agent: error output ▶ Error reply (user-readable, de/es/pl/en) ▶ Compo
   tool's path and parameters with the OpenAPI schema of the real app.
 - **Answer rules** (shared `common.md`): the user's language; only numbers from tool results;
   one closing line naming the snapshot; custom-material / proxy / estimated rows and what-if
-  scenarios are labelled; on `too_many_results` ask the user to narrow (level, category,
-  cluster, Assembly Code) instead of retrying; at most 1800 characters (Discord limit 2000).
+  scenarios are labelled and opened with an explicit scenario line; on `too_many_results` ask
+  the user to narrow (level, category, cluster, Assembly Code) instead of retrying; at most
+  1800 characters (Discord limit 2000). Numbers are **rounded, not truncated** (618,515.60 is
+  618,516); the model **never judges over/under target itself**: it quotes the `status` /
+  `status_after` / delta of the row it talks about (a cluster has its own status, different from
+  the grand total's); a call is **never repeated** with the same tool and parameters.
+- **Cluster names are never guessed.** `list_cost_clusters` (`GET /cost/clusters`) returns the
+  exact names with their Assembly Code groups; `get_cost_items` takes only a name from it or
+  from `get_cost_summary`; an `unknown_cluster` error lists the valid names and the agent asks
+  which one is meant.
   STV units are exactly the data's: kgCO2e, MJ, water in kg, ozone in kg CFC-11e.
 - **Reply.** Discord node → `channel_id` of the normalizer (thread or channel), content
   `<@user_id> reply`. The webhook answers the caller first with
-  `{reply, category, language, tools, tool_response_chars, failed}` (the eval reads this).
+  `{reply, category, language, tools, tool_response_chars, tool_errors, failed}` (the eval reads
+  this). `tool_errors` lists the `"error"` codes of the tool results (`too_many_results`,
+  `unknown_cluster`, `tool_failed` for a transport error); `failed` is only true when an agent
+  node itself failed, so the eval also looks at the reply and `tool_response_chars`.
 - **Errors.** Each agent has an error output → short readable message to the user. Anything
   else (Discord send, normalizer, …) runs the global error workflow, which posts workflow,
   node, message and execution link (no user text) to `DISCORD_CHANNEL_ID_DEBUG`.
@@ -100,25 +118,54 @@ change needs a restart of n8n only, no re-import:
 | `CONCHO_MODEL_SUBAGENT` | the five subagent models | `gpt-4o-mini` |
 | `CONCHO_MODEL_TTS` | reserved for voice replies, no node uses it yet | `gpt-4o-mini-tts` |
 
-`agent.models` in `project_config.json` (required by the schema since P3.1) is **not** read by
-the agent; see the open question in the PR.
+The models are **only** in the env: `project_config.json` has no model settings (`agent.models`
+was removed from the schema; a team config that still has it fails validation, delete the key).
 
-## Credentials (created by the import script of P6.6, not part of the export)
+## Memory (P6.4)
 
-The workflow refers to three credentials by fixed id: `concho-openai` (OpenAI API key),
-`concho-discord` (Discord bot token), `concho-webhook-auth` (header `X-Concho-Token`).
-Until P6.6 exists, create them by hand in n8n with exactly these ids/names or pick them in the
-nodes. `N8N_BLOCK_ENV_ACCESS_IN_NODE=false` is required (`$env` in expressions).
+Follow-ups ("and on Level 2?") need the earlier messages. Two Postgres nodes keep them in the
+table `concho_memory` ([`agent/memory.sql`](../agent/memory.sql)); n8n's own memory nodes are
+not used (they would store the router's JSON and the subagents' turns as well, twice, and give
+no retention):
+
+- **Load history** runs before the router: the last `CONCHO_MEMORY_MESSAGES` (6) rows of this
+  `user_id` + `channel_id` younger than `CONCHO_MEMORY_DAYS` (30), oldest first, as one text
+  block `user: …` / `assistant: …` (each cut at 700 characters). It is put in front of the
+  question for the router **and** the subagents: `Chat history (oldest first; only to understand
+  follow-up questions, its numbers are old): … Latest message: …`.
+- **Save turn** runs after the caller got its answer (`Respond to caller`): it inserts the
+  user's message and the reply, and deletes everything older than the retention in the same
+  statement (retention without a cron job). Failed turns, turns without user or channel id and
+  empty replies are not stored (`Remember turn?`).
+- A Discord thread is a channel of its own, so each thread has its own memory.
+- Both nodes continue on error: if Postgres is down, Concho answers without history.
+- The prompts say the history is only for understanding a follow-up; every number must come from
+  a tool call of this turn. The SQL is tested on a real Postgres 16 (`CONCHO_TEST_PSQL`, see
+  `tests/agent/test_agent_memory.py`): window of 6, other users and channels excluded, rows older
+  than 30 days neither read nor kept, `memory.sql` idempotent.
+- Stored: chat text of the team's channel for at most 30 days; nothing is written to the repo.
+
+## Credentials (created by `scripts/import_workflows.sh`, not part of the export)
+
+The workflows refer to four credentials by fixed id: `concho-openai` (OpenAI API key),
+`concho-discord` (Discord bot token), `concho-webhook-auth` (header `X-Concho-Token`) and
+`concho-postgres` (the memory nodes; the fourth one is new in P6.4). `scripts/import_workflows.sh`
+creates them from the env ([`agent-deployment.md`](agent-deployment.md)); by hand, create them in
+n8n with exactly these ids/names. `N8N_BLOCK_ENV_ACCESS_IN_NODE=false` is required (`$env` in
+expressions).
 
 ## What is tested offline, and what is not
 
-Tested (`pytest tests/agent`, no n8n, no LLM): the JSON is valid and every connection points to
+Tested (`pytest tests/agent tests/agent_eval`, no n8n, no LLM): the JSON is valid and every connection points to
 an existing node; every node is reachable; each agent has one model and exactly the intended
 tools; no tool outside the data API; tools match the API's endpoints and parameters; no URL,
 IP, token or Discord ID in the JSON; no node references; the router enum and the Switch cover
 all categories with a fallback; every agent has an error branch; the reply goes to the
 originating channel and mentions the user; models come from the env with the default; every
-`$env` variable is in `.env.example`; prompts render and contain no project string.
+`$env` variable is in `.env.example`; prompts render and contain no project string; the memory
+SQL (static, and on a real Postgres when `CONCHO_TEST_PSQL` is set), the compose file, the
+import script against a stub `docker`, the credentials builder, the bot's payload, the eval
+scorer and the question generator.
 
 **Not tested here (needs a running n8n and an OpenAI key; Max to check):**
 
@@ -134,3 +181,10 @@ originating channel and mentions the user; models come from the env with the def
    that id.
 7. Answers: language, numbers, snapshot line, labels, `too_many_results` handling (P6.8
    measures this).
+8. Memory: `queryReplacement` given as an expression that returns an array fills `$1…$6` of the
+   Postgres nodes; the follow-up question gets the history; `Save turn` writes two rows.
+9. `list_cost_clusters` is called instead of a guessed cluster name; the what-if answer quotes
+   the cluster's own `status_after`; no call is repeated.
+
+Checked by Max on n8n 2.43.8 with the Island data (before PR 2): router, tools, snapshot line,
+labels and languages work. Still untested: the error output of an agent node, the Discord thread.

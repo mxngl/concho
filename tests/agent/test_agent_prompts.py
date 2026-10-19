@@ -136,7 +136,7 @@ def test_router_prompt_lists_the_enum_and_the_follow_up_rule():
 
 
 def test_prompts_name_exactly_the_tools_of_their_agent():
-    tools = {"cost": {"get_cost_summary", "get_cost_items", "cost_what_if"},
+    tools = {"cost": {"get_cost_summary", "list_cost_clusters", "get_cost_items", "cost_what_if"},
              "carbon": {"get_carbon_summary", "get_carbon_items", "carbon_what_if"},
              "quantity": {"get_quantities", "count_elements"},
              "general": {"get_cost_overview", "get_carbon_overview", "get_quality",

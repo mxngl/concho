@@ -1,4 +1,5 @@
 {
+  "id": "concho-main",
   "name": "Concho",
   "nodes": [
     {
@@ -93,7 +94,7 @@
     {
       "parameters": {
         "promptType": "define",
-        "text": "={{ $json.message }}",
+        "text": "={{ ($json.history ? 'Chat history (oldest first; only to understand follow-up questions, its numbers are old):\\n' + $json.history + '\\n\\n' : '') + 'Latest message: ' + $json.message }}",
         "hasOutputParser": true,
         "options": {
           "systemMessage": "@@PROMPT:router@@",
@@ -103,7 +104,7 @@
       "type": "@n8n/n8n-nodes-langchain.agent",
       "typeVersion": 3.1,
       "position": [
-        480,
+        920,
         0
       ],
       "id": "1ea3f553-4a47-5327-a503-6f541e300588",
@@ -127,7 +128,7 @@
       "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
       "typeVersion": 1.3,
       "position": [
-        400,
+        840,
         200
       ],
       "id": "5e9ec7e1-ef57-58fc-be6f-4f54bca6f2c0",
@@ -147,7 +148,7 @@
       "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
       "typeVersion": 1.3,
       "position": [
-        560,
+        1000,
         200
       ],
       "id": "7644a3b0-5389-5300-bfd2-d503f5baa654",
@@ -162,7 +163,7 @@
       "type": "n8n-nodes-base.merge",
       "typeVersion": 3.2,
       "position": [
-        720,
+        1160,
         0
       ],
       "id": "0dd4ab9c-da67-5625-a50d-2bebe2173051",
@@ -176,6 +177,12 @@
               "id": "7e0652f4-7e61-538d-9d1b-d840c37eaee3",
               "name": "message",
               "value": "={{ $json.message }}",
+              "type": "string"
+            },
+            {
+              "id": "412d3e66-e286-5564-b332-822045d74ef8",
+              "name": "history",
+              "value": "={{ $json.history ?? '' }}",
               "type": "string"
             },
             {
@@ -234,7 +241,7 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        900,
+        1340,
         0
       ],
       "id": "0d07cb51-4ecc-537e-9c71-c91512a3cc92",
@@ -374,7 +381,7 @@
       "type": "n8n-nodes-base.switch",
       "typeVersion": 3.4,
       "position": [
-        1080,
+        1520,
         0
       ],
       "id": "1d07b5d5-7a49-5a4a-959e-82787a044519",
@@ -382,7 +389,7 @@
     },
     {
       "parameters": {
-        "toolDescription": "TVD cost summary: grand total, target, delta, status, cost per SF and one row per cluster (estimate, target, delta). The answer names its snapshot. If it is an error with the code too_many_results, ask the user to narrow the question instead of calling again.",
+        "toolDescription": "TVD cost summary: grand total, target, delta, status, cost per SF and one row per cluster (estimate, target, delta, status). Quote status and delta as given. The answer names its snapshot. If it is an error with the code too_many_results, ask the user to narrow the question instead of calling again.",
         "url": "={{ $env.CONCHO_API_URL }}/cost/summary",
         "sendHeaders": true,
         "headerParameters": {
@@ -413,7 +420,7 @@
       "type": "n8n-nodes-base.httpRequestTool",
       "typeVersion": 4.4,
       "position": [
-        1560,
+        2000,
         20
       ],
       "id": "3f7d6f9f-ae2a-50fb-b5c2-5258f5bc2b66",
@@ -421,7 +428,7 @@
     },
     {
       "parameters": {
-        "toolDescription": "Cost line items (largest first) with matched_lines and matched_total. Filter by cluster name and/or Assembly Code prefix (Uniformat, e.g. B30). The answer names its snapshot. If it is an error with the code too_many_results, ask the user to narrow the question instead of calling again.",
+        "toolDescription": "Cost line items (largest first) with matched_lines and matched_total. Filter by an exact cluster name (from list_cost_clusters or get_cost_summary, never guessed) and/or Assembly Code prefix (Uniformat, e.g. B30). If the cluster is unknown the error unknown_cluster lists the valid names: ask the user which one is meant. The answer names its snapshot. If it is an error with the code too_many_results, ask the user to narrow the question instead of calling again.",
         "url": "={{ $env.CONCHO_API_URL }}/cost",
         "sendHeaders": true,
         "headerParameters": {
@@ -444,7 +451,7 @@
           "parameters": [
             {
               "name": "cluster",
-              "value": "={{ $fromAI('cluster', 'Cost cluster name, e.g. Shell. Leave empty for all.', 'string', '') }}"
+              "value": "={{ $fromAI('cluster', 'Exact cost cluster name as returned by list_cost_clusters or get_cost_summary. Never guess or translate a name; leave empty to filter by ac instead.', 'string', '') }}"
             },
             {
               "name": "ac",
@@ -460,7 +467,7 @@
       "type": "n8n-nodes-base.httpRequestTool",
       "typeVersion": 4.4,
       "position": [
-        1650,
+        2090,
         60
       ],
       "id": "f4e30f76-0edd-5a9b-a787-c1879d4c443f",
@@ -468,7 +475,7 @@
     },
     {
       "parameters": {
-        "toolDescription": "Scenario computed on the server: the cost of all line items with this Assembly Code prefix changes by change_pct percent (roof +10% is ac B30, change_pct 10). Returns the new grand total and the delta to the target. Labelled what_if. The answer names its snapshot. If it is an error with the code too_many_results, ask the user to narrow the question instead of calling again.",
+        "toolDescription": "Scenario computed on the server: the cost of all line items with this Assembly Code prefix changes by change_pct percent (roof +10% is ac B30, change_pct 10). Returns the new grand total, status_after and delta to the target, and per affected cluster its target, delta_to_target_after and status_after (over_target / under_target): quote these, never compare numbers yourself. Labelled what_if: always present the result as a scenario. The answer names its snapshot. If it is an error with the code too_many_results, ask the user to narrow the question instead of calling again.",
         "url": "={{ $env.CONCHO_API_URL }}/cost/what_if",
         "sendHeaders": true,
         "headerParameters": {
@@ -507,7 +514,7 @@
       "type": "n8n-nodes-base.httpRequestTool",
       "typeVersion": 4.4,
       "position": [
-        1740,
+        2180,
         20
       ],
       "id": "8ce3e85c-6dbe-5816-b6a8-6af0941bec0e",
@@ -546,7 +553,7 @@
       "type": "n8n-nodes-base.httpRequestTool",
       "typeVersion": 4.4,
       "position": [
-        1560,
+        2000,
         360
       ],
       "id": "b38aeee4-d338-5a66-bb8d-bdbfbd12e5ce",
@@ -593,7 +600,7 @@
       "type": "n8n-nodes-base.httpRequestTool",
       "typeVersion": 4.4,
       "position": [
-        1650,
+        2090,
         400
       ],
       "id": "6a3487b4-47fd-50f6-ae19-f8b9e0a245ff",
@@ -644,7 +651,7 @@
       "type": "n8n-nodes-base.httpRequestTool",
       "typeVersion": 4.4,
       "position": [
-        1740,
+        2180,
         360
       ],
       "id": "32a4d6da-dba4-560a-88c1-67b22522e6ca",
@@ -695,7 +702,7 @@
       "type": "n8n-nodes-base.httpRequestTool",
       "typeVersion": 4.4,
       "position": [
-        1560,
+        2000,
         700
       ],
       "id": "04a25578-4f37-5063-8c2f-b5102da85b3b",
@@ -750,7 +757,7 @@
       "type": "n8n-nodes-base.httpRequestTool",
       "typeVersion": 4.4,
       "position": [
-        1650,
+        2090,
         740
       ],
       "id": "80feee82-f422-573f-9094-c62e12dcdad7",
@@ -789,7 +796,7 @@
       "type": "n8n-nodes-base.httpRequestTool",
       "typeVersion": 4.4,
       "position": [
-        1560,
+        2000,
         1040
       ],
       "id": "cc581bb1-0f19-5a9a-9467-d692cff08084",
@@ -828,7 +835,7 @@
       "type": "n8n-nodes-base.httpRequestTool",
       "typeVersion": 4.4,
       "position": [
-        1650,
+        2090,
         1080
       ],
       "id": "0893ed43-1395-554e-a442-4b29afa915d0",
@@ -867,7 +874,7 @@
       "type": "n8n-nodes-base.httpRequestTool",
       "typeVersion": 4.4,
       "position": [
-        1740,
+        2180,
         1040
       ],
       "id": "a75abff8-8b9a-52f7-9684-61a54a72a9d2",
@@ -897,7 +904,7 @@
       "type": "n8n-nodes-base.httpRequestTool",
       "typeVersion": 4.4,
       "position": [
-        1830,
+        2270,
         1080
       ],
       "id": "0c0a498e-6656-5ee2-b53b-b727340e44d8",
@@ -940,7 +947,7 @@
       "type": "n8n-nodes-base.httpRequestTool",
       "typeVersion": 4.4,
       "position": [
-        1920,
+        2360,
         1040
       ],
       "id": "37022fb4-77ef-5697-9a2a-31b811e59fe1",
@@ -955,7 +962,7 @@
       "type": "n8n-nodes-base.merge",
       "typeVersion": 3.2,
       "position": [
-        2200,
+        2640,
         0
       ],
       "id": "96571410-67d7-5f44-a946-ac7ae5347ab8",
@@ -964,7 +971,7 @@
     {
       "parameters": {
         "promptType": "define",
-        "text": "={{ $json.message }}",
+        "text": "={{ ($json.history ? 'Chat history (oldest first; only to understand follow-up questions, its numbers are old):\\n' + $json.history + '\\n\\n' : '') + 'Latest message: ' + $json.message }}",
         "options": {
           "systemMessage": "@@PROMPT:cost@@",
           "maxIterations": 3,
@@ -974,7 +981,7 @@
       "type": "@n8n/n8n-nodes-langchain.agent",
       "typeVersion": 3.1,
       "position": [
-        1500,
+        1940,
         -200
       ],
       "id": "abe09ce8-a7e0-5cc1-acf5-9a6685ef8b57",
@@ -997,7 +1004,7 @@
       "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
       "typeVersion": 1.3,
       "position": [
-        1500,
+        1940,
         -40
       ],
       "id": "7114cfdb-5d35-57a6-8feb-23a57ef57eca",
@@ -1012,7 +1019,7 @@
     {
       "parameters": {
         "promptType": "define",
-        "text": "={{ $json.message }}",
+        "text": "={{ ($json.history ? 'Chat history (oldest first; only to understand follow-up questions, its numbers are old):\\n' + $json.history + '\\n\\n' : '') + 'Latest message: ' + $json.message }}",
         "options": {
           "systemMessage": "@@PROMPT:carbon@@",
           "maxIterations": 3,
@@ -1022,7 +1029,7 @@
       "type": "@n8n/n8n-nodes-langchain.agent",
       "typeVersion": 3.1,
       "position": [
-        1500,
+        1940,
         140
       ],
       "id": "64c8c76e-b919-5a55-af8e-c4cb8037e188",
@@ -1045,7 +1052,7 @@
       "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
       "typeVersion": 1.3,
       "position": [
-        1500,
+        1940,
         300
       ],
       "id": "1c9614ba-3533-580a-adb2-3e902ecc024b",
@@ -1060,7 +1067,7 @@
     {
       "parameters": {
         "promptType": "define",
-        "text": "={{ $json.message }}",
+        "text": "={{ ($json.history ? 'Chat history (oldest first; only to understand follow-up questions, its numbers are old):\\n' + $json.history + '\\n\\n' : '') + 'Latest message: ' + $json.message }}",
         "options": {
           "systemMessage": "@@PROMPT:quantity@@",
           "maxIterations": 3,
@@ -1070,7 +1077,7 @@
       "type": "@n8n/n8n-nodes-langchain.agent",
       "typeVersion": 3.1,
       "position": [
-        1500,
+        1940,
         480
       ],
       "id": "1c658cd6-271c-5b6b-8463-622a73bd6598",
@@ -1093,7 +1100,7 @@
       "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
       "typeVersion": 1.3,
       "position": [
-        1500,
+        1940,
         640
       ],
       "id": "caf5fa9c-26a5-5df4-b32e-da65af195f20",
@@ -1108,7 +1115,7 @@
     {
       "parameters": {
         "promptType": "define",
-        "text": "={{ $json.message }}",
+        "text": "={{ ($json.history ? 'Chat history (oldest first; only to understand follow-up questions, its numbers are old):\\n' + $json.history + '\\n\\n' : '') + 'Latest message: ' + $json.message }}",
         "options": {
           "systemMessage": "@@PROMPT:general@@",
           "maxIterations": 3,
@@ -1118,7 +1125,7 @@
       "type": "@n8n/n8n-nodes-langchain.agent",
       "typeVersion": 3.1,
       "position": [
-        1500,
+        1940,
         820
       ],
       "id": "9543b1f8-0ea6-57a3-b67c-f67de774e160",
@@ -1141,7 +1148,7 @@
       "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
       "typeVersion": 1.3,
       "position": [
-        1500,
+        1940,
         980
       ],
       "id": "b03453bc-4139-5ef8-9c1d-e2a722363b2d",
@@ -1156,7 +1163,7 @@
     {
       "parameters": {
         "promptType": "define",
-        "text": "=Category: {{ $json.category }}\nUser message: {{ $json.message }}",
+        "text": "=Category: {{ $json.category }}\n{{ ($json.history ? 'Chat history (oldest first; only to understand follow-up questions, its numbers are old):\\n' + $json.history + '\\n\\n' : '') }}User message: {{ $json.message }}",
         "options": {
           "systemMessage": "@@PROMPT:fallback@@",
           "maxIterations": 3,
@@ -1166,7 +1173,7 @@
       "type": "@n8n/n8n-nodes-langchain.agent",
       "typeVersion": 3.1,
       "position": [
-        1500,
+        1940,
         1160
       ],
       "id": "42bfe2c2-4d1e-5e0f-9bbc-72631dfe5202",
@@ -1189,7 +1196,7 @@
       "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
       "typeVersion": 1.3,
       "position": [
-        1500,
+        1940,
         1320
       ],
       "id": "53c0a826-f059-53df-ac82-a1b5b1711bab",
@@ -1225,7 +1232,7 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        2200,
+        2640,
         400
       ],
       "id": "7d846e4e-ce26-5c9c-9663-0bcc7a53956e",
@@ -1248,6 +1255,12 @@
               "type": "array"
             },
             {
+              "id": "bce51c09-84f4-536d-b6fb-8d7edf462d72",
+              "name": "tool_errors",
+              "value": "={{ ($json.intermediateSteps || []).map(s => { const o = String(s.observation ?? ''); const m = o.match(/\"error\"\\s*:\\s*\"([a-z_]+)\"/); return m ? m[1] : (/^\\s*error|ECONNREFUSED|ENOTFOUND|ETIMEDOUT|status code|socket hang up/i.test(o) ? 'tool_failed' : ''); }).filter(Boolean) }}",
+              "type": "array"
+            },
+            {
               "id": "14867e41-e14d-5333-991a-fbb101ce7bd1",
               "name": "tool_response_chars",
               "value": "={{ ($json.intermediateSteps || []).map(s => String(s.observation ?? '').length) }}",
@@ -1267,7 +1280,7 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        2420,
+        2860,
         0
       ],
       "id": "5c7512b3-2f53-505d-b8d2-a96d0d1d6232",
@@ -1276,13 +1289,13 @@
     {
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={{ JSON.stringify({ reply: $json.reply, category: $json.category, language: $json.language, tools: $json.tools, tool_response_chars: $json.tool_response_chars, failed: $json.failed }) }}",
+        "responseBody": "={{ JSON.stringify({ reply: $json.reply, category: $json.category, language: $json.language, tools: $json.tools, tool_response_chars: $json.tool_response_chars, tool_errors: $json.tool_errors, failed: $json.failed }) }}",
         "options": {}
       },
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.4,
       "position": [
-        2640,
+        3080,
         0
       ],
       "id": "838ffea8-9d9f-52e9-b5da-82f3d990c788",
@@ -1335,7 +1348,7 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
       "position": [
-        2860,
+        3300,
         0
       ],
       "id": "786577f4-88cd-5067-95ff-934313aecc79",
@@ -1360,7 +1373,7 @@
       "type": "n8n-nodes-base.discord",
       "typeVersion": 2,
       "position": [
-        3080,
+        3520,
         -60
       ],
       "id": "490788df-4207-587a-8229-ddf96da7fa27",
@@ -1371,6 +1384,173 @@
           "name": "Concho Discord bot"
         }
       }
+    },
+    {
+      "parameters": {
+        "toolDescription": "Lookup of the valid cost cluster names, exactly as spelled in the data, with the Assembly Code groups (ac_groups) each cluster contains and its estimate, target and status. Call it before get_cost_items when the user names a cluster or a building part and you do not have the exact cluster name yet. Never guess a cluster name. The answer names its snapshot.",
+        "url": "={{ $env.CONCHO_API_URL }}/cost/clusters",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.CONCHO_API_TOKEN }}"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "snapshot",
+              "value": "={{ $fromAI('snapshot', 'Snapshot id. Leave empty for the latest snapshot; only set it when the user names a snapshot.', 'string', '') }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.4,
+      "position": [
+        2090,
+        -20
+      ],
+      "id": "81e59c8b-1cf4-5e3a-9ae9-55f03fa8c55c",
+      "name": "list_cost_clusters"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT COALESCE(string_agg(line, E'\\n' ORDER BY id), '') AS history\nFROM (\n  SELECT id, role || ': ' || left(content, 700) AS line\n  FROM concho_memory\n  WHERE user_id = $1 AND channel_id = $2\n    AND created_at > now() - make_interval(days => $4::int)\n  ORDER BY id DESC\n  LIMIT $3::int\n) AS last_messages",
+        "options": {
+          "queryReplacement": "={{ [$json.user_id, $json.channel_id, Number($env.CONCHO_MEMORY_MESSAGES || 6), Number($env.CONCHO_MEMORY_DAYS || 30)] }}"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        480,
+        160
+      ],
+      "id": "aba75a4e-7bbd-56b4-8742-a9ab054ac069",
+      "name": "Load history",
+      "credentials": {
+        "postgres": {
+          "id": "concho-postgres",
+          "name": "Concho Postgres"
+        }
+      },
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        700,
+        0
+      ],
+      "id": "d1fa3e33-c64d-5b53-9403-311f4b4ab05e",
+      "name": "With history"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "3602e590-e7ca-5eec-ac19-d0430315df7d",
+              "leftValue": "={{ $json.failed }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "false",
+                "singleValue": true
+              }
+            },
+            {
+              "id": "88352564-bba0-51e7-a95b-52c9049f5d64",
+              "leftValue": "={{ $json.user_id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            },
+            {
+              "id": "7908f49e-c5fc-5285-92e1-30ad038f3a4e",
+              "leftValue": "={{ $json.reply }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            },
+            {
+              "id": "c5c00498-8c49-59a7-907c-de16af3f2393",
+              "leftValue": "={{ $json.channel_id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        3300,
+        220
+      ],
+      "id": "14c73ea2-7e79-5a1f-873d-fcd191f812a0",
+      "name": "Remember turn?"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH purge AS (\n  DELETE FROM concho_memory WHERE created_at < now() - make_interval(days => $6::int)\n)\nINSERT INTO concho_memory (user_id, channel_id, role, category, content)\nVALUES ($1, $2, 'user', $3, $4), ($1, $2, 'assistant', $3, $5)",
+        "options": {
+          "queryReplacement": "={{ [$json.user_id, $json.channel_id, $json.category, $json.message, $json.reply, Number($env.CONCHO_MEMORY_DAYS || 30)] }}"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        3520,
+        220
+      ],
+      "id": "3bddee9f-007c-5f8f-a23e-23f6373128f3",
+      "name": "Save turn",
+      "credentials": {
+        "postgres": {
+          "id": "concho-postgres",
+          "name": "Concho Postgres"
+        }
+      },
+      "onError": "continueRegularOutput"
     }
   ],
   "connections": {
@@ -1389,12 +1569,12 @@
       "main": [
         [
           {
-            "node": "Router",
+            "node": "Load history",
             "type": "main",
             "index": 0
           },
           {
-            "node": "Router + context",
+            "node": "With history",
             "type": "main",
             "index": 1
           }
@@ -1842,6 +2022,11 @@
             "node": "Reply on Discord?",
             "type": "main",
             "index": 0
+          },
+          {
+            "node": "Remember turn?",
+            "type": "main",
+            "index": 0
           }
         ]
       ]
@@ -1851,6 +2036,55 @@
         [
           {
             "node": "Send reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "list_cost_clusters": {
+      "ai_tool": [
+        [
+          {
+            "node": "Cost Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load history": {
+      "main": [
+        [
+          {
+            "node": "With history",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "With history": {
+      "main": [
+        [
+          {
+            "node": "Router",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Router + context",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Remember turn?": {
+      "main": [
+        [
+          {
+            "node": "Save turn",
             "type": "main",
             "index": 0
           }

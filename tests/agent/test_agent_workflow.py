@@ -24,7 +24,7 @@ WORKFLOW_FILES = ["concho.json", "error-handler.json"]
 CATEGORIES = ["COST", "CARBON", "QUANTITY", "SCHEDULE", "GENERAL", "OTHER"]
 SUBAGENTS = ["Cost Agent", "Carbon Agent", "Quantity Agent", "General Agent", "Fallback Agent"]
 TOOL_NODES = {
-    "Cost Agent": {"get_cost_summary", "get_cost_items", "cost_what_if"},
+    "Cost Agent": {"get_cost_summary", "list_cost_clusters", "get_cost_items", "cost_what_if"},
     "Carbon Agent": {"get_carbon_summary", "get_carbon_items", "carbon_what_if"},
     "Quantity Agent": {"get_quantities", "count_elements"},
     "General Agent": {"get_cost_overview", "get_carbon_overview", "get_quality",
@@ -325,7 +325,7 @@ def test_env_example_has_no_values_that_look_like_secrets():
     for line in h.ENV_EXAMPLE.read_text(encoding="utf-8").splitlines():
         if "=" in line and not line.lstrip().startswith("#"):
             key, _, value = line.partition("=")
-            if key.endswith(("TOKEN", "KEY", "PATH")):
+            if key.endswith(("TOKEN", "KEY", "PATH", "PASSWORD")):
                 assert value.strip() == "", f"{key} must be empty in .env.example"
     assert not check_forbidden.check_text(h.ENV_EXAMPLE.read_text(encoding="utf-8"),
                                           "agent/.env.example")

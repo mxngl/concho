@@ -69,6 +69,33 @@ def test_cost_summary(api):
     assert body["unmapped_elements"]["count"] == 1
 
 
+def test_cost_summary_rows_carry_a_status_per_cluster(api):
+    rows = {r["cluster"]: r for r in api.get("/cost/summary").json()["rows"]}
+    assert {r["status"] for r in rows.values()} == {"under_target"}  # synthetic target = +10 %
+
+
+def test_cost_clusters_lookup_gives_exact_names_and_codes(api):
+    body = api.get("/cost/clusters").json()
+    rows = {r["cluster"]: r for r in body["rows"]}
+    assert set(rows) == set(syn.LINE_ITEMS) and body["snapshot"]["id"] == SID
+    assert rows["Shell"]["ac_groups"] == ["B10", "B20", "B30"]
+    assert rows["Substructure"]["ac_groups"] == ["A10"]
+    assert rows["Shell"]["target"] == pytest.approx(63000 * 1.1) and rows["Shell"]["status"]
+    assert api.get("/cost/clusters", params={"snapshot": "nope"}).status_code == 404
+
+
+def test_cost_what_if_names_the_cluster_status_after(api):
+    """The Shell cluster ends above its own target although the grand total stays under it."""
+    body = api.get("/cost/what_if", params={"ac": "B30", "change_pct": 30}).json()
+    shell = {r["cluster"]: r for r in body["rows"]}["Shell"]
+    assert shell["after"] == pytest.approx(72000.0) and shell["target"] == pytest.approx(69300.0)
+    assert shell["status_before"] == "under_target" and shell["status_after"] == "over_target"
+    assert shell["delta_to_target_after"] == pytest.approx(2700.0)
+    assert body["status_after"] == "over_target"  # 79,200 + 9,000 + contingency > 80,000
+    small = api.get("/cost/what_if", params={"ac": "B30", "change_pct": 5}).json()
+    assert {r["cluster"]: r for r in small["rows"]}["Shell"]["status_after"] == "under_target"
+
+
 def test_cost_filters(api):
     body = api.get("/cost", params={"cluster": "shell"}).json()  # case-insensitive
     assert body["matched_lines"] == 3 and body["matched_total"] == 63000.0
@@ -262,7 +289,8 @@ def test_snapshots_compare_and_snapshot_param(repo):
 
 def test_every_answer_names_its_snapshot(repo):
     api = client_for(repo)
-    urls = ["/cost/summary", "/cost?cluster=Shell", "/cost/what_if?ac=B30&change_pct=5",
+    urls = ["/cost/summary", "/cost/clusters", "/cost?cluster=Shell",
+            "/cost/what_if?ac=B30&change_pct=5",
             "/carbon/summary", "/carbon?stv_assembly=Floor",
             "/carbon/what_if?material_from=Concrete%20(sf)&material_to=Timber%20(sf)",
             "/quantities", "/elements/count", "/quality", "/snapshots",
@@ -338,7 +366,8 @@ def test_all_endpoints_stay_under_the_caps_on_a_realistic_project(tmp_path):
     syn.write_exports(repo)
     syn.add_snapshot(repo, SID, tvd=syn.big_tvd(48), stv=syn.big_stv(40))
     api = client_for(repo)
-    for url in ("/cost/summary", "/cost", "/carbon/summary", "/quality", "/snapshots",
+    for url in ("/cost/summary", "/cost/clusters", "/cost", "/carbon/summary", "/quality",
+                "/snapshots",
                 "/cost/what_if?ac=B&change_pct=10", "/quantities?category=Walls&level=L1",
                 "/elements/count"):
         body = api.get(url).json()
