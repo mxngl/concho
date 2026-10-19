@@ -2,6 +2,8 @@
 
 pytest suite. Run with `pytest`.
 
+`tests/agent/` and `tests/agent_eval/` test the agent (workflow JSON, prompts, memory SQL, deployment bundle, bot, eval scorer and generator) offline; the evaluation questions are `tests/agent_eval/questions.yaml` ([`docs/agent-eval.md`](../docs/agent-eval.md)). `CONCHO_TEST_PSQL` (psql options of a scratch Postgres) enables one more test of the memory SQL.
+
 Only non-sensitive fixtures go under `tests/fixtures/`. Tests that need course workbooks or RSMeans-derived data read a local path from an env var and are skipped when it is unset.
 
 ## Reference fixtures (Island 2026)

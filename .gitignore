@@ -25,3 +25,5 @@ exports/**/raw/
 # TVD engine data and outputs (never commit: cost data is RSMeans-derived)
 cost_data.csv
 TVD_Dashboard.html
+# P6.8 generated eval set and report (contain project numbers)
+tests/agent_eval/generated/

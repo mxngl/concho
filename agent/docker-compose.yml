@@ -1,0 +1,108 @@
+# Concho deployment bundle (roadmap P6.6): n8n + Postgres + Discord bot + data API.
+#
+# Run from the repo root so the .env file is found:
+#   cp agent/.env.example .env          # fill in (never commit)
+#   docker compose --env-file .env -f agent/docker-compose.yml up -d --build
+#   bash scripts/import_workflows.sh    # render prompts, import workflows + credentials
+#
+# Network: only n8n's editor is published, and only on 127.0.0.1. The data API and Postgres
+# have no published ports (they are reachable by name inside this compose network); the bot
+# and n8n only make outbound connections to Discord/OpenAI. Nothing here listens publicly.
+# See docs/agent-deployment.md.
+
+name: concho
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-concho}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-concho}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # chat memory table (P6.4); runs once, when the volume is created
+      - ./memory.sql:/docker-entrypoint-initdb.d/10-memory.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  data-api:
+    build:
+      context: ..
+      dockerfile: agent/Dockerfile.api
+    restart: unless-stopped
+    environment:
+      CONCHO_API_TOKEN: ${CONCHO_API_TOKEN:?set CONCHO_API_TOKEN in .env}
+    volumes:
+      # the team repo with results/ (read-only); the database lives in the apidata volume
+      - ${CONCHO_DATA_REPO:?set CONCHO_DATA_REPO in .env to the team repo folder}:/data:ro
+      - apidata:/db
+    expose:
+      - "8000"
+    # For a local curl test only (never a public address): publish on the loopback interface.
+    # ports:
+    #   - "127.0.0.1:8000:8000"
+
+  n8n:
+    # the version the workflow was tested on (local test of the P6.2 export)
+    image: n8nio/n8n:${N8N_VERSION:-2.43.8}
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      data-api:
+        condition: service_healthy
+    environment:
+      DB_TYPE: postgresdb
+      DB_POSTGRESDB_HOST: postgres
+      DB_POSTGRESDB_PORT: "5432"
+      DB_POSTGRESDB_DATABASE: ${POSTGRES_DB:-concho}
+      DB_POSTGRESDB_USER: ${POSTGRES_USER:-concho}
+      DB_POSTGRESDB_PASSWORD: ${POSTGRES_PASSWORD}
+      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY:?set N8N_ENCRYPTION_KEY in .env}
+      N8N_HOST: localhost
+      N8N_PORT: "5678"
+      N8N_PROTOCOL: http
+      WEBHOOK_URL: ${N8N_WEBHOOK_BASE_URL:-http://localhost:5678/}
+      GENERIC_TIMEZONE: ${GENERIC_TIMEZONE:-UTC}
+      TZ: ${GENERIC_TIMEZONE:-UTC}
+      # the workflows read the settings below with $env in expressions
+      N8N_BLOCK_ENV_ACCESS_IN_NODE: "false"
+      CONCHO_API_URL: http://data-api:8000
+      CONCHO_API_TOKEN: ${CONCHO_API_TOKEN}
+      CONCHO_MODEL_ROUTER: ${CONCHO_MODEL_ROUTER:-gpt-4o-mini}
+      CONCHO_MODEL_SUBAGENT: ${CONCHO_MODEL_SUBAGENT:-gpt-4o-mini}
+      CONCHO_MODEL_TTS: ${CONCHO_MODEL_TTS:-gpt-4o-mini-tts}
+      CONCHO_MEMORY_MESSAGES: ${CONCHO_MEMORY_MESSAGES:-6}
+      CONCHO_MEMORY_DAYS: ${CONCHO_MEMORY_DAYS:-30}
+      DISCORD_GUILD_ID: ${DISCORD_GUILD_ID:-}
+      DISCORD_CHANNEL_ID_DEBUG: ${DISCORD_CHANNEL_ID_DEBUG:-}
+    ports:
+      # the editor, on this machine only
+      - "127.0.0.1:${N8N_PORT:-5678}:5678"
+    volumes:
+      - n8n_data:/home/node/.n8n
+
+  bot:
+    build:
+      context: ./bot
+    restart: unless-stopped
+    depends_on:
+      - n8n
+    environment:
+      DISCORD_BOT_TOKEN: ${DISCORD_BOT_TOKEN:?set DISCORD_BOT_TOKEN in .env}
+      DISCORD_GUILD_ID: ${DISCORD_GUILD_ID:-}
+      DISCORD_CHANNEL_ID_ASK: ${DISCORD_CHANNEL_ID_ASK:-}
+      # production URL of the webhook node (the workflow must be active)
+      CONCHO_WEBHOOK_URL: http://n8n:5678/webhook/${CONCHO_WEBHOOK_PATH:?set CONCHO_WEBHOOK_PATH in .env}
+      CONCHO_WEBHOOK_TOKEN: ${CONCHO_WEBHOOK_TOKEN:?set CONCHO_WEBHOOK_TOKEN in .env}
+    # The bot only needs the network to n8n and to Discord.
+
+volumes:
+  pgdata:
+  apidata:
+  n8n_data:

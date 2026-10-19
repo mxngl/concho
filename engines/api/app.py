@@ -95,6 +95,11 @@ def create_app(db_path: str | Path, token: str | None = None, *,
         return answer(lambda: queries.cost_summary(
             conn, queries.resolve_snapshot(conn, snapshot)))
 
+    @app.get("/cost/clusters", dependencies=guarded)
+    def cost_clusters(conn: Conn, snapshot: str | None = None):
+        return answer(lambda: queries.cost_clusters(
+            conn, queries.resolve_snapshot(conn, snapshot)))
+
     @app.get("/cost", dependencies=guarded)
     def cost(conn: Conn, cluster: str | None = None, ac: str | None = None,
              snapshot: str | None = None):

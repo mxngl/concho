@@ -110,9 +110,10 @@ All `GET` unless noted; all take an optional `snapshot=<id>` (default: the lates
 
 | Endpoint | Answer |
 |---|---|
-| `/cost/summary` | TVD grand total, target, delta, status, $/SF, one row per cluster, unmapped elements |
+| `/cost/summary` | TVD grand total, target, delta, status, $/SF, one row per cluster (estimate, target, delta, `status`), unmapped elements |
+| `/cost/clusters` | lookup: the exact cluster names with their Assembly Code groups (`ac_groups`, e.g. `B20`), estimate, target and `status`; agents use it instead of guessing a name for `/cost?cluster=` |
 | `/cost?cluster=&ac=` | cost line items (largest first) with `matched_lines` / `matched_total`; `ac` is a prefix (`B30`, `B3010`; the course's 4-digit form `B2000` means `B20`) |
-| `/cost/what_if?ac=&change_pct=` | scenario, computed server-side: the line items of that code cost `change_pct` % more (e.g. `ac=B30&change_pct=10` = "roof +10 %"); new grand total, delta to target, affected clusters. Percent-of-subtotal lines (contingency) not selected by the code are rescaled with the subtotal; fixed lump sums are unchanged. Labelled `what_if` |
+| `/cost/what_if?ac=&change_pct=` | scenario, computed server-side: the line items of that code cost `change_pct` % more (e.g. `ac=B30&change_pct=10` = "roof +10 %"); new grand total, delta to target, affected clusters, each with its own `target`, `delta_to_target_after` and `status_after` (`over_target` / `under_target` / `on_target`; agents quote it and never compare numbers themselves). Percent-of-subtotal lines (contingency) not selected by the code are rescaled with the subtotal; fixed lump sums are unchanged. Labelled `what_if` |
 | `/carbon/summary` | STV life cycle / embodied / use phase per metric (kgCO2e, MJ, kg, kg CFC-11e), % of target, top assemblies, use-phase-modeled warning, mapping coverage |
 | `/carbon?stv_assembly=&material=` | STV items (`material` = substring of the material type) with amount, unit, kgCO2e, MJ, water |
 | `/carbon/what_if?material_from=&material_to=&stv_assembly=` | all of `material_from` replaced by `material_to` (same amount): embodied and life cycle before/after. `ac` is accepted as an alias of `stv_assembly` (STV items are keyed by STV assembly, not by Uniformat code). The per-unit factor of `material_to` is read from this snapshot's results: the API has **no LCA catalog** (course data), so `material_to` must already occur in the project, with the same unit (else `unknown_material_factor`, `unit_mismatch`) |

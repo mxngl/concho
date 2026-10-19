@@ -1,0 +1,16 @@
+# Docker build context of the agent bundle (agent/docker-compose.yml): nothing secret or large.
+.git
+.env
+.env.*
+!.env.example
+.fixtures
+.venv
+**/__pycache__
+**/*.xlsx
+.concho
+.concho-work
+agent/build
+site
+results
+revit-addin
+tests
