@@ -1,0 +1,13 @@
+.git
+.github
+.fixtures
+**/__pycache__
+.pytest_cache
+.ruff_cache
+.venv
+tests
+docs
+agent/build
+revit-addin
+template
+data-api

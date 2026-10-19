@@ -7,7 +7,8 @@ follow with Tier 2 / P7.3): the schedule tables (`schedule_tasks`, `schedule_ele
 `takt_zones`, `deliveries`) and the `/schedule`, `/takt`, `/deliveries` endpoints.
 
 Code: [`engines/api/`](../engines/api/). Local only: no hosting, no deployment, no n8n changes
-(D2 is open).
+(D2 is open). The compose bundle that runs it next to n8n (not
+exposed publicly) is described in [`agent.md`](agent.md#deployment-bundle-p66).
 
 ```
 team repo                     concho-api ingest                concho-api serve

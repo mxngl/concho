@@ -1,0 +1,13 @@
+# Data API (concho-api serve), P5.4/P6.6. Build context: the repo root (see docker-compose.yml).
+FROM python:3.12-slim
+WORKDIR /app
+COPY pyproject.toml README.md ./
+COPY engines ./engines
+COPY dashboards ./dashboards
+RUN pip install --no-cache-dir ".[api]" \
+ && useradd --system --create-home concho \
+ && mkdir /data && chown concho /data
+USER concho
+EXPOSE 8000
+# The team repo is mounted read-only at /team; the database lives in the /data volume.
+CMD ["concho-api", "serve", "--repo", "/team", "--db", "/data/concho.db", "--host", "0.0.0.0", "--port", "8000"]

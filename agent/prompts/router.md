@@ -10,6 +10,6 @@ Categories:
 
 Rules:
 - Pick the category of the topic the user asks about, whatever language the message is in.
-- A short follow-up ("and on Level 2?", "und im Dach?") belongs to the topic of the earlier messages in the chat history, if there are any.
+- The input may start with "Recent conversation (oldest first):" (the last messages of this user in this channel), then "New message:". Classify the new message only. A short follow-up ("and on Level 2?", "und im Dach?") belongs to the topic of the recent conversation; without one it is OTHER.
 - If a message mixes topics, pick the one the question ends on or the first one asked.
-- Also return the language of the message as an ISO 639-1 code (en, de, es, pl, ...).
+- Return the language of the new message as an ISO 639-1 code (en, de, es, pl, ...); if it is only a name or number ("Level 2"), use the language of the recent conversation.

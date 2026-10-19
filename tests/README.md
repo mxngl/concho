@@ -54,3 +54,7 @@ pytest tests/stv/test_stv_course_equivalence.py tests/tvd/test_tvd_course_equiva
 `-s` shows the max. relative error per case.
 
 Filled by: Phase 2 (golden and course-equivalence tests), and every later task.
+
+## Agent tests
+
+`tests/agent/` (workflow JSON, prompts, rendering, memory, deployment bundle, bot) and `tests/agent_eval/` (eval question templates, generator, scorer, runner against a fake webhook) run offline: no n8n, no LLM, no Discord, invented data only. Two optional extras: `CONCHO_TEST_DATABASE_URL=postgresql://...` (plus `psql`) runs the memory SQL against a real Postgres, and the `docker` CLI (if present) validates the compose file with `docker compose config`. The live evaluation is `python scripts/run_eval.py` (needs a running bundle and an OpenAI key; not part of `pytest`).

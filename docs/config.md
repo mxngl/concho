@@ -137,7 +137,7 @@ categories stay an engine default (`engines/tvd/rules.py`). The engine validates
 5. **schedule:** start date, work calendar, blocked periods (e.g. hurricane season), target
    completion, takt rooms per zone, trade order, and which licensed-tool adapters the team
    uses (ALICE, Fuzor, Manufacton; all off = tool-agnostic core).
-6. **agent:** answer language and model names. Discord server/channel IDs go into `.env`;
+6. **agent:** answer language. Model names live in the env (`CONCHO_MODEL_ROUTER` / `_SUBAGENT` / `_TTS`, [`agent.md`](agent.md)), not in the config. Discord server/channel IDs go into `.env`;
    the config only names the env vars (e.g. `"ask": "DISCORD_CHANNEL_ID_ASK"`).
 7. **files:** paths to the cost DB, STV mapping, custom materials, macro schedule and
    schedule rules, and the exports directory.
@@ -245,10 +245,6 @@ Generated from `docs/schema/project_config.schema.json`; do not edit by hand.
 | `schedule.adapters.manufacton` | boolean |  | `false` | Manufacton parts/assemblies/orders. |
 | `agent` | object | yes |  | Concho agent settings. |
 | `agent.default_language` | string |  | `"en"` | Answer language (ISO 639-1, e.g. 'en', 'de'). (pattern `^[a-z]{2}(-[A-Z]{2})?$`) |
-| `agent.models` | object | yes |  | Model names per agent role (D6: provider still open). |
-| `agent.models.router` | string | yes |  | Model for the router agent. |
-| `agent.models.subagent` | string | yes |  | Model for the subagents. |
-| `agent.models.tts` | string \| null |  | `null` | Text-to-speech model (optional). |
 | `agent.discord` | object |  |  | Discord IDs are given as env var NAMES only, never as IDs. |
 | `agent.discord.guild` | string \| null |  | `null` | Env var with the server ID. (pattern `^[A-Z_][A-Z0-9_]*$`) |
 | `agent.discord.channels` | map `^[a-z][a-z0-9_-]*$` → string |  |  | Logical channel name (e.g. 'ask', 'debug') -> env var with the channel ID. |
